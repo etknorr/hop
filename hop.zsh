@@ -17,6 +17,7 @@ source "$HOP_HOME/lib/dsl.zsh"
 source "$HOP_HOME/lib/workspaces.zsh"
 source "$HOP_HOME/lib/ui.zsh"
 source "$HOP_HOME/lib/actions.zsh"
+source "$HOP_HOME/lib/doctor.zsh"
 
 # Kinds come from your config, or from every shipped preset when there is no config yet.
 # - An unconfigured install still works, which is what makes hop useful in a fresh clone.
@@ -52,6 +53,8 @@ _hop_usage() {
 	print -r -- '  hopw                cd to the workspace containing $PWD (longest prefix wins)'
 	print -r -- '  hop --no-vim        search-first fzf, no modal layer (same as HOP_VIM=0)'
 	print -r -- '  hop --vim           force the modal layer on when HOP_VIM=0 is set'
+	print -r -- '  hop --doctor        dump config, tools and kind counts for a bug report'
+	print -r -- '  HOP_DEBUG=1 hop     log every key dispatch, then read it with --doctor'
 	print -r -- '  hop -h, --help      this text'
 	print -r -- ''
 	print -r -- '  kinds, * being in the default set:'
@@ -277,6 +280,10 @@ hop() {
 				HOP_VIM=1
 				opts=1
 				shift
+				;;
+			--doctor)
+				_hop_doctor
+				return $?
 				;;
 			-k | --kinds)
 				if (( $# < 2 )); then

@@ -77,6 +77,20 @@ t 'hop --help marks the default kinds with a star and names the config path'
 # The star column is what tells you which kinds a bare `hop` will search.
 assert_contains "$help" '* tg'
 assert_contains "$help" '* dir'
+
+# --doctor is the only way a bug report can carry the shell state, since fzf cannot be captured.
+t 'hop --doctor exits 0 and reports install, config, tools and the confusable keys'
+typeset doc
+doc=$(hop_probe 'hop --doctor')
+assert_contains "$doc" 'HOP_HOME'
+assert_contains "$doc" 'HOP_CONFIG'
+assert_contains "$doc" 'tools'
+assert_contains "$doc" 'keys people mix up'
+
+t 'hop --doctor works outside a git repo, where it is most often needed'
+typeset docout
+docout=$(hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor" 2>&1)
+assert_contains "$docout" 'NONE, so hop opens the workspace or repo picker'
 assert_contains "$help" "$HOP_FIX_NOCONFIG" 'the help must name the config file you would create'
 
 t 'hop --help does not star an opt-in kind'

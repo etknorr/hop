@@ -88,6 +88,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `-w`, `--workspaces` | pick a workspace root; `l` drills into its repos |
 | `--no-vim` | search-first fzf, no modal layer, same as `HOP_VIM=0` |
 | `--vim` | force the modal layer on when `HOP_VIM=0` is set |
+| `--doctor` | dump config, tools and kind counts for a bug report |
 | `-h`, `--help` | usage, listing the kinds actually registered |
 
 `-c` is the one to remember. `hop -c -k file pr` finds a file by name inside the subtree you are
@@ -422,6 +423,39 @@ The suite is headless and hermetic: it builds synthetic fixture repos rather tha
 checkouts, and it stubs every external command so a test can never open an editor window or a
 browser tab. Interactive fzf cannot be driven in a synthetic pty, so whatever genuinely needs a
 terminal lives in `SMOKE.md` as a manual checklist.
+
+---
+
+## Troubleshooting
+
+```zsh
+hop --doctor
+```
+
+Prints the install path and version, every `HOP_*` setting and whether its file is readable, the
+version of each optional tool, where you are and which workspace that falls in, and every
+registered kind with its live row count in the current repo. That last table is usually the answer:
+a kind showing `0` is a kind whose `--dirs` or `--marker` does not match this repo.
+
+For a key that did something unexpected, log what actually dispatched:
+
+```zsh
+HOP_DEBUG=1 hop      # reproduce the problem
+hop --doctor         # the last 15 dispatches are at the bottom
+```
+
+`--doctor` output contains local paths. Read it before pasting anywhere public.
+
+### Keys that get mixed up
+
+`^G` launches hop from the shell, so `ctrl-g` *inside* hop reads as "do that again". It is not — it
+is the browse verb. Navigation is `l`/`h` in NORMAL and `ctrl-l`/`ctrl-h` in SEARCH.
+
+### Nothing appears at all
+
+`hop` needs either a git repo or a configured workspace. Outside a repo it opens the workspace
+picker, and with no `~/.config/hop/workspaces` it guesses `~/src`, `~/code`, `~/projects`, `~/dev`
+and `~/work`. If none of those exist you get an empty picker; write the file.
 
 ---
 

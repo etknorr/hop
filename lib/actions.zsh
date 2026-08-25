@@ -113,7 +113,11 @@ _hop_act_browse() {
 	root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)
 	root=${root:A}
 	if [[ -z $root ]]; then
+		# Reached most often by pressing ctrl-g on a WORKSPACE row, meaning to go deeper.
+		# - ^G launches hop, so ctrl-g inside it reads as "again", but it is the browse verb.
+		# - Naming the drill key here is the only place the mistake is visible enough to correct.
 		print -ru2 -- "hop: not in a git repository: ${dir}"
+		print -ru2 -- 'hop: to go INTO a repo from a workspace, press l (NORMAL) or ctrl-l (SEARCH)'
 		return 1
 	fi
 	if [[ $dir == "$root" ]]; then
@@ -134,6 +138,7 @@ _hop_act_browse() {
 _hop_dispatch() {
 	emulate -L zsh
 	local key=$1 dir=$2 preview=${3:-$2}
+	_hop_dbg "dispatch key=${key:-<enter>} dir=${dir} preview=${preview}"
 	case $key in
 		'') _hop_act_cd "$dir" ;;
 		ctrl-o) _hop_act_open "$preview" ;;
