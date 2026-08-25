@@ -1,12 +1,13 @@
 #!/usr/bin/env zsh
 # hop: a zsh+fzf navigator for large config monorepos.
-# - Activated by one line in .zshrc: source ~/.config/hop/hop.zsh
+# - Activated by one line in .zshrc: source ~/.local/share/hop/hop.zsh
 # - HOP_HOME is derived from this file's own path, so the directory can move or become its own repo.
 # - Nothing here may reference the parent path of $HOP_HOME.
 
-if [[ -z ${HOP_HOME:-} ]]; then
-	typeset -g HOP_HOME="${${(%):-%x}:A:h}"
-fi
+# Derived unconditionally, never inherited, because an inherited value can name the WRONG install.
+# - Honouring a pre-set HOP_HOME broke `source ~/.zshrc` in a shell that had loaded an older path.
+# - There is no use for an override that points somewhere without this file in it.
+typeset -g HOP_HOME="${${(%):-%x}:A:h}"
 
 # Your own hop_kind declarations live here; nothing repo-specific ships in the code.
 typeset -g HOP_CONFIG=${HOP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}

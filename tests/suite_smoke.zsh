@@ -52,6 +52,18 @@ typeset noise
 noise=$(hop_probe 'true' 2>&1)
 assert_empty "$noise"
 
+# A stale HOP_HOME naming an OLD install location made `source ~/.zshrc` fail on every lib.
+# - It must be overridden by this file's own path, never honoured, or a move breaks a live shell.
+t 'an inherited HOP_HOME naming the wrong install is overridden, not honoured'
+typeset stale
+stale=$(HOP_HOME=/nonexistent/hop zsh -f -c "source ${(q)HOP_HOME}/hop.zsh 2>&1; print -r -- \$HOP_HOME")
+assert_eq "$HOP_HOME" "$stale" 'a stale HOP_HOME was honoured, so every lib source would fail'
+
+t 'sourcing with a stale HOP_HOME emits nothing on stderr'
+typeset stalenoise
+stalenoise=$(HOP_HOME=/nonexistent/hop zsh -f -c "source ${(q)HOP_HOME}/hop.zsh" 2>&1 >/dev/null)
+assert_empty "$stalenoise"
+
 t 'hop --help exits 0 and lists the registry, not a hardcoded kind list'
 typeset help
 help=$(hop_probe 'hop --help')
