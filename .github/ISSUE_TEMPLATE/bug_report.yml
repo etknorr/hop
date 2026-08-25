@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in hop is broken or behaving unexpectedly.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. `hop` is a zsh function running in your own
+        shell, so the state of that shell is most of the evidence — see the doctor section below.
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: hop --doctor output
+      description: >
+        Run `hop --doctor` and paste the full output here. It reports HOP_HOME, every HOP_*
+        setting, the version of each optional tool, where you are, and the last dispatches under
+        HOP_DEBUG=1. It is almost always the fastest way to find the cause.
+
+        `hop --doctor` prints local paths (your home directory, repo locations). Read the output
+        before pasting it here and redact anything you don't want public.
+      placeholder: |
+        HOP_DEBUG=1 hop      # reproduce the problem first, if you can
+        hop --doctor         # then paste everything below
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact keys pressed and commands run, in order. Note if it needs a specific kind, config, or repo shape to reproduce.
+      placeholder: |
+        1. cd into a repo with ...
+        2. hop
+        3. press ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: hop version
+      description: From the `version` line of `hop --doctor`, or `git -C ~/.local/share/hop describe --tags --always`.
+    validations:
+      required: false

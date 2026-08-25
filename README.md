@@ -1,5 +1,9 @@
 # hop
 
+[![CI](https://img.shields.io/github/actions/workflow/status/etknorr/hop/ci.yml?branch=main&label=CI)](https://github.com/etknorr/hop/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![shell: zsh](https://img.shields.io/badge/shell-zsh-89e051.svg)](https://www.zsh.org/)
+
 A modal, fzf-driven navigator for large configuration monorepos.
 
 `hop` answers one question fast: **which unit did I mean, and take me there.** In a repo with
