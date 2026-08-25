@@ -32,26 +32,133 @@ Requires `zsh` and [`fzf`](https://github.com/junegunn/fzf); `git` does the enum
 Optional: [`bat`](https://github.com/sharkdp/bat) for highlighted previews, `gh` for the browse
 verb, and VS Code's `code` for the open verbs.
 
+A zsh plugin is always **a local checkout plus one line that sources it.** There is nothing to
+compile and no binary to put on `$PATH`. What a plugin manager adds is bookkeeping: it does the
+clone, it can pin you to a released version, and it updates everything with one command. If you
+already use one, use it here. If you do not, the [manual clone](#manual-clone) is exactly what the
+others do underneath, and [`hop upgrade`](#updating) covers pinning and updating yourself.
+
+`hop` has to run **inside your interactive shell**, because its whole purpose is to `cd`. Anything
+that runs it in a subprocess or a container cannot work, which is also why there is no Homebrew
+formula and no container image.
+
+Each recipe below is given twice. Unpinned follows the default branch and changes when it changes;
+pinned sits on a release tag until you move it. Pinning is the better default for something you
+launch from muscle memory.
+
+### zinit
+
 ```zsh
-git clone git@github.com:etknorr/hop.git ~/.local/share/hop
+# follows main
+zinit light etknorr/hop
+
+# pinned to a release
+zinit ice ver'v0.1.0'
+zinit light etknorr/hop
 ```
 
-Add one line to `.zshrc`:
+### antidote
+
+In your plugin file, usually `~/.zsh_plugins.txt`:
+
+```
+# follows main
+etknorr/hop
+
+# pinned to a release
+etknorr/hop branch:v0.1.0
+```
+
+The annotation is called `branch:`, but it is handed straight to `git clone`, so a tag pins fine.
+
+### sheldon
+
+In `~/.config/sheldon/plugins.toml`:
+
+```toml
+# follows main
+[plugins.hop]
+github = "etknorr/hop"
+
+# pinned to a release
+[plugins.hop]
+github = "etknorr/hop"
+tag = "v0.1.0"
+```
+
+Then `sheldon lock --update`.
+
+### oh-my-zsh
+
+Oh-my-zsh has no fetcher, so the clone into its custom plugins directory is yours to make:
+
+```zsh
+# follows main
+git clone https://github.com/etknorr/hop.git \
+  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
+
+# pinned to a release
+git clone --branch v0.1.0 https://github.com/etknorr/hop.git \
+  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
+```
+
+Then add it to the list in `.zshrc`, **before** `source $ZSH/oh-my-zsh.sh`:
+
+```zsh
+plugins=(git hop)
+```
+
+### Manual clone
+
+No manager, one line of `.zshrc`, and nothing between you and the checkout:
+
+```zsh
+# follows main
+git clone https://github.com/etknorr/hop.git ~/.local/share/hop
+
+# pinned to a release
+git clone --branch v0.1.0 https://github.com/etknorr/hop.git ~/.local/share/hop
+```
 
 ```zsh
 source ~/.local/share/hop/hop.zsh
 ```
 
-That is the whole install. `HOP_HOME` resolves to `hop.zsh`'s own directory, so the install can live
-anywhere and be moved without editing anything.
+`HOP_HOME` resolves to `hop.zsh`'s own directory, so the checkout can live anywhere and be moved
+without editing anything. `hop.plugin.zsh` sits alongside it purely because that is the filename
+plugin managers look for; both do the same thing.
 
-**Completions** need `hop.zsh` sourced *before* `compinit`. `hop.zsh` adds `$HOP_HOME/completions`
-to `fpath`, which only takes effect if `compinit` has not already run. If your `.zshrc` calls
-`compinit` first, symlink into a directory already on `fpath` instead:
+### Updating
+
+A manager owns the checkouts it made, so update there: `zinit update etknorr/hop`,
+`antidote update`, `sheldon lock --update`, or re-clone the oh-my-zsh directory. Bump the pinned
+version in your config first if you set one.
+
+A manual clone updates itself:
+
+```zsh
+hop upgrade --check     # what is installed vs what is released; changes nothing
+hop upgrade             # move to the newest release
+hop upgrade 0.1.0       # pin to exactly that release
+exec zsh                # reload; a sourced function cannot replace itself mid-call
+```
+
+`hop upgrade` refuses rather than acts when the checkout is dirty, sits on a branch other than
+`main`, is detached somewhere that is not a release tag, or has no `origin` remote. It never runs
+`git clean`, never hard-resets and never forces anything, so the worst case is a refusal that
+explains itself. Untracked files are left where they are.
+
+### Completions
+
+Completions need `hop.zsh` sourced *before* `compinit`. `hop.zsh` adds `$HOP_HOME/completions` to
+`fpath`, which only takes effect if `compinit` has not already run. Most managers handle this. If
+your `.zshrc` calls `compinit` first, symlink into a directory already on `fpath` instead:
 
 ```zsh
 ln -s ~/.local/share/hop/completions/_hop ~/.zfunc/_hop
 ```
+
+### Configuring it
 
 With no config at all, `hop` loads every shipped preset and works immediately in any repo following
 a common convention. To teach it your own layout:
@@ -73,6 +180,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `hop /` or `hopr` | `cd` to the repo root |
 | `hop -` | `cd -` |
 | `hopw` | `cd` to the workspace containing `$PWD`, deepest match winning |
+| `hop upgrade` | move a manual clone to the newest release; see [Updating](#updating) |
 | `^G` or `alt-g` | open `hop` from a half-typed command line, which survives |
 
 `^G` replaces zsh's `send-break`. Use `^C` to abandon a line, or rebind `hop-widget`.
@@ -364,11 +472,13 @@ every day.
 
 ```
 hop.zsh                 entry point: hop, hopr, hopw, the ^G widget, config loading
+hop.plugin.zsh          the name plugin managers look for; sources hop.zsh and nothing else
 lib/dsl.zsh             the hop_kind registry and the generic enumeration engine
 lib/providers.zsh       row primitives, plus families too irregular to declare
 lib/ui.zsh              the single fzf call and the whole modal keymap
 lib/actions.zsh         the verbs: cd, open, edit, copy, browse, and frecency
 lib/workspaces.zsh      workspace config parsing and lookup
+lib/upgrade.zsh         hop upgrade: the release-tag self-update, and every refusal it makes
 presets/                shipped kind declarations, loaded with hop_preset
 bin/hop-kinds           renders the `:` menu and reloads rows; never runs fzf
 bin/hop-preview         the preview pane, and the `?` keymap overlay
