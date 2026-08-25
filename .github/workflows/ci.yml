@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh and fzf (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh fzf
+
+      - name: Install fzf (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fzf
+
+      - name: Print tool versions
+        run: |
+          zsh --version
+          fzf --version
+          git --version
+
+      - name: Assert zsh is 5.9+
+        run: |
+          zsh -c '
+            emulate -L zsh
+            if [[ ${ZSH_VERSION%%.*} -lt 5 || ( ${ZSH_VERSION%%.*} -eq 5 && ${${ZSH_VERSION#5.}%%.*} -lt 9 ) ]]; then
+              print -ru2 -- "expected zsh 5.9+, got ${ZSH_VERSION}"
+              exit 1
+            fi
+          '
+
+      - name: Run test suite
+        run: zsh tests/run
+
+  lint:
+    name: lint (zsh -n)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      - name: Syntax check every zsh script
+        run: |
+          set -euo pipefail
+          status=0
+          # *.zsh files anywhere in the repo.
+          while IFS= read -r -d '' f; do
+            zsh -n "$f" || status=1
+          done < <(find . -name '*.zsh' -not -path './.git/*' -print0)
+          # bin/* scripts.
+          for f in bin/*; do
+            zsh -n "$f" || status=1
+          done
+          # the test runner itself.
+          zsh -n tests/run || status=1
+          exit $status
