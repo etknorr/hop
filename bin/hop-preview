@@ -1,0 +1,124 @@
+#!/usr/bin/env zsh
+# hop preview renderer.
+# - Standalone on purpose: fzf runs --preview in a fresh $SHELL -c that inherits no zsh functions.
+# - Invoked as `hop-preview {2} {3}`, so $1 is the target dir and $2 the informative file.
+# - `hop-preview --keys` is the one other mode: it renders the modal keymap for the `?` overlay.
+# - `bat` is not installed on this machine, so `cat`/`head` is the working path, not the fallback.
+# - Never fails loudly: a bad argument prints one line, never a traceback or a stray shell error.
+
+emulate -L zsh
+
+typeset -r OFF=$'\e[0m'
+typeset -r HDR=$'\e[1;36m'
+typeset -r SUB=$'\e[2m'
+typeset -r WARN=$'\e[33m'
+typeset -r RULE=$'\e[2m'
+typeset -r KEY=$'\e[1;33m'
+typeset -r MAX_LINES=400
+typeset -r MAX_ENTRIES=200
+
+typeset dir=${1:-} target=${2:-} root='' e='' n=0
+typeset -a entries
+
+# --keys renders the modal keymap into the preview pane, which is what `?` binds to.
+# - It lives here rather than in a bind string because change-preview() takes a command, not text.
+# - Both modes are shown at once: the question "what does this key do" is usually about the other mode.
+# - Width is held under 50 columns so it survives a narrow preview pane without wrapping.
+if [[ $dir == '--keys' ]]; then
+	print -r -- "${HDR}hop keys${OFF}"
+	print -r -- "${RULE}──────────────────────────────────────────${OFF}"
+	print -r -- "${HDR}NORMAL${OFF}${SUB}  (search off, letters are verbs)${OFF}"
+	print -rl -- \
+		"  ${KEY}j${OFF} / ${KEY}k${OFF}          down / up" \
+		"  ${KEY}g${OFF} / ${KEY}G${OFF}          first / last row" \
+		"  ${KEY}^d${OFF} / ${KEY}^u${OFF}        half page down / up" \
+		"  ${KEY}enter${OFF}          cd to the dir" \
+		"  ${KEY}o${OFF}              code -r the preview file" \
+		"  ${KEY}O${OFF}              code the dir as a folder" \
+		"  ${KEY}e${OFF}              \$EDITOR the preview file" \
+		"  ${KEY}y${OFF} / ${KEY}Y${OFF}          copy dir / preview file" \
+		"  ${KEY}b${OFF}              gh browse" \
+		"  ${KEY}l${OFF} / ${KEY}h${OFF}          drill in / back out a level" \
+		"  ${KEY}p${OFF}              toggle the preview pane" \
+		"  ${KEY}r${OFF}              refresh the current view" \
+		"  ${KEY}/${OFF}              switch to SEARCH" \
+		"  ${KEY}:${OFF}              switch view, enter picks, esc back" \
+		"  ${KEY}?${OFF}              this help" \
+		"  ${KEY}q${OFF} / ${KEY}esc${OFF}        quit"
+	print -r -- ''
+	print -r -- "${HDR}SEARCH${OFF}${SUB}  (every key types)${OFF}"
+	print -rl -- \
+		"  ${KEY}esc${OFF}            back to NORMAL, clears query" \
+		"  ${KEY}enter${OFF}          cd to the dir" \
+		"  ${KEY}^o${OFF} / ${KEY}^t${OFF}        code file / code dir" \
+		"  ${KEY}^y${OFF} / ${KEY}M-y${OFF}       copy dir / preview file" \
+		"  ${KEY}M-o${OFF}            \$EDITOR the preview file" \
+		"  ${KEY}^g${OFF}             gh browse" \
+		"  ${KEY}M-a${OFF}            add the conf kind" \
+		"  ${KEY}M-p${OFF}            toggle the preview pane"
+	print -r -- ''
+	print -r -- "${SUB}HOP_VIM=0 or --no-vim turns the modal layer off.${OFF}"
+	exit 0
+fi
+
+[[ -n $target ]] || target=$dir
+
+if [[ -z $dir && -z $target ]]; then
+	print -r -- "${WARN}hop: nothing to preview${OFF}"
+	exit 0
+fi
+
+# Paths render relative to the repo, since the absolute prefix repeats on every row.
+root=$(git -C "${dir:-.}" rev-parse --show-toplevel 2>/dev/null)
+
+hop_rel() {
+	emulate -L zsh
+	local p=$1
+	if [[ -n $root && $p == "$root" ]]; then
+		print -r -- "${root:t}"
+	elif [[ -n $root && $p == "$root"/* ]]; then
+		print -r -- "${p#"$root"/}"
+	else
+		print -r -- "$p"
+	fi
+}
+
+print -r -- "${HDR}$(hop_rel "$dir")${OFF}"
+
+if [[ ! -e $target ]]; then
+	print -r -- "${WARN}no preview: $(hop_rel "$target") does not exist${OFF}"
+	exit 0
+fi
+
+if [[ -d $target ]]; then
+	print -r -- "${SUB}directory listing${OFF}"
+	print -r -- "${RULE}────────────────────────────────${OFF}"
+	entries=("$target"/*(ND))
+	if (( $#entries == 0 )); then
+		print -r -- "${SUB}(empty)${OFF}"
+		exit 0
+	fi
+	for e in "${entries[@]}"; do
+		if (( ++n > MAX_ENTRIES )); then
+			print -r -- "${SUB}… $(( $#entries - MAX_ENTRIES )) more${OFF}"
+			break
+		fi
+		if [[ -d $e ]]; then
+			print -r -- "${HDR}${e:t}/${OFF}"
+		else
+			print -r -- "${e:t}"
+		fi
+	done
+	exit 0
+fi
+
+print -r -- "${SUB}$(hop_rel "$target")${OFF}"
+print -r -- "${RULE}────────────────────────────────${OFF}"
+
+if (( $+commands[bat] )); then
+	bat --color=always --style=plain --line-range=":${MAX_LINES}" "$target" 2>/dev/null && exit 0
+fi
+
+# head bounds a multi-megabyte file so scrolling the list stays responsive.
+head -n "$MAX_LINES" "$target" 2>/dev/null || print -r -- "${WARN}no preview: cannot read $(hop_rel "$target")${OFF}"
+exit 0

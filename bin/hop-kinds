@@ -1,0 +1,83 @@
+#!/usr/bin/env zsh
+# hop kind menu: the `:` verb, k9s' "go to a new area".
+# - Standalone because fzf's reload() runs in a fresh shell that inherits no zsh functions.
+# - HOP_HOME comes from this file's own path so nothing depends on the parent directory.
+#
+# Two subcommands, both pure stdout. NEITHER runs fzf.
+#   hop-kinds menu <root>            rows for the kind menu itself
+#   hop-kinds rows <root> <kind>...  rows for those kinds, the view you switched to
+#
+# An earlier version ran a NESTED fzf inside execute(). That is the most terminal-fragile thing
+# fzf can be asked to do, it could not be tested without a real tty, and it was the reported bug.
+# The in-place design keeps everything inside the one fzf process.
+
+emulate -L zsh
+setopt local_options no_nomatch
+
+typeset -g HOP_HOME=${${(%):-%x}:A:h:h}
+# hop.zsh and not just providers.zsh, because the kind registry is what this command renders.
+source "$HOP_HOME/hop.zsh"
+
+typeset mode=${1:-} root=${2:-}
+(( $# >= 2 )) && shift 2
+
+if [[ -z $mode || -z $root ]]; then
+	print -ru2 -- 'hop-kinds: usage: hop-kinds menu <root> | hop-kinds rows <root> <kind>...'
+	exit 2
+fi
+
+if [[ $mode == rows ]]; then
+	(( $# )) || exit 0
+	_hop_generate "$root" "$@"
+	exit 0
+fi
+
+if [[ $mode != menu ]]; then
+	print -ru2 -- "hop-kinds: unknown subcommand: ${mode}"
+	exit 2
+fi
+
+# Counts are cached per root+HEAD because a full sweep of every kind costs ~1.6s.
+# - A miss renders instantly WITHOUT counts and warms the cache detached, so `:` never blocks.
+# - HEAD in the key means a branch switch invalidates it for free, and this repo switches often.
+typeset cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/hop
+typeset head_id key cache
+head_id=$(git -C "$root" rev-parse HEAD 2>/dev/null) || head_id=nohead
+[[ -n $head_id ]] || head_id=nohead
+key="${${root//\//_}//[^A-Za-z0-9_.-]/}-${head_id}"
+cache="$cache_dir/counts-$key"
+
+typeset -A counts
+if [[ -r $cache ]]; then
+	typeset ck cn
+	while IFS=$'\t' read -r ck cn; do
+		[[ -n $ck ]] && counts[$ck]=$cn
+	done < "$cache"
+fi
+
+# Warming detached keeps the menu instant; the next `:` in this commit shows the numbers.
+if [[ ! -r $cache ]]; then
+	(
+		mkdir -p "$cache_dir" 2>/dev/null || exit 0
+		typeset tmp wk wn
+		tmp=$(mktemp "$cache_dir/.counts.XXXXXX" 2>/dev/null) || exit 0
+		for wk in "${_HOP_ALL_KINDS[@]}"; do
+			wn=$(_hop_generate "$root" "$wk" 2>/dev/null | grep -c '')
+			print -r -- "${wk}	${wn}"
+		done > "$tmp"
+		mv -f "$tmp" "$cache" 2>/dev/null
+	) >/dev/null 2>&1 &!
+fi
+
+typeset C_KIND=$'\e[1;36m' C_NUM=$'\e[1m' C_DESC=$'\e[2m' OFF=$'\e[0m'
+typeset k disp n
+
+for k in "${_HOP_ALL_KINDS[@]}"; do
+	n=${counts[$k]:-}
+	# A cached zero means the family genuinely is not in this repo, so hide the row entirely.
+	[[ $n == 0 ]] && continue
+	printf -v disp '%s%-11s%s %s%8s%s  %s%s%s' \
+		"$C_KIND" "$k" "$OFF" "$C_NUM" "${n:-}" "$OFF" "$C_DESC" "${_HOP_K_DESC[$k]:-}" "$OFF"
+	# Field 2 is the kind name, which is what fzf hands back as {2} when building the reload.
+	print -r -- "${disp}	${k}	${root}"
+done

@@ -1,0 +1,48 @@
+#compdef hop
+# zsh completion for hop. See ~/.config/hop/README.md.
+#
+# Flags: -a/--all, -k/--kinds <kinds>, -R/--repos, --vim/--no-vim, -h/--help.
+# -k takes a comma-separated list of kind names, completed one at a time with
+# already-chosen kinds excluded (that is what `_values -s ,` gives us).
+
+# Kinds come straight from the registry hop.zsh already built in this shell, so a kind
+# declared in your own config completes with no change here.
+_hop_kinds() {
+  local -a kinds
+  local k
+  for k in "${_HOP_ALL_KINDS[@]}"; do
+    kinds+=("${k}[${_HOP_K_DESC[$k]:-}]")
+  done
+  _values -s , 'kind' "${kinds[@]}"
+}
+
+# The trailing words are an fzf query, not a filename, so there is nothing real
+# to complete. Offer the two literal targets hop treats specially and otherwise
+# say so rather than dumping the filesystem.
+_hop_query() {
+  local -a targets
+  targets=(
+    '/:repo root'
+    '-:previous directory (cd -)'
+  )
+  _describe -t hop-targets 'target' targets
+  _message -e query 'fzf query words'
+}
+
+_hop() {
+  local curcontext="$curcontext" state line
+  typeset -A opt_args
+
+  _arguments -s -S \
+    '(-a --all)'{-a,--all}'[include every registered kind, not just the defaults]' \
+    '(-k --kinds)'{-k,--kinds}'+[restrict to these kinds]:kinds:_hop_kinds' \
+    '(-R --repos)'{-R,--repos}'[pick a repo from $HOP_REPOS instead of the current one]' \
+    '(-w --workspaces)'{-w,--workspaces}'[pick a workspace root; l shows its repos]' \
+    '(-c --cwd --here)'{-c,--cwd,--here}'[only targets under $PWD, for any kind]' \
+    '(--vim --no-vim)--no-vim[search-first fzf, no modal layer (same as HOP_VIM=0)]' \
+    '(--vim --no-vim)--vim[force the modal layer on when HOP_VIM=0 is set]' \
+    '(- *)'{-h,--help}'[show usage and exit]' \
+    '*::query:_hop_query'
+}
+
+_hop "$@"

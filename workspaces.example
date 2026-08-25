@@ -1,0 +1,20 @@
+# hop workspaces: a plain list of directories that hold repos.
+# Copy this to ~/.config/hop/workspaces and edit.
+#
+# Format:  name = path     (name optional; a bare path is named after its basename)
+# A leading ~ and any $VAR are expanded. Lines are never eval'd, so a backtick is inert.
+# A path that does not exist yet is skipped silently, so listing it early is fine.
+# Order here is the order the picker shows them.
+#
+# $HOP_WORKSPACES (colon-separated) overrides this file for one shell.
+
+work      = ~/work/code
+work-all  = ~/work
+personal  = ~/src
+dotfiles  = ~/.local/share/chezmoi
+
+# Two workspaces may nest, as work and work-all do above.
+# `hopw` picks the DEEPER one for the directory you are standing in, which is the useful answer.
+
+# Not created yet? Leave it listed; hop just skips it until it exists.
+scratch   = ~/scratch

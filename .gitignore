@@ -1,0 +1,6 @@
+# Your own kind declarations; config.example.zsh is the tracked template.
+config.zsh
+# Personal machine paths; workspaces.example is the tracked template.
+workspaces
+# Frecency history is per-machine state, not configuration.
+history

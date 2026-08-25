@@ -1,0 +1,188 @@
+#!/usr/bin/env zsh
+# hop test runner.
+#
+# usage: tests/run [pattern]
+#
+# - Every tests/suite_*.zsh is a plain zsh script that calls `t <name>` then asserts.
+# - Each suite runs in its OWN zsh process, so a suite that crashes costs one failure, not the run.
+# - Each suite is also bounded by perl's alarm, because this machine has no `timeout`.
+# - The pattern selects suites by filename first, and failing that selects tests by name.
+# - NOTHING here may launch interactive fzf: `fzf --filter` is the only permitted mode.
+# - Anything that needs a real terminal is a manual check, and lives in ../SMOKE.md.
+
+emulate -L zsh
+setopt local_options no_nomatch null_glob
+
+typeset -g HOP_TESTS=${0:A:h}
+typeset -g HOP_HOME=${HOP_TESTS:h}
+export HOP_TESTS HOP_HOME
+
+typeset -gi HOP_T_TIMEOUT=${HOP_T_TIMEOUT:-120}
+typeset -g HOP_T_SENTINEL='##hop-test-count'
+
+# ---------------------------------------------------------------------------
+# Child mode: run exactly one suite in this process and report its tally.
+# ---------------------------------------------------------------------------
+if [[ ${1:-} == '--_suite' ]]; then
+	typeset suite=${2:-}
+	if [[ ! -r $suite ]]; then
+		print -ru2 -- "run: cannot read suite: ${suite}"
+		exit 2
+	fi
+	HOP_T_SUITE=${${suite:t}#suite_}
+	HOP_T_SUITE=${HOP_T_SUITE%.zsh}
+	source "$HOP_TESTS/lib/assert.zsh"
+	source "$HOP_TESTS/lib/fixture.zsh"
+
+	typeset -i _HOP_T_REPORTED=0
+
+	# _hop_t_report -> close the open test and emit the tally, at most once.
+	# - A suite that dies mid-run still gets its earlier passes counted this way.
+	# - The parent decides it crashed from the child's exit status, never from a missing tally alone.
+	_hop_t_report() {
+		(( _HOP_T_REPORTED )) && return 0
+		_HOP_T_REPORTED=1
+		_hop_t_finish
+		print -r -- "${HOP_T_SENTINEL} ${HOP_T_PASS} ${HOP_T_FAIL} ${HOP_T_SKIPPED}"
+		return 0
+	}
+
+	# This replaces the EXIT trap fixture.zsh installed, so cleanup is chained in explicitly.
+	trap '_hop_t_report; fixture_cleanup' EXIT INT TERM
+
+	source "$suite"
+	_hop_t_report
+	exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Parent mode.
+# ---------------------------------------------------------------------------
+typeset PATTERN=${1:-}
+
+if [[ $PATTERN == (-h|--help) ]]; then
+	print -r -- 'usage: tests/run [pattern]'
+	print -r -- ''
+	print -r -- '  tests/run              run every suite'
+	print -r -- '  tests/run smoke        run the suites whose filename matches *smoke*'
+	print -r -- '  tests/run "zsh -n*"    no suite matches, so this selects tests by name'
+	print -r -- ''
+	print -r -- '  HOP_T_TIMEOUT=N        seconds a single suite may take (default 120)'
+	print -r -- ''
+	print -r -- '  The tree under test is the one this script lives in, so run the APPLIED copy'
+	print -r -- '  and `chezmoi apply` an edited file before trusting a green run.'
+	print -r -- '  Manual, terminal-only checks live in SMOKE.md.'
+	exit 0
+fi
+
+# The chezmoi source tree names files `executable_hop-preview`, which no assert_exec can pass.
+# - Failing here with the real reason beats eight confusing failures about missing files.
+if [[ -e $HOP_HOME/bin/executable_hop-preview ]]; then
+	print -ru2 -- "run: ${HOP_HOME} is the chezmoi SOURCE tree, where filenames carry attr prefixes."
+	print -ru2 -- 'run: apply it first, then run the applied copy at ~/.config/hop/tests/run.'
+	exit 2
+fi
+
+# Colour is settled once, here, because a suite always writes into a pipe and can never tell.
+if [[ -t 1 ]]; then
+	export HOP_T_COLOR=1
+	typeset GREEN=$'\e[32m' RED=$'\e[31m' DIM=$'\e[2m' BOLD=$'\e[1m' OFF=$'\e[0m'
+else
+	export HOP_T_COLOR=0
+	typeset GREEN='' RED='' DIM='' BOLD='' OFF=''
+fi
+
+typeset -a SUITES=("$HOP_TESTS"/suite_*.zsh)
+if (( $#SUITES == 0 )); then
+	print -ru2 -- "run: no suites found in ${HOP_TESTS}"
+	exit 1
+fi
+
+# A pattern is a suite selector when it matches a filename, and a test selector otherwise.
+# - One argument covers both because `run smoke` and `run 'executable*'` are the same intent.
+export HOP_T_FILTER=''
+if [[ -n $PATTERN ]]; then
+	typeset -a picked=(${(M)SUITES:#*${~PATTERN}*})
+	if (( $#picked )); then
+		SUITES=("${picked[@]}")
+	else
+		HOP_T_FILTER=$PATTERN
+	fi
+fi
+
+typeset TMPOUT
+TMPOUT=$(mktemp "${${TMPDIR:-/tmp}:A}/hop-run.XXXXXX") || exit 1
+trap 'rm -f -- "$TMPOUT"' EXIT INT TERM
+
+# perl's alarm is the timeout on this box, and a missing perl must not silently drop the bound.
+typeset -a BOUND=()
+if (( ${+commands[perl]} )); then
+	BOUND=(perl -e 'alarm shift @ARGV; exec @ARGV' "$HOP_T_TIMEOUT")
+fi
+
+zmodload -F zsh/datetime b:strftime p:EPOCHREALTIME 2>/dev/null
+typeset -F START=${EPOCHREALTIME:-0}
+
+typeset -i PASS=0 FAIL=0 SKIPPED=0
+typeset suite line name
+typeset -i st tallied crashed
+typeset -a body
+
+for suite in "${SUITES[@]}"; do
+	name=${${suite:t}%.zsh}
+	"${BOUND[@]}" zsh "${0:A}" --_suite "$suite" > "$TMPOUT" 2>&1
+	st=$?
+	tallied=0
+	body=()
+	if [[ -s $TMPOUT ]]; then
+		for line in "${(@f)$(<"$TMPOUT")}"; do
+			if [[ $line == "${HOP_T_SENTINEL} "* ]]; then
+				typeset -a c=(${=line})
+				(( PASS += ${c[2]:-0} ))
+				(( FAIL += ${c[3]:-0} ))
+				(( SKIPPED += ${c[4]:-0} ))
+				tallied=1
+			else
+				body+=("$line")
+			fi
+		done
+	fi
+
+	# A non-zero child status is the crash signal, since a suite that finishes always exits 0.
+	# - The tally is still trusted when present, so passes recorded before the crash still count.
+	crashed=0
+	(( st != 0 || ! tallied )) && crashed=1
+	if (( crashed )); then
+		(( FAIL++ ))
+		body+=("  ${RED}✗${OFF} ${name}: suite did not finish (exit ${st})")
+		if (( st == 142 )); then
+			body+=("      ${DIM}killed by the ${HOP_T_TIMEOUT}s alarm; a test may be waiting on a terminal${OFF}")
+		fi
+	fi
+
+	# A name filter leaves most suites with nothing to say, and a bare header is pure noise.
+	if (( $#body )); then
+		print -r -- "${BOLD}${name}${OFF}"
+		print -rl -- "${body[@]}"
+	fi
+done
+
+typeset ELAPSED
+printf -v ELAPSED '%.2f' $(( ${EPOCHREALTIME:-0} - START ))
+
+print -r -- ''
+if (( PASS + FAIL + SKIPPED == 0 )); then
+	print -r -- "${RED}no tests ran${OFF}${PATTERN:+  (pattern: ${PATTERN})}"
+	exit 1
+fi
+
+typeset SUM="${PASS} passed, ${FAIL} failed"
+(( SKIPPED )) && SUM="${SUM}, ${SKIPPED} skipped"
+SUM="${SUM}  in ${ELAPSED}s"
+
+if (( FAIL )); then
+	print -r -- "${RED}FAIL${OFF}  ${SUM}"
+	exit 1
+fi
+print -r -- "${GREEN}ok${OFF}  ${SUM}"
+exit 0
