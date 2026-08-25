@@ -422,3 +422,9 @@ The suite is headless and hermetic: it builds synthetic fixture repos rather tha
 checkouts, and it stubs every external command so a test can never open an editor window or a
 browser tab. Interactive fzf cannot be driven in a synthetic pty, so whatever genuinely needs a
 terminal lives in `SMOKE.md` as a manual checklist.
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
