@@ -23,9 +23,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install zsh and fzf (Ubuntu)
+      - name: Install zsh (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y zsh fzf
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      # Debian's packaged fzf (0.44.1) predates --accept-nth, so pull the real upstream release.
+      - name: Install fzf (Ubuntu)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo junegunn/fzf --pattern 'fzf-*-linux_amd64.tar.gz' --output fzf.tar.gz --clobber
+          tar -xzf fzf.tar.gz fzf
+          sudo install -m 0755 fzf /usr/local/bin/fzf
+          rm -f fzf fzf.tar.gz
 
       - name: Install fzf (macOS)
         if: runner.os == 'macOS'
