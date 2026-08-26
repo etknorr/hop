@@ -63,7 +63,7 @@ _hop_usage() {
 	print -r -- '  hop --vim           force the modal layer on when HOP_VIM=0 is set'
 	print -r -- '  hop --doctor        dump config, tools and kind counts for a bug report'
 	print -r -- '  hop --doctor=short  the same, minus paths and names; safe to paste publicly'
-	print -r -- '  HOP_DEBUG=1 hop     log every key dispatch, then read it with --doctor'
+	print -r -- '  HOP_DEBUG=1 hop     log every pick and key dispatch, read it with --doctor'
 	print -r -- '  hop upgrade         fast-forward main to the newest release, then exec zsh'
 	print -r -- '  hop upgrade 0.1.0   pin the install to exactly that release, detached'
 	print -r -- '  hop upgrade --check what is installed vs what is released; changes nothing'
