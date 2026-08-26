@@ -35,6 +35,10 @@ typeset -g  HOP_PTY_CANARY=''
 typeset -gF HOP_PTY_SETTLE=${HOP_PTY_SETTLE:-0.25}
 # Ceiling on every poll, so a wedged fzf fails one test instead of eating the suite's alarm.
 typeset -gF HOP_PTY_WAIT=${HOP_PTY_WAIT:-10}
+# How long the trace must stop growing before a state read counts as settled.
+# - The one timing value a caller could not override, and the only one that can go WRONG rather
+#   than merely slow: too short and pty_quiesce reads a half-applied action chain.
+typeset -gF HOP_PTY_QUIET=${HOP_PTY_QUIET:-0.2}
 
 # pty_supported -> 0 when zsh/zpty loads. The suite skips everything when this fails.
 # - Also the one place the suite's own process group is recorded, before any child exists.
@@ -122,7 +126,7 @@ pty_count() {
 # - Waiting for quiet instead means every assertion reads a settled state.
 pty_quiesce() {
 	emulate -L zsh
-	local -F quiet=${1:-0.2} spent=0 still=0
+	local -F quiet=${1:-$HOP_PTY_QUIET} spent=0 still=0
 	local -i last
 	_hop_pty_n
 	last=$HOP_PTY_N
