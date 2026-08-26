@@ -15,6 +15,16 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- A test suite killed by its bound reported every result it had already produced as zero.
+  The tally reached the runner only in a final sentinel line, and the bound ends a suite with `KILL`, which no trap can catch, so a suite killed with 16 passing tests on screen reported `0 passed, 1 failed`.
+  Preserving a partial tally was designed and wired, and worked for every signal except the one the runner itself sends.
+  The parent counts the result markers it is already holding when no sentinel arrives, so a killed suite keeps its passes.
+- The per-suite bound was too low for a busy machine, and a crash never said what had killed it.
+  `suite_pty` takes about 13.6s at loadavg 14 and 182.28s at loadavg 185, so the 120s bound was killing a suite that was merely slow, and the default is 600s now.
+  A crash reports its own elapsed time and the load average, and separates the runner's bound from a signal sent from outside it, which is the distinction that had exit 143 at 110.83s read as this bound firing for most of a day when the bound exits 142.
+- Fixture directories orphaned by a killed suite are reaped at startup.
+  A suite that cannot run its cleanup leaves its entire fixture set behind, and 2053 entries had accumulated under the temp directory before anyone counted them.
+  The sweep is age-gated so a concurrent run's fixtures survive, and it matches files as well as directories, because the runner's own scratch file leaks the same way.
 - The picker no longer leaves a `hop-guard.XXXXXX` directory in your temp dir every time it is killed outright.
   Each picker makes one private directory for the escape guard's timestamp and removes it on `EXIT HUP TERM`, but `SIGKILL` cannot be trapped, so `kill -9`, an OOM kill, or a terminal tearing down the process group left the directory behind for good and one accumulated per killed picker.
   A trap cannot fix what a trap cannot catch, so the picker now sweeps guard directories older than a day before creating its own.
