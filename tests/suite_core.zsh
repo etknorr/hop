@@ -160,3 +160,82 @@ hop -w" "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=1' >/dev/null 2>&1
 out=''
 [[ -r $CO_OFFLOG ]] && out=$(cat -- "$CO_OFFLOG")
 assert_empty "$out" 'a pick must not write a debug log unless HOP_DEBUG asked for one'
+
+# ---------------------------------------------------------------------------
+# Item 1: hop -c has to work through a symlink, and on a name holding a backslash.
+# ---------------------------------------------------------------------------
+# The repo is reached through a REAL symlink, which is the only way $PWD and git disagree.
+# - fixture_tmpdir resolves its own path, so the link has to be made here to get a logical $PWD.
+# - This is the /var case suite_smoke pins, one level further: /tmp is a symlink on macOS too.
+# The tg preset needs two path components under terraform/, so every unit here is scope/name.
+typeset CO_REPO CO_LINK CO_SUB CO_BS
+fixture_repo core
+CO_REPO=$REPLY
+fixture_write 'terraform/acct/prod/us-east-1/terragrunt.hcl' 'include {}'
+fixture_write 'terraform/acct/stage/us-east-1/terragrunt.hcl' 'include {}'
+fixture_write 'README.md' '# fixture'
+fixture_commit 'initial'
+
+fixture_tmpdir link
+CO_LINK="$REPLY/link"
+ln -sfn -- "$CO_REPO" "$CO_LINK"
+CO_SUB='terraform/acct/prod'
+
+t 'the fixture really is reached through a symlink, or the cases below prove nothing'
+assert_eq "$CO_REPO" "${CO_LINK:A}" 'the link has to resolve to the fixture repo'
+assert_ne "$CO_REPO" "$CO_LINK" 'an unresolved link is what makes $PWD and git disagree'
+out=$(co_run "builtin cd -q -- ${(q)CO_LINK}/${CO_SUB}
+print -r -- \"\$PWD\"
+git rev-parse --show-toplevel")
+assert_contains "$out" "$CO_LINK/$CO_SUB" 'zsh keeps $PWD logical, which is the whole bug'
+assert_contains "$out" "$CO_REPO" 'git reports the physical root, which is the other half'
+
+t 'hop -c finds targets in a subtree entered through a symlink'
+out=$(co_run "builtin cd -q -- ${(q)CO_LINK}/${CO_SUB}
+hop -c -k tg" 'HOP_FZF_EXIT=1'); st=$?
+assert_not_contains "$out" 'hop: no targets under' 'the logical/physical mismatch dropped every row'
+assert_contains "$out" 'hop: no match' 'reaching fzf at all is what proves the rows survived'
+assert_eq 1 "$st"
+
+t 'and the surviving rows are the ones under that subtree, not the whole repo'
+co_run "builtin cd -q -- ${(q)CO_LINK}/${CO_SUB}
+hop -c -k tg" 'HOP_FZF_EXIT=1' >/dev/null 2>&1
+out=$(cat -- "$CO_STDIN")
+assert_contains "$out" "$CO_REPO/terraform/acct/prod/us-east-1" 'the row in the subtree has to be offered'
+assert_not_contains "$out" 'acct/stage' 'a sibling subtree must still be filtered out'
+
+t 'hop -c still narrows, so the symlink fix did not turn the filter off'
+co_run "builtin cd -q -- ${(q)CO_LINK}/terraform/acct/stage
+hop -c -k tg" 'HOP_FZF_EXIT=1' >/dev/null 2>&1
+out=$(cat -- "$CO_STDIN")
+assert_contains "$out" "$CO_REPO/terraform/acct/stage/us-east-1"
+assert_not_contains "$out" 'acct/prod' 'standing in stage must not offer prod'
+
+t 'hop -c under a subtree with no targets still says so, by its own message'
+out=$(co_run "builtin cd -q -- ${(q)CO_LINK}
+mkdir -p empty/deeper
+builtin cd -q -- empty/deeper
+hop -c -k tg" 'HOP_FZF_EXIT=1'); st=$?
+assert_contains "$out" 'hop: no targets under' 'a genuinely empty subtree keeps the original message'
+assert_eq 1 "$st"
+
+t 'a directory whose name holds a backslash is not mangled, which awk -v did'
+CO_BS='terraform/we\ird/unit'
+fixture_write "${CO_BS}/terragrunt.hcl" 'include {}'
+fixture_commit 'backslash'
+out=$(co_run "builtin cd -q -- ${(q)CO_REPO}/${(q)CO_BS}
+hop -c -k tg" 'HOP_FZF_EXIT=1'); st=$?
+assert_not_contains "$out" 'hop: no targets under' 'awk -v escape-processed the backslash away'
+assert_contains "$out" 'hop: no match'
+assert_eq 1 "$st"
+
+t 'and that backslash subtree offers its own row, not a sibling'
+co_run "builtin cd -q -- ${(q)CO_REPO}/${(q)CO_BS}
+hop -c -k tg" 'HOP_FZF_EXIT=1' >/dev/null 2>&1
+out=$(cat -- "$CO_STDIN")
+assert_contains "$out" "$CO_REPO/$CO_BS"
+assert_not_contains "$out" 'acct/prod' 'the filter still has to exclude everything else'
+
+t 'the -c filter no longer forks awk, per the same rule providers.zsh already follows'
+out=$(co_run 'print -r -- ${#${(M)${(f)"$(functions hop)"}:#*awk*}}')
+assert_eq 0 "$out" 'awk -v cannot carry a path safely, so hop() must not use it'

@@ -459,11 +459,27 @@ hop() {
 	# -c narrows every kind to the subtree you are standing in, not just the file kind.
 	# - Enumeration still starts at the repo root, because a kind's bases are repo-root relative.
 	# - Filtering the rows afterwards is what makes one flag work identically for all kinds.
-	if (( here )) && [[ $PWD != $root ]]; then
-		targets=$(print -r -- "$targets" | awk -F'\t' -v p="$PWD" '$2 == p || index($2, p "/") == 1')
-		if [[ -z $targets ]]; then
-			print -ru2 -- "hop: no targets under ${PWD} for kinds: ${(j:,:)kinds}"
-			return 1
+	# - $PWD is LOGICAL while the rows are built from git's PHYSICAL root, so both sides resolve first.
+	# - Unresolved, every row was dropped in any repo under macOS /tmp or a symlinked parent.
+	# - _hop_act_browse fixed this same class with ${1:A}, and its comment names the /tmp case.
+	# - Filtering in zsh rather than awk, because `awk -v` escape-processes the value it is handed.
+	# - So a directory whose name contains a backslash silently matched nothing at all.
+	if (( here )); then
+		local hdir=${PWD:A} hroot=${root:A}
+		if [[ $hdir != "$hroot" ]]; then
+			local -a kept=()
+			local row rdir
+			for row in "${(@f)targets}"; do
+				[[ -n $row ]] || continue
+				# Field 2 is the absolute dir, read exactly as _hop_rank reads it.
+				rdir=${${row#*$'\t'}%$'\t'*}
+				[[ $rdir == "$hdir" || $rdir == "$hdir"/* ]] && kept+=("$row")
+			done
+			targets=${(F)kept}
+			if [[ -z $targets ]]; then
+				print -ru2 -- "hop: no targets under ${PWD} for kinds: ${(j:,:)kinds}"
+				return 1
+			fi
 		fi
 	fi
 
