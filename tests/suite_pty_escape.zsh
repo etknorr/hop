@@ -49,6 +49,19 @@ typeset -g ESC_DBG="$HOME/.local/state/hop/debug.log"
 # - Left to hop's own probe it is pbcopy here and wl-copy or xclip there, which no exact assert survives.
 export HOP_CLIPBOARD=pbcopy
 
+# The guard times a verb against the PREVIOUS check's clock reading, so its discriminator is its own fork.
+# - At loadavg 35 that fork measured 425ms mean, which is past the shipped 0.15 threshold.
+# - A check that slow reads as a real keypress and fails open, so the forged payload runs a verb.
+# - Reproduced here 3 times in 4 under 24-way load, dispatching ctrl-o and reaching the code stub.
+# - So the shipped default cannot hold these negatives green, and no retry count would change that.
+# - Pinning the window past any plausible fork latency keeps every link they exist to prove intact.
+# - Those links are: introducer, bindable alt-key, mark written, verb consults the guard, verb refused.
+# - What the pin removes is failure caused by a slow fork, which is not why any case below was written.
+# - It does NOT claim the shipped 0.15 is adequate under load; bin/hop-guard now records that it is not.
+# - 300s, because the worst check fork measured 5.5s at loadavg 35 and the pin has to clear that outright.
+# - Nothing leaks between cases: lib/ui.zsh mktemp -d's the mark dir per picker under an EXIT trap.
+export HOP_GUARD_WINDOW=300
+
 # Losing pty capability is suite_pty.zsh's canary to report, and it turns CI red on its own.
 # - Duplicating that assertion here would give one broken runner nine red tests for one cause.
 if ! pty_canary; then
@@ -58,6 +71,23 @@ fi
 
 # The verb binaries; bat is deliberately absent, since bat running IS the preview pane doing its job.
 typeset -ga ESC_VERB_BINS=(gh pbcopy pbpaste code editor vim nvim open xclip xsel wl-copy)
+
+# Every stub pty.zsh installs, which is the verb list plus the one the preview pane runs.
+# - esc_log_corrupt needs the FULL set, because a line naming bat is legitimate and only a garbled one is not.
+typeset -ga ESC_STUB_BINS=("${ESC_VERB_BINS[@]}" bat)
+
+# Dropping the bat stub leaves calls.log with exactly ONE writer, which is what makes the log trustworthy.
+# - Each stub appends its name, then every argument, then the newline, as THREE separate appends.
+# - The preview pane runs bat on every render, so a second stub was writing throughout every session.
+# - Measured: a bat call landed between gh's appends and recorded `batgh<TAB>browse<TAB>--<TAB>...`.
+# - esc_verbs matches the first tab field only, so that read as "gh never ran" with an empty stderr.
+# - It cost a real b control a red 1 run in 25 under load, blaming the guard for a logging race.
+# - bin/hop-preview gates on `bat` being on PATH, so removing it falls through to the cat/head path.
+# - That path is what this machine already uses, and no case here asserts the preview pane's contents.
+# - HOP_PTY_SHARED is per-process and pty_env has already built it, so this cannot reach another suite.
+# - The cost is a coupling to pty.zsh's stub layout, which this suite already has by knowing bat is a stub.
+# - The stub's three-append write is the underlying bug, and it belongs to tests/lib/pty.zsh, not here.
+rm -f -- "$HOP_PTY_SHARED/bat"
 
 typeset -g ESC_DISPATCH='' ESC_FIRED='' ESC_ALIVE=''
 
@@ -91,6 +121,25 @@ esc_verbs() {
 		(( ${ESC_VERB_BINS[(Ie)$n]} )) && out+=("$n")
 	done
 	print -rn -- "${(j:,:)out}"
+}
+
+# esc_log_corrupt -> the calls.log lines no single stub could have written, joined for a message.
+# - Dropping the bat stub above removed the only concurrent writer this suite currently has.
+# - This is the tripwire for the next one, since the three-append write in pty.zsh is still there.
+# - Without it a second writer would return silently to blaming the guard for an empty verb list.
+# - Proven reachable: 60 concurrent stub calls produced `batbat<TAB>...` and a line starting with a tab.
+esc_log_corrupt() {
+	emulate -L zsh
+	local -a all=("${(@f)$(pty_calls)}")
+	all=(${all:#})
+	local -a bad=()
+	local l n
+	for l in "${all[@]}"; do
+		n=${l%%$'\t'*}
+		[[ -n $n ]] && (( ${ESC_STUB_BINS[(Ie)$n]} )) && continue
+		bad+=("$l")
+	done
+	print -rn -- "${(j: | :)bad}"
 }
 
 # esc_case <bytes> -> drive one sequence in as a single write, then describe what it did.
@@ -198,6 +247,12 @@ fi
 # - A kitty graphics APC carries kilobytes of base64, so a long payload is not hypothetical.
 # - Measured: letters arrive ~20ms apart, so timing from the introducer alone breaks through at letter 8.
 # - This body is four verbs repeated, so it is 64 separate attempts to run one.
+# - Disclosure: with the window pinned above, timing from the introducer alone would pass this too.
+# - So this case no longer discriminates re-arm, and pretending otherwise would be the vacuous kind of green.
+# - suite_guard's 'a refused verb pushes the window forward' is where re-arm is pinned instead.
+# - That test compares the mark before and after a refusal, which is exact and needs no pty.
+# - Its window is pinned there too, because its refusal step used to run on the load-sensitive default.
+# - What this case still proves is that a 64-letter payload reaches no verb through the real picker.
 t 'pty-esc: a long APC payload cannot outlast the guard'
 if esc_case $'\e_G'"${(l:64::obey:)}"$'\e\\'; then
 	esc_assert_inert 'a long APC payload'
@@ -208,13 +263,22 @@ fi
 # ---------------------------------------------------------------------------
 # The positive controls, without which every negative above proves nothing.
 # ---------------------------------------------------------------------------
+# Both controls send a bare letter, and a plain letter never marks, so only an alt-<char> arms the guard.
+# - lib/ui.zsh mktemp -d's the mark dir per picker under an EXIT trap, so a fresh picker has no mark at all.
+# - That is what rules out a mark left behind by one of the negatives above, which the pin would prolong.
+# - With no mark file to read, `check` fails open at ANY window, so the pin above cannot suppress these.
+# - That makes the pin part of the claim rather than a caveat on it: an unmarked key fires regardless.
+# - hop's stderr is reported on failure, because a verb can bail AFTER dispatch has logged the key.
+# - `dispatch key=` is written before the verb runs, so the first assert passing proves nothing about the second.
+
 # b is the browse verb, and browse is the exact verb the BEL case used to reach.
 t 'pty-esc: a real b still browses, so the negatives are not vacuous'
 if esc_open; then
 	pty_key b
 	if pty_wait_exit; then
-		assert_eq 'ctrl-g' "$(esc_key)" 'a real b no longer dispatches the browse verb'
-		assert_eq 'gh' "$(esc_verbs)" 'a real b no longer reaches the gh binary'
+		typeset esc_bwhy="$(pty_err)" esc_bbad="$(esc_log_corrupt)"
+		assert_eq 'ctrl-g' "$(esc_key)" "a real b no longer dispatches the browse verb; hop said: ${esc_bwhy}"
+		assert_eq 'gh' "$(esc_verbs)" "a real b no longer reaches the gh binary; hop said: ${esc_bwhy}; interleaved log lines: ${esc_bbad}"
 	else
 		_hop_t_bad 'b never made the picker exit' "$(pty_trace)"
 	fi
@@ -228,8 +292,9 @@ t 'pty-esc: a real y still copies, so the negatives are not vacuous'
 if esc_open; then
 	pty_key y
 	if pty_wait_exit; then
-		assert_eq 'ctrl-y' "$(esc_key)" 'a real y no longer dispatches the copy verb'
-		assert_eq 'pbcopy' "$(esc_verbs)" 'a real y no longer reaches the clipboard binary'
+		typeset esc_ywhy="$(pty_err)" esc_ybad="$(esc_log_corrupt)"
+		assert_eq 'ctrl-y' "$(esc_key)" "a real y no longer dispatches the copy verb; hop said: ${esc_ywhy}"
+		assert_eq 'pbcopy' "$(esc_verbs)" "a real y no longer reaches the clipboard binary; hop said: ${esc_ywhy}; interleaved log lines: ${esc_ybad}"
 	else
 		_hop_t_bad 'y never made the picker exit' "$(pty_trace)"
 	fi
@@ -254,5 +319,5 @@ if esc_case $'\e]11;rgb:1e1e/1e1e/1e1e\e\\'; then
 else
 	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
 fi
-# Back to the pinned default, so nothing after this point runs with the guard disabled.
-export HOP_GUARD_WINDOW=''
+# Back to this suite's pin, not to empty, so nothing after this point runs on the load-sensitive default.
+export HOP_GUARD_WINDOW=300

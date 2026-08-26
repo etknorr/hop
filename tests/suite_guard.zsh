@@ -34,9 +34,17 @@ typeset g_stamp=''
 assert_nonempty "$g_stamp" 'mark wrote nothing, so every check below would fail open and prove nothing'
 assert_eq '' "${g_stamp//[0-9.]/}" 'the mark must be a bare clock reading, digits and one dot only'
 
+# Every assertion that a verb was REFUSED has to pin the window, and the reason is not caution.
+# - `check` re-arms on refusal, so the age it computes is the interval between two consecutive forks.
+# - That makes the guard's discriminator its own fork cost: measured 220ms worst at loadavg 44.
+# - Against the shipped 150ms window a fork that slow reads as a real keypress and fails open.
+# - Measured 1 in 40 at loadavg 44, so an unpinned refusal assertion is a load meter, not a test.
+# - Asserting a PASS needs no pin, because load only pushes the age further outside the window.
+# - Consequence worth stating plainly: the shipped 0.15 default is pinned by no test in this file.
+# - It cannot be, since asserting it holds under load would be asserting something measurably false.
 t 'a verb landing inside the window is refused'
 "$G_BIN" mark "$G_MARK"
-assert_eq 'ignore' "$(g_check)" 'a verb microseconds after an unparsed escape must not run'
+assert_eq 'ignore' "$(g_check HOP_GUARD_WINDOW=60)" 'a verb microseconds after an unparsed escape must not run'
 
 t 'the same verb outside the window runs untouched'
 "$G_BIN" mark "$G_MARK"
@@ -46,7 +54,7 @@ assert_eq "$G_ACT" "$(g_check)" 'a real keypress 300ms later was swallowed, whic
 # The window is what separates the two populations, so it has to be the thing under test.
 t 'the window is a real threshold, not a constant answer'
 "$G_BIN" mark "$G_MARK"
-assert_eq 'ignore' "$(g_check HOP_GUARD_WINDOW=5)" 'a 5s window must refuse a verb that lands immediately'
+assert_eq 'ignore' "$(g_check HOP_GUARD_WINDOW=60)" 'a 60s window must refuse a verb that lands immediately'
 "$G_BIN" mark "$G_MARK"
 sleep 0.1
 assert_eq "$G_ACT" "$(g_check HOP_GUARD_WINDOW=0.01)" 'a 10ms window must let a verb 100ms later through'
@@ -61,7 +69,7 @@ t 'a refused verb pushes the window forward, so a long payload cannot outlast it
 "$G_BIN" mark "$G_MARK"
 typeset g_first g_second
 read -r g_first < "$G_MARK"
-assert_eq 'ignore' "$(g_check)" 'the first payload letter was not refused'
+assert_eq 'ignore' "$(g_check HOP_GUARD_WINDOW=60)" 'the first payload letter was not refused'
 read -r g_second < "$G_MARK"
 assert_eq 1 $(( g_second > g_first )) 'a refusal left the mark untouched, so the window never re-arms'
 
@@ -92,10 +100,32 @@ t 'a mark from the future fails open, so a backwards clock cannot quarantine the
 print -rn -- '99999999999.0' > "$G_MARK"
 assert_eq "$G_ACT" "$(g_check)" 'a negative age must pass, or a clock change disables hop until it catches up'
 
+# A refusal at the default window cannot be asserted here at all, and that is a fact about the code.
+# - The value under test IS the fallback to 0.15, so pinning a window would test a different thing.
+# - Refusing at 0.15 has to be observed across a fork whose own latency reached 220ms at loadavg 44.
+# - Comparing two such forks was measurably worse: 3 runs in 10 went red under 24-way load.
+# - Any one of the forks crossing the threshold breaks a comparison, so comparing triples the exposure.
+# - So the behaviour below is asserted only where it holds at every load, well outside the window.
+# - The narrower claim that survives: a garbage window neither aborts nor refuses a key 300ms late.
+# - It cannot distinguish a fallback of 0.15 from one of 0, because both let a key 300ms late through.
+# - The literal check at the end covers exactly that, by reading the two constants out of the source.
 t 'a malformed window falls back to the default instead of aborting'
 "$G_BIN" mark "$G_MARK"
-assert_eq 'ignore' "$(g_check HOP_GUARD_WINDOW=abc)" 'a garbage window must fall back, not crash or disable'
-assert_eq 'ignore' "$(g_check HOP_GUARD_WINDOW=0.1.5)" 'a two-dot window must fall back, not abort the caller'
+sleep 0.3
+assert_eq "$G_ACT" "$(g_check HOP_GUARD_WINDOW=abc)" 'a garbage window must fall back, not crash or refuse forever'
+"$G_BIN" mark "$G_MARK"
+sleep 0.3
+assert_eq "$G_ACT" "$(g_check HOP_GUARD_WINDOW=0.1.5)" 'a two-dot window must fall back, not abort the caller'
+# The control, without which the two passes above could be a guard that refuses nothing whatsoever.
+"$G_BIN" mark "$G_MARK"
+sleep 0.3
+assert_eq 'ignore' "$(g_check HOP_GUARD_WINDOW=60)" 'control: a 60s window must still refuse a key 300ms late'
+# "Falls back to THE DEFAULT" is a claim about two literals in one file, so it needs no clock at all.
+typeset g_default g_fallback
+g_default=$(grep -o 'HOP_GUARD_WINDOW:-[0-9][0-9.]*' "$G_BIN" | head -1)
+g_fallback=$(grep -o 'raw=[0-9][0-9.]*' "$G_BIN" | head -1)
+assert_nonempty "$g_default" 'the default window literal is no longer where this check looks for it'
+assert_eq "${g_default##*:-}" "${g_fallback##*=}" 'the fallback constant drifted from the documented default'
 
 t 'HOP_GUARD_WINDOW=0 is the off switch a timing heuristic has to have'
 "$G_BIN" mark "$G_MARK"
