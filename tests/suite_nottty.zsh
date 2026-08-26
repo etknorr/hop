@@ -286,26 +286,55 @@ pipeout=CLOSED' "$NT_CLOSED_RES" 'with no ctty every shape must be false, whatev
 
 # zpty is the only way to manufacture a controlling terminal here, and it starts no fzf at all.
 # - The suite process itself may have no ctty: an agent's shell and a CI runner both lack one.
-# - So the positive direction cannot be tested in-process, and without a pty it has to skip.
+# - So the positive direction cannot be tested in-process, and it needs a pty to exist at all.
 # - Only `zpty -d` is ever used to tear this down, never TERM, and the child exits on its own.
+# - It SKIPS only when zpty is genuinely unavailable, which is zmodload or `zpty -b` failing.
+# - It does NOT skip on an empty result, because tests/suite_pty.zsh drives real fzf on both runners.
+# - A pty is therefore known to work here, so an empty result is a defect and must fail loudly.
+# - The child writes a `ready` marker before probing, so "never started" is tellable from "no result".
+# - The marker, zpty's stderr and the child's stderr all ride into the failure message.
+# - That is what an earlier empty macOS result lacked, which left nothing to diagnose it by.
+typeset NT_PTY_RES='' NT_PTY_ERR='' NT_PTY_CERR='' NT_PTY_READY=''
+typeset -i NT_PTY_ST=0 NT_PTY_HAVE=0
 if zmodload zsh/zpty 2>/dev/null && fixture_tmpdir ntpty; then
 	typeset ntp=$REPLY
-	print -rl -- "$(fixture_pins)" "$(nt_pins)" "export NT_RES=${(q)ntp}/res" "$NT_SHAPES" > "$ntp/shapes.zsh"
+	print -rl -- "$(fixture_pins)" "$(nt_pins)" "export NT_RES=${(q)ntp}/res" \
+		"print -r -- ready > ${(q)ntp}/ready" "$NT_SHAPES" > "$ntp/shapes.zsh"
 	: > "$ntp/res"
-	typeset NT_PTY_RES='' junk
-	typeset -F spent=0
-	zpty -b NTPTY "zsh -f ${ntp}/shapes.zsh"
-	while (( spent < NT_SECS )); do
-		while zpty -r -t NTPTY junk 2>/dev/null; do :; done
-		[[ -s $ntp/res ]] && (( $(grep -c . "$ntp/res") == 5 )) && break
-		sleep 0.02
-		(( spent += 0.02 ))
-	done
-	zpty -d NTPTY 2>/dev/null
-	NT_PTY_RES=$(<"$ntp/res")
-
-	t 'a ctty present: the predicate is true in every redirected shape'
-	assert_eq "$NT_WANT_OPEN" "$NT_PTY_RES" 'a stdin test would report CLOSED here and refuse four working shapes'
+	: > "$ntp/ready"
+	: > "$ntp/childerr"
+	: > "$ntp/zptyerr"
+	# Deliberately NOT inside a $(...): a zpty entry dies with the subshell that created it.
+	zpty -b NTPTY "zsh -f ${ntp}/shapes.zsh 2> ${ntp}/childerr" 2> "$ntp/zptyerr"
+	NT_PTY_ST=$?
+	if (( NT_PTY_ST == 0 )); then
+		NT_PTY_HAVE=1
+		typeset junk
+		typeset -F spent=0
+		typeset -a nlines
+		while (( spent < NT_SECS )); do
+			while zpty -r -t NTPTY junk 2>/dev/null; do :; done
+			nlines=(${(f)"$(<$ntp/res)"})
+			# (@) is load-bearing: ${#${nlines:#}} is the joined STRING length, not the count.
+			(( ${#${(@)nlines:#}} == 5 )) && break
+			sleep 0.05
+			(( spent += 0.05 ))
+		done
+		zpty -d NTPTY 2>/dev/null
+		NT_PTY_RES=$(<"$ntp/res")
+	fi
+	NT_PTY_READY=$(<"$ntp/ready")
+	NT_PTY_ERR=$(<"$ntp/zptyerr")
+	NT_PTY_CERR=$(<"$ntp/childerr")
 else
-	skip 'a ctty present: the predicate is true in every redirected shape' 'zsh/zpty did not load, so no ctty can be manufactured'
+	NT_PTY_ERR='zsh/zpty did not load'
+fi
+
+if (( NT_PTY_HAVE )); then
+	t 'a ctty present: the predicate is true in every redirected shape'
+	assert_eq "$NT_WANT_OPEN" "$NT_PTY_RES" \
+		"a stdin test would report CLOSED here and refuse four working shapes (child started: ${NT_PTY_READY:-NO}${NT_PTY_CERR:+, child stderr: ${NT_PTY_CERR}})"
+else
+	skip 'a ctty present: the predicate is true in every redirected shape' \
+		"zpty is unavailable here, so no ctty can be manufactured (status ${NT_PTY_ST}${NT_PTY_ERR:+: ${NT_PTY_ERR}})"
 fi
