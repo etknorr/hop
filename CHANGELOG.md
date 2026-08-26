@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Fixed
+
+- The test suite no longer inherits the developer's own `hop` settings. An exported `HOP_FZF_MIN`,
+  `HOP_VIM`, `HOP_HOPRC` or `HOP_REPOS` made it fail or hang, and an inherited `HOP_FZF_HEIGHT`
+  started fzf against no terminal and left orphaned processes behind. Every setting hop reads is now
+  pinned from one list, rather than from three helpers that each kept their own and drifted.
+- The suite's per-child timeout is a real bound again. Five call sites used a shape where the timer
+  lived inside the process being timed, so a child that ignored the signal ran unbounded and its
+  grandchildren outlived the run. The timer now sits outside it and kills the whole process group.
+
 ## [0.1.0] - 2026-08-25
 
 First release.

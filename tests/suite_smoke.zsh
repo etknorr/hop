@@ -197,6 +197,26 @@ assert_not_contains "$fileline" '*' 'file is opt-in, so it must not carry the de
 # ---------------------------------------------------------------------------
 # The harness itself: fixtures, stubs and the probe.
 # ---------------------------------------------------------------------------
+# The pin list claims a new hop setting is one new line in it, and nothing enforced that claim.
+# - Three helpers each kept a private list, and an unpinned HOP_FZF_MIN or HOP_REPOS walked in.
+# - So the list is derived from the product here instead of trusted, and drift fails rather than leaks.
+# - hop's convention is the discriminator: `_HOP_*` with a leading underscore is INTERNAL state,
+#   and a bare `HOP_*` is a user setting, which is why the pattern refuses a preceding word character.
+# - HOP_HOME is excluded because hop.zsh derives it unconditionally, so no inherited value survives.
+# - HOP_VIM_* are excluded because lib/ui.zsh assigns them; they are computed keymaps, not settings.
+t 'every hop setting the product reads is covered by the fixture pin list'
+typeset -a pinnames prodvars unpinned rawvars
+fixture_sources shipped
+rawvars=(${(f)"$(grep -rhoE '(^|[^A-Za-z0-9_])HOP_[A-Z_]+' "${reply[@]}")"})
+prodvars=(${(u)rawvars#*HOP_})
+prodvars=(${prodvars/#/HOP_})
+prodvars=(${prodvars:#HOP_HOME})
+prodvars=(${prodvars:#HOP_VIM_*})
+assert_ge $#prodvars 10 'the scan found almost no settings, so it would pass while checking nothing'
+pinnames=(${${(f)"$(fixture_pin_pairs /nonexistent)"}%%=*})
+unpinned=(${prodvars:|pinnames})
+assert_empty "${(j:, :)unpinned}" 'a probe could inherit these from the developer running the suite'
+
 t 'fixture_repo builds a throwaway git repo'
 typeset REPLY repo top
 fixture_repo smoke
