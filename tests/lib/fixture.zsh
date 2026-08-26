@@ -290,6 +290,9 @@ fixture_pin_derived() {
 # - An inherited 80% is what left 8 fzf and 8 orphaned parents alive 38 minutes after a run said FAIL.
 # - DEBUG_LOG and WORKSPACES_FILE are named outright rather than left to the XDG roots above,
 #   because an exported value overrides those and would read the user's real, private config.
+# - The two FZF_* pins are the ones no scan of hop's own source can find, because FZF reads them.
+# - Measured: FZF_DEFAULT_OPTS='--exact' silently disabled the CONTROL arm of the --exact guard,
+#   so the fuzzy comparison returned one row and the test stopped proving anything.
 fixture_pin_settings() {
 	emulate -L zsh
 	local home=$1
@@ -305,7 +308,9 @@ fixture_pin_settings() {
 		'HOP_FZF_MIN=' \
 		'HOP_FZF_HEIGHT=' \
 		'HOP_CLIPBOARD=' \
-		'HOP_HIST_MAX='
+		'HOP_HIST_MAX=' \
+		'FZF_DEFAULT_OPTS=' \
+		'FZF_DEFAULT_COMMAND='
 }
 
 # fixture_pin_pairs <home> -> both lists as `VAR=value`, for the callers that hand pins to `env`.

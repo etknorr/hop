@@ -217,6 +217,16 @@ pinnames=(${${(f)"$(fixture_pin_pairs /nonexistent)"}%%=*})
 unpinned=(${prodvars:|pinnames})
 assert_empty "${(j:, :)unpinned}" 'a probe could inherit these from the developer running the suite'
 
+# fzf reads its own settings, which hop never names, so the scan above is blind to them by construction.
+# - They are therefore written out by hand, and this test exists to notice if one is dropped.
+# - Measured: FZF_DEFAULT_OPTS='--exact' disabled the CONTROL arm of the --exact guard in
+#   suite_integration, so its fuzzy comparison returned one row and the test proved nothing.
+t 'the fzf settings hop never names, and so cannot be scanned for, are pinned anyway'
+typeset fzfvar
+for fzfvar in FZF_DEFAULT_OPTS FZF_DEFAULT_COMMAND; do
+	assert_nonempty "${pinnames[(r)$fzfvar]}" "${fzfvar} is unpinned, and fzf reads it even if hop does not"
+done
+
 t 'fixture_repo builds a throwaway git repo'
 typeset REPLY repo top
 fixture_repo smoke
