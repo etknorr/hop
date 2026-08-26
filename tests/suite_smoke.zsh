@@ -150,6 +150,32 @@ assert_not_contains "$sentshort" "$sentwstarget"
 # A bare `typeset REPLY` further down would otherwise echo whatever REPLY still holds here.
 unset REPLY
 
+# ---------------------------------------------------------------------------
+# --version: the release contract other tooling (hop upgrade) depends on.
+# ---------------------------------------------------------------------------
+t 'VERSION is a bare semver, no v prefix'
+typeset ver ok
+read -r ver < "$HOP_HOME/VERSION"
+assert_nonempty "$ver" 'VERSION must not be empty'
+if [[ $ver == <->.<->.<-> ]]; then ok=1; else ok=0; fi
+assert_eq 1 "$ok" "VERSION does not match ^[0-9]+.[0-9]+.[0-9]+\$: got ${ver}"
+
+t 'hop --version exits 0 and contains the VERSION contents'
+typeset verout
+verout=$(hop_probe 'hop --version')
+assert_contains "$verout" "$ver"
+assert_contains "$verout" 'hop '
+
+t 'hop -V is the same as --version'
+typeset vshort
+vshort=$(hop_probe 'hop -V')
+assert_eq "$verout" "$vshort"
+
+t 'CHANGELOG.md keeps an Unreleased heading, so a release cannot strand entries'
+typeset changelog
+changelog=$(<"$HOP_HOME/CHANGELOG.md")
+assert_contains "$changelog" '## [Unreleased]'
+
 t 'hop --help does not star an opt-in kind'
 typeset -a helplines=(${(f)help})
 typeset fileline=${${(M)helplines:#*[[:space:]]file[[:space:]]*}[1]}
