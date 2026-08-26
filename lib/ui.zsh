@@ -225,8 +225,6 @@ _hop_pick() {
 		--accept-nth='2,3'
 		--no-multi
 		--layout=reverse
-		--height='80%'
-		--min-height=18
 		--info=inline
 		--border=rounded
 		--border-label=" $label "
@@ -247,6 +245,13 @@ _hop_pick() {
 		--bind='alt-p:toggle-preview'
 		--bind='ctrl-r:refresh-preview'
 	)
+	# HOP_FZF_HEIGHT is a real knob: set it EMPTY and fzf takes the whole screen.
+	# - Default-if-unset, not :-, because empty has to stay a distinguishable answer.
+	# - Fullscreen is also the only mode a synthetic pty can drive, which tests/suite_pty.zsh needs.
+	# - In --height mode fzf emits ESC[6n and blocks forever on a report zsh/zpty never sends.
+	local h=${HOP_FZF_HEIGHT-80%}
+	[[ -n $h ]] && args+=(--height="$h" --min-height=18)
+
 	[[ -n $query ]] && args+=(--query="$query")
 	[[ -n $reload ]] && args+=(--bind="alt-a:reload:$reload")
 

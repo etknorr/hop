@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - `hop --doctor=short`, a paste-safe diagnostic mode for public bug reports: it omits `PWD`, the
   git toplevel, workspace names and paths, and kind names, replacing them with counts, and shows
   a config path only when it still matches hop's shipped default.
+- `HOP_FZF_HEIGHT` sets the picker's height, defaulting to the previous hardcoded `80%`. An empty
+  value drops `--height` entirely and gives fzf the whole screen.
 
 ## [0.1.0] - 2026-08-25
 

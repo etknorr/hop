@@ -395,8 +395,20 @@ workspaces.example      a workspace list to copy
 | `HOP_REPOS` | every repo in every workspace | colon-separated repo list for `-R` |
 | `HOP_HISTFILE` | `~/.local/state/hop/history` | frecency history |
 | `HOP_VIM` | `1` | `0` disables the modal layer |
+| `HOP_FZF_HEIGHT` | `80%` | picker height; **empty means fullscreen** |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |
+
+### `HOP_FZF_HEIGHT`
+
+By default the picker takes 80% of the terminal and leaves your scrollback visible above it. Any
+value fzf's `--height` accepts works here, so `HOP_FZF_HEIGHT=100%` or `HOP_FZF_HEIGHT=30` both do
+what you would expect. Setting it to the **empty string** is the special case: it drops `--height`
+altogether and fzf takes over the whole screen on its own alternate buffer.
+
+Fullscreen is also the only mode that survives a synthetic terminal, which is what the pty tests
+use. In `--height` mode fzf asks the terminal where the cursor is and waits for the answer, and
+nothing in `zsh/zpty` ever answers, so the picker hangs before it draws anything.
 
 ### `.hoprc` is opt-in
 
@@ -422,8 +434,17 @@ tests/run
 
 The suite is headless and hermetic: it builds synthetic fixture repos rather than reading your real
 checkouts, and it stubs every external command so a test can never open an editor window or a
-browser tab. Interactive fzf cannot be driven in a synthetic pty, so whatever genuinely needs a
-terminal lives in `SMOKE.md` as a manual checklist.
+browser tab.
+
+`tests/suite_pty.zsh` is the exception to headless. It runs the real picker inside a `zsh/zpty`
+pseudo-terminal and sends real keystrokes, which is the only way to prove that a key reaches its
+action. It needs `HOP_FZF_HEIGHT=` for fullscreen, and it reads fzf's own exported state rather than
+the screen, because `zsh/zpty` cannot set a window size and the rendered UI is unusable. Missing
+`zsh/zpty` skips those tests locally but **fails** under `$CI`, so a runner that loses pty
+capability turns red instead of quietly dropping coverage.
+
+What is left in `SMOKE.md` is the part with no machine-readable outcome: whether the layout is
+actually readable at 80 columns.
 
 ---
 
