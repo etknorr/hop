@@ -7,6 +7,7 @@
 # - Each line is <= 35 columns, which survives a 36-column pane.
 # - M-a is omitted when nothing is bound to it, so the picker cannot advertise a dead key.
 # - This is the non-modal legend, used when HOP_VIM=0 or --no-vim turns the modal layer off.
+# - Browse is M-B, not ^G: a bare BEL byte in the terminal's output IS ctrl-g, so ^G ran the verb.
 _hop_header() {
 	emulate -L zsh
 	local -a lines=(
@@ -14,9 +15,9 @@ _hop_header() {
 		'^Y copy · M-y copy file · M-o edit'
 	)
 	if [[ -n ${1:-} ]]; then
-		lines+=('^G github · M-a +conf · M-p preview')
+		lines+=('M-B github · M-a +conf · M-p preview')
 	else
-		lines+=('^G github · M-p preview')
+		lines+=('M-B github · M-p preview')
 	fi
 	print -rn -- "${(pj:\n:)lines}"
 }
@@ -63,12 +64,12 @@ _hop_vim_header() {
 	(( avail = avail - 4 ))
 	local -a lines
 	if [[ $mode == SEARCH ]]; then
-		lines=('SEARCH  type to filter  esc normal  enter cd  ^o code  ^y yank  ^g browse')
+		lines=('SEARCH  type to filter  esc normal  enter cd  ^o code  ^y yank  M-B browse')
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'SEARCH  type to filter'
 				'esc normal  enter cd'
-				'^o code  ^y yank  ^g browse'
+				'^o code  ^y yank  M-B browse'
 			)
 		fi
 	else
@@ -283,7 +284,8 @@ _hop_pick() {
 	local prev_cmd="${(q)HOP_HOME}/bin/hop-preview {2} {3}"
 
 	# Built once because repeated --expect flags have ambiguous merge semantics, and ctrl-l is gated on drill.
-	local _hop_expect='ctrl-o,ctrl-t,ctrl-y,ctrl-g,alt-o,alt-y'
+	# - ctrl-g is deliberately NOT here any more; see the ctrl-g:ignore bind below for why.
+	local _hop_expect='ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y'
 	[[ -n $drill ]] && _hop_expect+=',ctrl-l'
 	[[ -n $up ]] && _hop_expect+=',ctrl-h'
 
@@ -314,6 +316,17 @@ _hop_pick() {
 		--bind='ctrl-/:toggle-preview'
 		--bind='alt-p:toggle-preview'
 		--bind='ctrl-r:refresh-preview'
+		# Browse lives on M-B because ctrl-g was reachable with no keypress at all.
+		# - A single BEL byte (0x07) in anything the terminal prints IS ctrl-g as far as fzf is concerned.
+		# - Measured under a pty: a bare \a made hop run `gh browse`, and --expect made it do so
+		#   whether or not the modal layer was on, so HOP_VIM=0 and --no-vim did not protect either.
+		# - `ignore` rather than fzf's default `abort`, so a stray bell does nothing at all.
+		#   Leaving ctrl-g unbound would make the same bell CLOSE the picker, which is a worse trade.
+		# - print(ctrl-g)+accept rather than --expect, so _hop_dispatch needs no new arm and, unlike
+		#   an --expect key, this one is a bind and could be guarded later.
+		# - Not alt-g: that is the shell widget that LAUNCHES hop. Not alt-b: that is fzf's backward-word.
+		--bind='ctrl-g:ignore'
+		--bind='alt-B:print(ctrl-g)+accept'
 	)
 	# HOP_FZF_HEIGHT is a real knob: set it EMPTY and fzf takes the whole screen.
 	# - Default-if-unset, not :-, because empty has to stay a distinguishable answer.

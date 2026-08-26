@@ -53,7 +53,7 @@ if [[ $dir == '--keys' ]]; then
 		"  ${KEY}^o${OFF} / ${KEY}^t${OFF}        code file / code dir" \
 		"  ${KEY}^y${OFF} / ${KEY}M-y${OFF}       copy dir / preview file" \
 		"  ${KEY}M-o${OFF}            \$EDITOR the preview file" \
-		"  ${KEY}^g${OFF}             gh browse" \
+		"  ${KEY}M-B${OFF}            gh browse" \
 		"  ${KEY}M-a${OFF}            add the conf kind" \
 		"  ${KEY}M-p${OFF}            toggle the preview pane"
 	print -r -- ''

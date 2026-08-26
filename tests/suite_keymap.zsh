@@ -362,6 +362,61 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Tier 1c: the picker's OWN flags, one call frame further out than _hop_vim_binds.
+# ---------------------------------------------------------------------------
+
+# - _km_pick_probe <vim> -> \x1e-joined dump of the FULL argument list _hop_pick hands fzf.
+# - Tier 1's probe sees only what _hop_vim_binds appends, and --expect is not there.
+# - Every check below runs at HOP_VIM=1 AND at HOP_VIM=0, because --expect is passed unconditionally.
+# - An --expect key ignores the modal layer, so --no-vim never protected against one the way it does a letter.
+# - fixture_pins does not pin HOP_VIM, so exporting it here genuinely varies what the probe sees.
+_km_pick_probe() {
+	emulate -L zsh
+	local -x KM_VIM=$1
+	hop_probe '
+		COLUMNS=200
+		export HOP_VIM=$KM_VIM
+		typeset -ga KM_CAPTURED
+		fzf() { KM_CAPTURED=("$@"); return 0; }
+		_hop_pick "label" "header" "" "reloadcmd" "/some/root" "1" "restorecmd" "1"
+		print -rn -- "${(pj:\x1e:)KM_CAPTURED}"
+	'
+}
+
+typeset KM_PICK KM_PICK_NOVIM
+KM_PICK=$(_km_pick_probe 1)
+KM_PICK_NOVIM=$(_km_pick_probe 0)
+
+# Asserted first, because a probe that captured nothing would make every check below vacuous.
+t 'both picker probes captured a real argument list'
+assert_nonempty "$(_km_dump_get "$KM_PICK" '--expect=')" 'the HOP_VIM=1 probe captured no --expect at all'
+assert_nonempty "$(_km_dump_get "$KM_PICK_NOVIM" '--expect=')" 'the HOP_VIM=0 probe captured no --expect at all'
+
+# A single BEL byte (0x07) in anything the terminal prints arrives at fzf AS ctrl-g.
+# - Measured under a pty: a bare \a ran `gh browse`, at HOP_VIM=1 and at HOP_VIM=0 alike.
+# - `ignore` and not merely absent: unbound, fzf's own default for ctrl-g is `abort`.
+# - So leaving it out would make the same bell CLOSE the picker, which is a worse trade than a no-op.
+t 'ctrl-g is inert, so a bare BEL byte cannot reach the browse verb'
+assert_eq 'ignore' "$(_km_bind_action "$KM_PICK" ctrl-g)" 'ctrl-g must be bound to ignore, not left to fzf abort'
+assert_eq 'ignore' "$(_km_bind_action "$KM_PICK_NOVIM" ctrl-g)" 'the ctrl-g guard must not depend on the modal layer'
+
+# Exact lists, never a "does not contain ctrl-g" check, which would also pass on a key silently ADDED.
+t 'ctrl-g is gone from --expect, in both modes, because --expect outranks every bind'
+assert_eq 'ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y,ctrl-l,ctrl-h' "$(_km_dump_get "$KM_PICK" '--expect=')"
+assert_eq 'ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y,ctrl-l,ctrl-h' "$(_km_dump_get "$KM_PICK_NOVIM" '--expect=')"
+
+# print(ctrl-g)+accept rather than --expect=alt-B, which keeps _hop_dispatch's existing ctrl-g arm.
+# - A bind is also something a guard could wrap later, which an --expect key can never be.
+t 'browse moved to alt-B, printing the key _hop_dispatch already knows'
+assert_eq 'print(ctrl-g)+accept' "$(_km_bind_action "$KM_PICK" alt-B)"
+assert_eq 'print(ctrl-g)+accept' "$(_km_bind_action "$KM_PICK_NOVIM" alt-B)"
+
+# alt-g is the SHELL widget that launches hop, and alt-b is fzf's own backward-word.
+t 'browse did not land on alt-g or alt-b, which are both already taken'
+assert_empty "$(_km_bind_action "$KM_PICK" alt-g)" 'alt-g inside the picker would shadow the launcher key'
+assert_empty "$(_km_bind_action "$KM_PICK" alt-b)" 'alt-b is fzf backward-word and SEARCH needs it'
+
+# ---------------------------------------------------------------------------
 # Tier 2: the transform: action bodies, extracted and run directly as sh.
 # ---------------------------------------------------------------------------
 

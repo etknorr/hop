@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Changed
+
+- The browse verb moved off `ctrl-g` and onto `alt-B` in SEARCH, because `ctrl-g` was reachable with
+  no keypress at all. A single BEL byte (`0x07`) in anything a program prints arrives at fzf as
+  `ctrl-g`, and hop passed `ctrl-g` on `--expect`, so a stray bell ran `gh browse` and opened a
+  browser tab. `--expect` is passed unconditionally, so neither `HOP_VIM=0` nor `--no-vim` protected
+  against it the way they protect the NORMAL-mode letters. `ctrl-g` is now bound to `ignore` rather
+  than merely dropped: unbound, fzf's own default for it is `abort`, so the same bell would have
+  closed the picker instead. `b` in NORMAL is unchanged.
+
+  This also retires a documented confusion. `^G` launches hop from the shell, so `ctrl-g` *inside*
+  hop read as "do that again" when it was really the browse verb. It now means nothing there.
+
 ### Fixed
 
 - The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard

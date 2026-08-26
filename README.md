@@ -272,7 +272,7 @@ Every printable key types. `esc` returns to NORMAL and clears the query.
 | `ctrl-o` / `ctrl-t` | open the file / the directory in your editor |
 | `alt-o` | open the file in `$EDITOR` |
 | `ctrl-y` / `alt-y` | copy the directory / the file path |
-| `ctrl-g` | open on your git host |
+| `alt-B` | open on your git host |
 | `alt-a` | reload with every registered kind |
 | `ctrl-r` | refresh the preview |
 | `alt-p` or `ctrl-/` | toggle the preview pane |
@@ -613,8 +613,8 @@ name and reports counts in their place, so it is safe to paste into a public iss
 
 ### Keys that get mixed up
 
-`^G` launches hop from the shell, so `ctrl-g` *inside* hop reads as "do that again". It is not — it
-is the browse verb. Navigation is `l`/`h` in NORMAL and `ctrl-l`/`ctrl-h` in SEARCH.
+`^G` launches hop from the shell, and it no longer means anything *inside* hop: browse is `b` in
+NORMAL and `alt-B` in SEARCH. Navigation is `l`/`h` in NORMAL and `ctrl-l`/`ctrl-h` in SEARCH.
 
 ### Nothing appears at all
 
