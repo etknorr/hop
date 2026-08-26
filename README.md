@@ -161,8 +161,8 @@ date rather than moving you backwards onto the tag.
 `hop upgrade` refuses rather than acts when the checkout is dirty, sits on a branch other than
 `main`, is detached somewhere that is not a release tag, has no `origin` remote, or has a `main`
 that has diverged from the release. It never runs `git clean`, never hard-resets, never merges and
-never forces anything: `main` only ever moves by fast-forward. Untracked files are left where they
-are.
+never forces anything: `main` only ever moves by fast-forward. Untracked files are never touched —
+if one sits where the new release ships a file, that is a refusal too.
 
 `--check` never touches your worktree or `HEAD`. It does fetch tags, so it writes refs under `.git`.
 
