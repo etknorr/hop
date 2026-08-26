@@ -223,15 +223,16 @@ assert_not_contains "$filelines[1]" '*' 'file is opt-in, so it must not carry th
 #   and a bare `HOP_*` is a user setting, which is why the pattern refuses a preceding word character.
 # - HOP_HOME is excluded because hop.zsh derives it unconditionally, so no inherited value survives.
 # - HOP_VIM_* are excluded because lib/ui.zsh assigns them; they are computed keymaps, not settings.
+# - XDG_* is scanned too, because every hop default path resolves through one of those three roots.
+# - Dropping the XDG_STATE_HOME or XDG_CACHE_HOME pin failed nothing until they were scanned here.
 t 'every hop setting the product reads is covered by the fixture pin list'
 typeset -a pinnames prodvars unpinned rawvars
 fixture_sources shipped
-rawvars=(${(f)"$(grep -rhoE '(^|[^A-Za-z0-9_])HOP_[A-Z_]+' "${reply[@]}")"})
-prodvars=(${(u)rawvars#*HOP_})
-prodvars=(${prodvars/#/HOP_})
+rawvars=(${(f)"$(grep -rhoE '(^|[^A-Za-z0-9_])(HOP|XDG)_[A-Z_]+' "${reply[@]}")"})
+prodvars=(${(u)rawvars/#[^A-Z_]/})
 prodvars=(${prodvars:#HOP_HOME})
 prodvars=(${prodvars:#HOP_VIM_*})
-assert_ge $#prodvars 10 'the scan found almost no settings, so it would pass while checking nothing'
+assert_ge $#prodvars 15 'the scan found almost no settings, so it would pass while checking nothing'
 pinnames=(${${(f)"$(fixture_pin_pairs /nonexistent)"}%%=*})
 unpinned=(${prodvars:|pinnames})
 assert_empty "${(j:, :)unpinned}" 'a probe could inherit these from the developer running the suite'
@@ -245,6 +246,17 @@ typeset fzfvar
 for fzfvar in FZF_DEFAULT_OPTS FZF_DEFAULT_COMMAND; do
 	assert_nonempty "${pinnames[(r)$fzfvar]}" "${fzfvar} is unpinned, and fzf reads it even if hop does not"
 done
+
+# Deleting the HOME or XDG pin from fixture_pins failed NOTHING, so the pin was load-bearing yet unguarded.
+# - The leak it stops is the original defect: a probe READ the real ~/.config/hop and SOURCED its config.
+# - The suite process keeps the REAL $HOME deliberately, which is what makes it a usable needle here.
+t 'a probe child gets the throwaway $HOME and XDG roots, never the real ones'
+typeset -a probeenv
+probeenv=(${(f)"$(hop_probe 'print -rl -- $HOME $XDG_CONFIG_HOME $HOP_WORKSPACES_FILE')"})
+assert_eq "$HOP_FIX_HOME" "${probeenv[1]}" 'the probe ran with a $HOME the fixture does not own'
+assert_ne "$HOME" "${probeenv[1]}" 'the probe inherited the REAL $HOME, so every default path is the real one'
+assert_eq "${HOP_FIX_HOME}/.config" "${probeenv[2]}" 'XDG_CONFIG_HOME must move with $HOME or it still resolves home'
+assert_contains "${probeenv[3]}" "$HOP_FIX_HOME" 'the workspaces file a probe would READ is outside the fixture'
 
 t 'fixture_repo builds a throwaway git repo'
 typeset REPLY repo top
