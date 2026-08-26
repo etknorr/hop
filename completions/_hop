@@ -41,6 +41,7 @@ _hop() {
     '(-c --cwd --here)'{-c,--cwd,--here}'[only targets under $PWD, for any kind]' \
     '(--vim --no-vim)--no-vim[search-first fzf, no modal layer (same as HOP_VIM=0)]' \
     '(--vim --no-vim)--vim[force the modal layer on when HOP_VIM=0 is set]' \
+    '(- *)--doctor=-[dump config, tools and kind counts for a bug report]:mode:(short)' \
     '(- *)'{-h,--help}'[show usage and exit]' \
     '*::query:_hop_query'
 }

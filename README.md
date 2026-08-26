@@ -89,6 +89,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `--no-vim` | search-first fzf, no modal layer, same as `HOP_VIM=0` |
 | `--vim` | force the modal layer on when `HOP_VIM=0` is set |
 | `--doctor` | dump config, tools and kind counts for a bug report |
+| `--doctor=short` | the same, minus paths and names; safe to paste publicly |
 | `-h`, `--help` | usage, listing the kinds actually registered |
 
 `-c` is the one to remember. `hop -c -k file pr` finds a file by name inside the subtree you are
@@ -444,7 +445,9 @@ HOP_DEBUG=1 hop      # reproduce the problem
 hop --doctor         # the last 15 dispatches are at the bottom
 ```
 
-`--doctor` output contains local paths. Read it before pasting anywhere public.
+`--doctor` output contains local paths, workspace names and kind names. Read it before pasting
+anywhere public. For a bug report, run `hop --doctor=short` instead: it withholds every path and
+name and reports counts in their place, so it is safe to paste into a public issue.
 
 ### Keys that get mixed up
 
