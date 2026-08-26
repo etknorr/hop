@@ -18,10 +18,11 @@ body:
         way to find the cause: HOP_HOME, every HOP_* setting, the version of each optional tool,
         and counts in place of names.
 
-        `--doctor=short` withholds your current directory, your workspace and kind names, and
-        any config path you've customised off the shipped default, replacing each with a count —
-        which is what makes it safe to paste into a public issue. Plain `hop --doctor` prints all
-        of those in full — it's for reading locally, never for pasting here.
+        `--doctor=short` withholds your current directory, your workspace and kind names
+        (replaced with counts), and any config path you've customised off the shipped default
+        (withheld, though its readable/missing status still shows). That's what makes it safe to
+        paste into a public issue. Plain `hop --doctor` prints all of that in full — it's for
+        reading locally, never for pasting here.
       placeholder: |
         HOP_DEBUG=1 hop            # reproduce the problem first, if you can
         hop --doctor=short         # then paste everything below
