@@ -164,6 +164,9 @@ _hop_vim_binds /bin/true "" "" "" "" "" ""
 print -rl -- "${args[@]}"')
 assert_contains "$out" 'search()' 'esc must re-match, or NORMAL is left holding an empty list'
 assert_contains "$out" 'clear-query+search()' 'search() before clear-query re-runs the dead query'
+# Ordering guard: search() has to sit AHEAD of the transform, never inside it.
+# - Folding it back in is the one edit that reintroduces the dead list without breaking anything else.
+assert_contains "$out" 'search()+transform:' 'search() from inside a transform is silently a no-op'
 out=$(_fz_probe '0.74.1' '_hop_ver_lt 0.59.0 $HOP_FZF_MIN && print -r -- covered')
 assert_eq covered "$out" 'the floor must be at or above 0.59.0, where search() was added'
 
