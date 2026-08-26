@@ -52,6 +52,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   status.
 - `hop upgrade <TAB>` no longer offers a single garbage candidate (every tag joined by spaces)
   when the user has `column.ui=always` set; release tags are now listed with `for-each-ref`.
+- The `:` kind menu's count cache no longer stays blind to `git add`. It enumerates via the
+  index (`git ls-files --cached`) but was keyed only on `(root, HEAD)`, so staging a file into a
+  kind that had none, with HEAD unchanged, left that kind hidden from the menu until the next
+  commit. The key now also tracks the index file's mtime and size.
 - The test suite no longer inherits the settings of whoever runs it. An exported `HOP_FZF_MIN`,
   `HOP_VIM`, `HOP_HOPRC` or `HOP_REPOS` made it fail or hang, an inherited `HOP_FZF_HEIGHT` started
   fzf against no terminal and orphaned it, and `FZF_DEFAULT_OPTS` silently disabled the control arm

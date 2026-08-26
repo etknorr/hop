@@ -37,14 +37,36 @@ if [[ $mode != menu ]]; then
 	exit 2
 fi
 
-# Counts are cached per root+HEAD because a full sweep of every kind costs ~1.6s.
+# Counts are cached per root+HEAD+index because a full sweep of every kind costs ~1.6s.
 # - A miss renders instantly WITHOUT counts and warms the cache detached, so `:` never blocks.
 # - HEAD in the key means a branch switch invalidates it for free, and this repo switches often.
+# - Enumeration reads the INDEX (`git ls-files --cached`), not HEAD's tree, so `git add` with
+#   HEAD unchanged must invalidate too. mtime+size of the real index file is nearly free to
+#   check, unlike hashing its contents on every `:` press, and a `git add`/`rm`/commit/checkout
+#   always rewrites that file, changing at least one of the two.
 typeset cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/hop
-typeset head_id key cache
+typeset head_id idx_path idx_id key cache
 head_id=$(git -C "$root" rev-parse HEAD 2>/dev/null) || head_id=nohead
 [[ -n $head_id ]] || head_id=nohead
-key="${${root//\//_}//[^A-Za-z0-9_.-]/}-${head_id}"
+
+if [[ -f $root/.git/index ]]; then
+	idx_path=$root/.git/index
+elif [[ -e $root/.git ]]; then
+	# A linked worktree's .git is a FILE, so the real index lives elsewhere under .git/worktrees.
+	idx_path=$(git -C "$root" rev-parse --path-format=absolute --git-path index 2>/dev/null)
+fi
+if [[ -n $idx_path && -e $idx_path ]]; then
+	zmodload -F zsh/stat b:zstat 2>/dev/null
+	if (( ${+builtins[zstat]} )); then
+		# `+element` allows only ONE field per call, so this takes the full struct stat and
+		# picks size (8th) and mtime (10th) out of it rather than calling zstat twice.
+		typeset -a st
+		zstat -A st -- "$idx_path" 2>/dev/null && idx_id="${st[8]}.${st[10]}"
+	fi
+fi
+[[ -n ${idx_id:-} ]] || idx_id=noindex
+
+key="${${root//\//_}//[^A-Za-z0-9_.-]/}-${head_id}-${idx_id}"
 cache="$cache_dir/counts-$key"
 
 typeset -A counts
