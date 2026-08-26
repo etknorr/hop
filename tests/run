@@ -123,7 +123,31 @@ typeset -F START=${EPOCHREALTIME:-0}
 typeset -i PASS=0 FAIL=0 SKIPPED=0
 typeset suite line name
 typeset -i st tallied crashed
+typeset -i MARK_PASS MARK_FAIL MARK_SKIP
 typeset -a body
+
+# _hop_t_count_markers <line...> -> count the pass, fail and skip markers a child already printed.
+# - hop_bound KILLs the group, and KILL is untrappable, so a bounded-out child emits no sentinel.
+# - Its results are already in the parent's hands, so they are counted here rather than asked for.
+# - The colour prefix is stripped, because assert.zsh wraps the glyph when HOP_T_COLOR is on.
+# - Two leading spaces are what separate a marker from the six-space detail lines under a failure.
+_hop_t_count_markers() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	MARK_PASS=0 MARK_FAIL=0 MARK_SKIP=0
+	local l
+	for l in "$@"; do
+		[[ $l == '  '* ]] || continue
+		l=${l#'  '}
+		l=${l##($'\e['[0-9;]##m)#}
+		case $l in
+			('✓'*) (( MARK_PASS++ )) ;;
+			('✗'*) (( MARK_FAIL++ )) ;;
+			('-'*)  (( MARK_SKIP++ )) ;;
+		esac
+	done
+	return 0
+}
 
 for suite in "${SUITES[@]}"; do
 	name=${${suite:t}%.zsh}
@@ -146,9 +170,17 @@ for suite in "${SUITES[@]}"; do
 	fi
 
 	# A non-zero child status is the crash signal, since a suite that finishes always exits 0.
-	# - The tally is still trusted when present, so passes recorded before the crash still count.
+	# - The sentinel is authoritative when present, so the markers are only counted without one.
+	# - A bound kill leaves no sentinel, and every result the suite HAD printed used to be dropped.
+	# - Measured before this: a suite showing 16 passing tests reported "0 passed, 1 failed".
 	crashed=0
 	(( st != 0 || ! tallied )) && crashed=1
+	if (( ! tallied )); then
+		_hop_t_count_markers "${body[@]}"
+		(( PASS += MARK_PASS ))
+		(( FAIL += MARK_FAIL ))
+		(( SKIPPED += MARK_SKIP ))
+	fi
 	if (( crashed )); then
 		(( FAIL++ ))
 		body+=("  ${RED}✗${OFF} ${name}: suite did not finish (exit ${st})")
