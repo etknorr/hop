@@ -9,12 +9,33 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
-- The test suite is safe to run from a shell pipeline again. Handed a live stdin, `tests/run core`
-  discarded all 31 cases and took the full 120s bound, and it blamed the wrong thing on the way out:
-  the runner reported `a test may await a terminal` when every probe was in fact waiting on an EOF
-  that an open pipe never sends. The stub fzf captured stdin even when answering `--version`, a query
-  the real fzf reads no stdin for and hop pipes none into, so each probe burned its own bound until
-  the suite bound killed the run. CI never saw it, because GitHub Actions hands the job `/dev/null`.
+- Eight more assertions that a floor kept from failing. `assert_ge N` reads like a bound but asserts a
+  size, so it passes on every larger value too: the modal keymap check sat at 90 against 97 real keys
+  and stayed green with seven of them deleted, the `--help` registry check sat at 2 against 8 kinds and
+  stayed green with `helm` gone from the kind list entirely, and the `.github` YAML check sat at 1, so a
+  glob rotted to one subdirectory left the workflow file parsed by nothing and reported by nothing.
+  Each is now an exact set or an exact count. A floor of 1 used honestly, to prove evidence exists
+  before asserting over it, is kept and spelled that way.
+- One integration test was reading the wrong evidence rather than too little of it. The fzf stub
+  records the picker's rows to a file it only truncates on the runs it actually makes, so a probe that
+  errored before reaching the picker left the previous invocation's rows in place. With `hop -c` broken
+  so it produced nothing at all, the check that every offered row is inside `$PWD` passed on rows from
+  a different directory. The record is emptied before each run now, and that check fails rather than
+  passing over an empty list.
+- The integration suite no longer hangs when the runner's stdin never reaches EOF. `_hop_fzf_ver` is
+  the one fzf call in the product that is never handed rows on a pipe: `lib/ui.zsh` runs it with
+  stdout captured and stderr dropped, but stdin inherited. The recording stub read stdin
+  unconditionally, so it blocked on anything that never closes, and under a fifo held open the suite
+  took 81 seconds and failed seven of its tests. The worst case was a 120 second discard of the whole
+  run, reported as a timeout that blames a terminal rather than naming the wait. The stub now answers
+  a `--version` query without reading stdin, which is what real fzf does, and without touching the
+  argv and row records, so a version query can no longer satisfy another test's non-vacuity check.
+- The core suite no longer hangs either, for the same reason and with the same fix. Handed a live
+  stdin, `tests/run core` discarded all 31 of its cases and took the full 120s bound, reporting
+  `a test may await a terminal` when every probe was in fact waiting on an EOF that an open pipe
+  never sends. Its own recording stub captured stdin even when answering `--version`, so each probe
+  burned its bound until the suite bound killed the run. CI never saw it, because GitHub Actions
+  hands the job `/dev/null`.
 
 ## [0.1.1] - 2026-08-26
 

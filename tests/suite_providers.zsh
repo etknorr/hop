@@ -652,10 +652,11 @@ if [[ -n $TESTREPO && -d $TESTREPO/.git ]]; then
 	gen_err "$TESTREPO" "${SHIPPED[@]}"
 	assert_eq 0 $REPLY "${HOP_ERRTEXT:-stderr was not empty}"
 
-	t 'real checkout: the dir kind always finds at least the root row'
+	t 'real checkout: the dir kind always finds the root row'
 	rows=$(gen "$TESTREPO" dir)
-	nrows "$rows"
-	assert_ge $REPLY 1
+	# The row itself, not a count: $HOP_TEST_REPO is any checkout, so a count asserts its SIZE.
+	# - A `>= 1` floor also passed on any non-empty output, including one with no root row in it.
+	assert_contains "$rows" '<root>' 'the dir kind must offer the repo root whatever else it finds'
 
 	# The row contract on real data, which is where the 0-byte preview turned up in the first place.
 	# - file is left out on purpose: tens of thousands of stat calls buys nothing the others miss.

@@ -152,6 +152,11 @@ it_stub_fzf() {
 	print -rl -- \
 		'#!/bin/sh' \
 		'# hop test stub: records the call, draws nothing, exits 1 like fzf on no match.' \
+		'# A --version query neither reads stdin nor records, because real fzf does not read it either.' \
+		'# - lib/ui.zsh runs `fzf --version` with stdout captured and stderr dropped, but stdin INHERITED.' \
+		'# - So the cat below inherited the runners stdin, and on anything without EOF it blocked forever.' \
+		'# - Guarded first, before the records are truncated, so a version query cannot erase the rows.' \
+		'case " $* " in *" --version "*) exit 0 ;; esac' \
 		': > "$HOP_FZF_ARGV"' \
 		'for a in "$@"; do printf "%s\n" "$a" >> "$HOP_FZF_ARGV"; done' \
 		'cat > "$HOP_FZF_STDIN"' \
@@ -169,6 +174,12 @@ it_stub_fzf() {
 it_run_stub() {
 	emulate -L zsh
 	it_stub_fzf || return 1
+	# Truncated HERE, not in the stub, because the stub only truncates on the runs it actually makes.
+	# - A probe that errors out before the picker leaves the PREVIOUS invocation's record in place.
+	# - A later test then counts rows from an earlier one, which is asserting on the wrong evidence.
+	# - Emptied first, so "the picker never ran" reads as no rows rather than as somebody else's rows.
+	: > "$IT_FZF_ARGV"
+	: > "$IT_FZF_STDIN"
 	local code=$1
 	shift
 	it_run "_hop_tty_ok() { return 0 }
@@ -310,6 +321,54 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# The stub's own contract, which every it_run_stub test below silently depends on.
+# ---------------------------------------------------------------------------
+# `_hop_fzf_ver` is the one fzf call in the product that is never handed rows on a pipe.
+# - lib/ui.zsh runs it as `$(fzf --version 2>/dev/null)`: stdout captured, stderr dropped, stdin INHERITED.
+# - So the stub's `cat` inherited whatever stdin the runner had, and blocked on anything without EOF.
+# - Measured before the guard: this suite under a never-closing fifo took 81s and failed 7 of its tests.
+# - Worst case is a 120s discard of the whole run, reported as a timeout that blames a terminal.
+# - Both checks below are bounded, because the defect is a hang and an unbounded test reproduces it.
+t 'a --version query neither reads stdin nor erases the records the other tests read'
+it_stub_fzf
+assert_nonempty "$IT_STUBDIR" 'the stub was never built, so neither check below means anything'
+# This is the half that fails in ORDINARY CI, where stdin is /dev/null and nothing blocks at all.
+# - Reverting the guard truncates both records here, since `cat` on /dev/null succeeds instantly.
+# - A guard that only fails when a human pipes into the runner would not be much of a guard.
+print -r -- 'SENTINEL' > "$IT_FZF_ARGV"
+print -r -- 'SENTINEL' > "$IT_FZF_STDIN"
+typeset -i it_vst
+# The env vars are what it_run_stub normally supplies, and without them the stub cannot even open
+# its record files: it errors out at the first redirect and never reaches the `cat` under test.
+hop_bound 10 env "HOP_FZF_ARGV=${IT_FZF_ARGV}" "HOP_FZF_STDIN=${IT_FZF_STDIN}" \
+	"$IT_STUBDIR/fzf" --version < /dev/null
+it_vst=$?
+assert_eq 0 $it_vst 'real fzf --version exits 0 without reading stdin, and the stub must do the same'
+assert_eq SENTINEL "$(it_slurp "$IT_FZF_ARGV")" 'a version query must not touch the argv record'
+assert_eq SENTINEL "$(it_slurp "$IT_FZF_STDIN")" 'a version query must not touch the row record'
+
+# perl as well as mkfifo: with no perl hop_bound runs unbounded, and that is the hang this prevents.
+if (( ${+commands[perl]} )) && (( ${+commands[mkfifo]} )); then
+	t 'the stub exits on a --version query even when stdin never reaches EOF'
+	# A fifo held open read-write is what reproduces the real shape of this defect.
+	# - `sleep 60 |` closes at 60s and releases the suite, which masks the worst case as merely slow.
+	# - Read-write also means no writer PROCESS exists for the suite to wait on or to clean up.
+	typeset it_fifo="$IT_STUBDIR/nostdin"
+	rm -f -- "$it_fifo"
+	mkfifo -- "$it_fifo"
+	typeset -i it_fst
+	exec {it_fd}<> "$it_fifo"
+	hop_bound 10 env "HOP_FZF_ARGV=${IT_FZF_ARGV}" "HOP_FZF_STDIN=${IT_FZF_STDIN}" \
+		"$IT_STUBDIR/fzf" --version <&$it_fd
+	it_fst=$?
+	exec {it_fd}>&-
+	rm -f -- "$it_fifo"
+	assert_eq 0 $it_fst 'the stub blocked on stdin that never ends, which is the 120s discard in miniature'
+else
+	skip 'the stub exits on a --version query even when stdin never reaches EOF' 'perl or mkfifo is missing'
+fi
+
+# ---------------------------------------------------------------------------
 # --exact: asserted on the flags hop really passes, then priced against the fuzzy alternative.
 # ---------------------------------------------------------------------------
 # The recorded argv has to be the PICKER's, and saying which call is inspected is half the assertion.
@@ -339,7 +398,10 @@ if (( HAVE_FZF )); then
 
 	t "--exact narrows 'abg' to a single row where fuzzy matches several"
 	assert_eq 1 $xn "exact matching is what makes this query a single row, got ${xn}"
-	assert_ge $fn 2 "if fuzzy also returned one row this guard has stopped guarding, got ${fn}"
+	# The relationship, asserted exactly, rather than a floor on fn or a pinned count.
+	# - fn is fzf's own fuzzy result, so a literal 2 would assert fzf's algorithm across two CI legs.
+	# - What the control actually claims is that dropping --exact widens the match, and that is this.
+	assert_eq 1 $(( fn > xn )) "fuzzy must match strictly more than exact, got ${fn} vs ${xn}"
 else
 	# The skip must carry the SAME name as the t above, or the name varies by environment instead.
 	skip "--exact narrows 'abg' to a single row where fuzzy matches several" 'fzf is not installed'
@@ -357,10 +419,16 @@ rows=''
 cnt_sub=$(it_count "$rows")
 
 t 'hop -c in a subtree shows fewer rows than the repo root'
-assert_ge $cnt_sub 1 'the subtree does hold targets, so an empty list is a bug'
+# The fixture is built by this suite, so the count is exact rather than a floor to sit above.
+assert_eq 2 $cnt_sub "the subtree holds exactly two targets in this fixture, got ${cnt_sub}"
 assert_eq 1 $(( cnt_sub < cnt_root )) "scoping must strictly narrow: ${cnt_sub} vs ${cnt_root}"
 
 t 'every row hop -c offers is inside $PWD'
+# Guarded, because "no row escaped" is also true of no rows at all.
+# - This loop is the shape that passes hardest when the thing under test never ran.
+# - Truncating the record file fixes WHOSE rows these are; it cannot make an empty list fail.
+# - Measured with -c broken so it errored before the picker: the loop below printed a pass.
+assert_nonempty "$rows" 'hop -c produced no rows, so the escape check below would be vacuous'
 bad=''
 for d in "${(@f)$(it_dirs "$rows")}"; do
 	[[ $d == $SUB || $d == $SUB/* ]] || bad=$d
@@ -446,7 +514,7 @@ assert_eq 1 $(it_count "$(it_err)") 'one clear line, never a traceback'
 
 t 'the dir kind still gets a scratch repo out of trouble'
 out=$(it_gen "$SCRATCH" dir)
-assert_ge $(it_count "$out") 1 'the repo root row is the floor hop never drops below'
+assert_eq 1 $(it_count "$out") 'a scratch repo with no subdirectories is exactly the root row'
 assert_contains "$out" '<root>'
 
 # ---------------------------------------------------------------------------
@@ -470,7 +538,8 @@ assert_eq "$WTREE" "$(_hop_fix_git -C "$WTREE" rev-parse --show-toplevel)"
 
 t 'enumerating a worktree yields paths inside the worktree, never the main checkout'
 out=$(it_gen "$WTREE" tg helm dir)
-assert_ge $(it_count "$out") 3 'the worktree has a tg unit, a values dir and its dir rows'
+# The floor here was 3 against an actual 5, so two rows could vanish and it still reported healthy.
+assert_eq 5 $(it_count "$out") 'the worktree fixture yields one tg unit, one helm values dir and three dir rows'
 bad=''
 for d in "${(@f)$(it_dirs "$out")}"; do
 	[[ $d == $WTREE || $d == $WTREE/* ]] || bad=$d
