@@ -86,6 +86,15 @@ _up_sha() {
 	_hop_fix_git -C "$1" rev-parse HEAD 2>/dev/null
 }
 
+# _up_branch <dir> -> the branch HEAD is on, or the literal DETACHED.
+# - A bare upgrade has to leave you somewhere you can upgrade again, so this is the proof.
+_up_branch() {
+	emulate -L zsh
+	local b
+	b=$(_hop_fix_git -C "$1" symbolic-ref --quiet --short HEAD 2>/dev/null) || b=''
+	print -r -- "${b:-DETACHED}"
+}
+
 typeset ORIGIN=''
 typeset UNTAGGED=''
 typeset V1='' V2=''
@@ -275,7 +284,8 @@ assert_contains "$out" 'not a git checkout'
 # ---------------------------------------------------------------------------
 # The updates that are supposed to happen.
 # ---------------------------------------------------------------------------
-t 'upgrade from main lands exactly on the newest tag and says to exec zsh'
+t 'a bare upgrade fast-forwards main and LEAVES YOU ON IT'
+# Detaching here would silently break the next `git pull`, and a yearly upgrader never works it out.
 _up_clone "$ORIGIN" up-latest
 dir=$REPLY
 _hop_fix_git -C "$dir" checkout -q -B main v0.1.0
@@ -283,16 +293,29 @@ out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
 st=$?
 assert_eq 0 "$st"
 assert_eq "$V2" "$(_up_sha "$dir")" 'upgrade did not land on v0.2.0'
+assert_eq main "$(_up_branch "$dir")" 'a bare upgrade detached HEAD, which it must never do'
 assert_contains "$out" 'v0.2.0'
+assert_contains "$out" 'on main'
 assert_contains "$out" 'exec zsh'
 
-t 'a pin detached at a tag is a normal state, and upgrades from there'
+t 'a bare upgrade never merges: main advances by fast-forward only'
+# A merge commit would mean main no longer matches any released tree, byte for byte.
+assert_eq 0 "$(_hop_fix_git -C "$dir" rev-list --count --merges main)" \
+	'a merge commit appeared on main, so this was not a fast-forward'
+assert_eq "$V2" "$(_hop_fix_git -C "$dir" rev-parse refs/heads/main)" \
+	'the main REF did not move, so only the worktree was updated'
+
+t 'a bare upgrade from a pin says it is leaving the pin, and returns to main'
 _up_clone "$ORIGIN" up-frompin
 dir=$REPLY
 _hop_fix_git -C "$dir" checkout -q v0.1.0
 out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
 st=$?
 assert_eq 0 "$st"
+assert_eq main "$(_up_branch "$dir")" 'leaving a pin has to land on main, not on another commit'
+assert_contains "$out" 'pinned at v0.1.0'
+assert_contains "$out" 'To stay pinned'
+assert_contains "$out" 'hop upgrade 0.1.0'
 assert_eq "$V2" "$(_up_sha "$dir")"
 
 t 'upgrade to a bare semver pins to that exact release'
@@ -310,6 +333,58 @@ out=$(_up_probe "$dir" '_hop_upgrade v0.1.0' 2>&1)
 st=$?
 assert_eq 0 "$st"
 assert_eq "$V1" "$(_up_sha "$dir")"
+
+t 'naming a version pins the install, detached, and says how to get back'
+assert_eq DETACHED "$(_up_branch "$dir")" 'a named version means a pin, and a pin means detached'
+assert_contains "$out" 'pinned at v0.1.0'
+assert_contains "$out" 'To follow releases again: hop upgrade'
+assert_contains "$out" 'checkout main'
+
+t 'a main already ahead of the newest release is up to date, not an error'
+# This is the normal state of an install that follows main between two releases.
+_up_clone "$ORIGIN" up-ahead
+dir=$REPLY
+_hop_fix_git -C "$dir" commit -q --allow-empty --no-gpg-sign -m 'a commit after the release'
+before=$(_up_sha "$dir")
+out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
+st=$?
+assert_eq 0 "$st" 'following main between releases must not be an error'
+assert_contains "$out" 'already carries v0.2.0'
+assert_eq "$before" "$(_up_sha "$dir")"
+assert_eq main "$(_up_branch "$dir")"
+
+t '--check on a main ahead of the newest release also says up to date'
+out=$(_up_probe "$dir" '_hop_upgrade --check' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_contains "$out" 'up to date'
+assert_not_contains "$out" 'an update is available'
+
+t 'a main that has diverged from the release is refused, never rebased or merged'
+_up_clone "$ORIGIN" up-diverged
+dir=$REPLY
+_hop_fix_git -C "$dir" checkout -q -B main v0.1.0
+_hop_fix_git -C "$dir" commit -q --allow-empty --no-gpg-sign -m 'a local commit on main'
+before=$(_up_sha "$dir")
+out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
+st=$?
+assert_eq 1 "$st"
+assert_contains "$out" 'diverged'
+assert_eq "$before" "$(_up_sha "$dir")"
+assert_eq main "$(_up_branch "$dir")" 'a refusal must not move HEAD off the branch either'
+
+t 'a pin with no local main branch is refused, and is told how to make one'
+_up_clone "$ORIGIN" up-nomain
+dir=$REPLY
+_hop_fix_git -C "$dir" checkout -q v0.1.0
+_hop_fix_git -C "$dir" branch -q -D main
+before=$(_up_sha "$dir")
+out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
+st=$?
+assert_eq 1 "$st"
+assert_contains "$out" 'no local main branch'
+assert_contains "$out" 'checkout -b main origin/main'
+assert_eq "$before" "$(_up_sha "$dir")"
 
 t 'upgrading to the release already checked out changes nothing'
 before=$(_up_sha "$dir")
@@ -354,6 +429,10 @@ assert_not_contains "$body" 'push --force'
 assert_not_contains "$body" 'fetch --force'
 assert_not_contains "$body" 'rm -rf'
 assert_not_contains "$body" 'git stash'
+assert_not_contains "$body" 'git reset'
+assert_not_contains "$body" 'merge --no-ff'
+assert_not_contains "$body" 'git rebase'
+assert_contains "$body" '--ff-only' 'main is only ever advanced by fast-forward'
 
 # ---------------------------------------------------------------------------
 # Wiring: hop.zsh, the usage text and the completion all have to know about it.
