@@ -284,51 +284,65 @@ closedfd=CLOSED
 pipedstdin=CLOSED
 pipeout=CLOSED' "$NT_CLOSED_RES" 'with no ctty every shape must be false, whatever stdin is'
 
+# A structural guard first, so the timing-dependent pty probe below is never the ONLY one.
+# - The regression this whole pair exists to catch is someone rewriting the predicate against stdin.
+# - Reading the function body catches that deterministically, with no pty and no timing at all.
+# - `-t` is banned outright rather than matched loosely, since `[[ -t 0 ]]` is the exact wrong fix.
+t 'the predicate reads /dev/tty and never tests a file descriptor'
+typeset NT_TTY_BODY=''
+NT_TTY_BODY=$(hop_probe 'functions _hop_tty_ok')
+assert_contains "$NT_TTY_BODY" '/dev/tty' 'the terminal is what decides this, so /dev/tty has to appear'
+assert_not_contains "$NT_TTY_BODY" '-t ' 'a `-t` test asks about a descriptor, which refuses four working shapes'
+
 # zpty is the only way to manufacture a controlling terminal here, and it starts no fzf at all.
 # - The suite process itself may have no ctty: an agent's shell and a CI runner both lack one.
 # - So the positive direction cannot be tested in-process, and it needs a pty to exist at all.
-# - Only `zpty -d` is ever used to tear this down, never TERM, and the child exits on its own.
 # - It SKIPS only when zpty is genuinely unavailable, which is zmodload or `zpty -b` failing.
 # - It does NOT skip on an empty result, because tests/suite_pty.zsh drives real fzf on both runners.
 # - A pty is therefore known to work here, so an empty result is a defect and must fail loudly.
-# - The child writes a `ready` marker before probing, so "never started" is tellable from "no result".
-# - The marker, zpty's stderr and the child's stderr all ride into the failure message.
-# - That is what an earlier empty macOS result lacked, which left nothing to diagnose it by.
-typeset NT_PTY_RES='' NT_PTY_ERR='' NT_PTY_CERR='' NT_PTY_READY=''
+# - The child writes a `done` marker as its LAST line, so the poll waits on completion, not a count.
+# - A count barrier cannot tell "not finished yet" from "finished and wrong", so it had to go.
+# - The pty's own output is accumulated, because child-side errors go THERE and not to any file.
+typeset NT_PTY_RES='' NT_PTY_ERR='' NT_PTY_CERR='' NT_PTY_OUT='' NT_PTY_DONE=''
 typeset -i NT_PTY_ST=0 NT_PTY_HAVE=0
 if zmodload zsh/zpty 2>/dev/null && fixture_tmpdir ntpty; then
 	typeset ntp=$REPLY
-	# The child redirects its OWN stderr, so no redirect operator goes in the zpty command string.
-	# - zpty does not hand that string to a shell on every zsh version, so a `2>` there is not portable.
-	# - Measured: adding one took both CI runners from a working child to a child that never started.
 	print -rl -- "exec 2> ${(q)ntp}/childerr" "$(fixture_pins)" "$(nt_pins)" \
-		"export NT_RES=${(q)ntp}/res" "print -r -- ready > ${(q)ntp}/ready" "$NT_SHAPES" > "$ntp/shapes.zsh"
+		"export NT_RES=${(q)ntp}/res" "$NT_SHAPES" "print -r -- done > ${(q)ntp}/done" > "$ntp/shapes.zsh"
 	: > "$ntp/res"
-	: > "$ntp/ready"
+	: > "$ntp/done"
 	: > "$ntp/childerr"
-	: > "$ntp/zptyerr"
-	# Deliberately NOT inside a $(...): a zpty entry dies with the subshell that created it.
-	zpty -b NTPTY "zsh -f ${ntp}/shapes.zsh" 2> "$ntp/zptyerr"
+
+	# The zpty child is a FORK of this shell, so it inherits the runner's EXIT trap from tests/run.
+	# - That fork RUNS the trap when the pty command completes, with no signal involved at all.
+	# - The trap calls fixture_cleanup, which rm -rf'd $ntp out from under the poll loop below.
+	# - Measured: res, the marker and childerr ALL read back empty while zpty reported status 0.
+	# - So this looked exactly like "the child never started", on both runners, and it was not.
+	# - Clearing it for the one builtin suffices, because the fork copies the trap table at fork time.
+	# - suite_pty.zsh survives only because its children are KILLed and never exit normally.
+	trap - EXIT INT TERM
+	zpty -b NTPTY "zsh -f ${ntp}/shapes.zsh"
 	NT_PTY_ST=$?
+	trap '_hop_t_report; fixture_cleanup' EXIT INT TERM
+
 	if (( NT_PTY_ST == 0 )); then
 		NT_PTY_HAVE=1
 		typeset junk
 		typeset -F spent=0
-		typeset -a nlines
 		while (( spent < NT_SECS )); do
-			while zpty -r -t NTPTY junk 2>/dev/null; do :; done
-			nlines=(${(f)"$(<$ntp/res)"})
-			# (@) is load-bearing: ${#${nlines:#}} is the joined STRING length, not the count.
-			(( ${#${(@)nlines:#}} == 5 )) && break
+			# Draining is load-bearing, and the drained bytes are KEPT: child errors land here.
+			while zpty -r -t NTPTY junk 2>/dev/null; do
+				NT_PTY_OUT+=$junk
+			done
+			[[ -s $ntp/done ]] && break
 			sleep 0.05
 			(( spent += 0.05 ))
 		done
 		zpty -d NTPTY 2>/dev/null
 		NT_PTY_RES=$(<"$ntp/res")
+		NT_PTY_DONE=$(<"$ntp/done")
+		NT_PTY_CERR=$(<"$ntp/childerr")
 	fi
-	NT_PTY_READY=$(<"$ntp/ready")
-	NT_PTY_ERR=$(<"$ntp/zptyerr")
-	NT_PTY_CERR=$(<"$ntp/childerr")
 else
 	NT_PTY_ERR='zsh/zpty did not load'
 fi
@@ -336,7 +350,7 @@ fi
 if (( NT_PTY_HAVE )); then
 	t 'a ctty present: the predicate is true in every redirected shape'
 	assert_eq "$NT_WANT_OPEN" "$NT_PTY_RES" \
-		"a stdin test would report CLOSED here and refuse four working shapes (child started: ${NT_PTY_READY:-NO}${NT_PTY_CERR:+, child stderr: ${NT_PTY_CERR}})"
+		"a stdin test would report CLOSED here and refuse four working shapes (child finished: ${NT_PTY_DONE:-NO}${NT_PTY_CERR:+, child stderr: ${NT_PTY_CERR}}${NT_PTY_OUT:+, pty said: ${NT_PTY_OUT}})"
 else
 	skip 'a ctty present: the predicate is true in every redirected shape' \
 		"zpty is unavailable here, so no ctty can be manufactured (status ${NT_PTY_ST}${NT_PTY_ERR:+: ${NT_PTY_ERR}})"
