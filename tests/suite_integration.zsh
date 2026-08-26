@@ -80,28 +80,23 @@ it_errbytes() {
 	print -r -- ${sz[1]}
 }
 
-# it_env -> the pins every child shell needs in order to be hermetic.
-# - HOP_CONFIG, HOME and XDG_CONFIG_HOME all resolve into the real user's dotfiles by default.
-# - HOP_HOPRC empty keeps a repo-root .hoprc from running code during a test.
-# - HOP_HISTFILE is /dev/null so no test can reorder the real frecency history.
+# it_env -> the pins every child shell needs in order to be hermetic, against THIS suite's own home.
+# - Delegated to fixture_pin_pairs so this list cannot fall behind the one hop_probe uses.
+# - It kept its own five-entry list once, and an exported HOP_FZF_MIN or HOP_REPOS walked straight in.
+# - Only the home differs from a probe's: this suite owns IT_HOME and builds a real checkout in it.
 it_env() {
 	emulate -L zsh
-	print -rl -- \
-		"HOP_CONFIG=$(_hop_fix_config)" \
-		"HOME=${IT_HOME}" \
-		"XDG_CONFIG_HOME=${IT_HOME}/.config" \
-		'HOP_HOPRC=' \
-		'HOP_HISTFILE=/dev/null'
+	fixture_pin_pairs "$IT_HOME"
 }
 
 # it_run <code> [VAR=value...] -> run code in a fresh shell with hop.zsh sourced; stderr to IT_ERRFILE.
-# - perl's alarm is the timeout on this box, and 20s is far above any honest enumeration.
+# - hop_bound is the timeout on this box, and 20s is far above any honest enumeration.
 it_run() {
 	emulate -L zsh
 	local code=$1
 	shift
 	local -a pins=("${(@f)$(it_env)}")
-	perl -e 'alarm 20; exec @ARGV' env "${pins[@]}" "$@" \
+	hop_bound 20 env "${pins[@]}" "$@" \
 		zsh -f -c "source ${(q)HOP_HOME}/hop.zsh || exit 97
 ${code}"  2>"$IT_ERRFILE"
 }
@@ -118,7 +113,7 @@ it_gen() {
 		code+=" ${(q)k}"
 	done
 	local -a pins=("${(@f)$(it_env)}")
-	perl -e 'alarm 30; exec @ARGV' env "${pins[@]}" \
+	hop_bound 30 env "${pins[@]}" \
 		zsh -f -c "source ${(q)HOP_HOME}/hop.zsh || exit 97
 ${code}" 2>"$IT_ERRFILE"
 }
@@ -197,7 +192,7 @@ it_nobat_path() {
 it_preview() {
 	emulate -L zsh
 	it_nobat_path || return 1
-	perl -e 'alarm 20; exec @ARGV' env "PATH=${IT_NOBAT}" \
+	hop_bound 20 env "PATH=${IT_NOBAT}" \
 		"$HOP_HOME/bin/hop-preview" "$@" 2>"$IT_ERRFILE"
 }
 
@@ -500,7 +495,7 @@ it_nobat_path
 
 t 'the no-bat PATH really has no bat on it'
 typeset BATPATH
-BATPATH=$(perl -e 'alarm 10; exec @ARGV' env "PATH=${IT_NOBAT}" \
+BATPATH=$(hop_bound 10 env "PATH=${IT_NOBAT}" \
 	zsh -f -c 'print -rn -- ${commands[bat]:-}' 2>&1)
 assert_empty "$BATPATH" 'the test only means something when bat is unreachable'
 
