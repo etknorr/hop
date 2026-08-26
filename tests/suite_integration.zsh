@@ -161,12 +161,18 @@ it_stub_fzf() {
 }
 
 # it_run_stub <code> [VAR=value...] -> it_run with the recording fzf shadowing the real one.
+# - _hop_tty_ok is forced true, because hop refuses the picker outright with no controlling terminal.
+# - A CI runner and an agent's shell both lack one, and neither can be given one cheaply here.
+# - The stub fzf is already a fiction that draws nothing and exits on demand, so the tty is the same one.
+# - Without this a probe silently resolves headlessly, and any flag assertion inspects THAT call.
+# - Overridden in the CHILD rather than the product, so no environment variable can weaken the guard.
 it_run_stub() {
 	emulate -L zsh
 	it_stub_fzf || return 1
 	local code=$1
 	shift
-	it_run "$code" "PATH=${IT_STUBDIR}:${PATH}" \
+	it_run "_hop_tty_ok() { return 0 }
+${code}" "PATH=${IT_STUBDIR}:${PATH}" \
 		"HOP_FZF_ARGV=${IT_FZF_ARGV}" "HOP_FZF_STDIN=${IT_FZF_STDIN}" "$@"
 }
 
@@ -306,16 +312,25 @@ fi
 # ---------------------------------------------------------------------------
 # --exact: asserted on the flags hop really passes, then priced against the fuzzy alternative.
 # ---------------------------------------------------------------------------
+# The recorded argv has to be the PICKER's, and saying which call is inspected is half the assertion.
+# - hop resolves headlessly through `fzf --filter` when /dev/tty cannot be opened, as in CI.
+# - That call passes --exact as well, so this pair once went green against the wrong invocation.
+# - it_run_stub forces the tty predicate true for exactly that reason; these tests prove it worked.
+# - Counting exact matches rather than taking an index: a floor admits any index and hides absence.
 it_run_stub "cd ${(q)MAIN} || exit 96
 hop -k tg" >/dev/null
 typeset -a ARGV=()
 [[ -r ${IT_FZF_ARGV:-} ]] && ARGV=("${(@f)$(it_slurp "$IT_FZF_ARGV")}")
 
-t 'hop passes --exact to fzf'
-assert_ge ${ARGV[(I)--exact]} 1 'without --exact, fuzzy matching over a ~90-column line overmatches'
+t 'the recorded fzf call is the interactive picker, not the headless matcher'
+assert_eq 0 ${#${(M)ARGV:#--filter=*}} 'a --filter in the argv means the probe never reached the picker'
+assert_eq 1 ${#${(M)ARGV:#--expect=*}} 'the picker is the call that passes --expect, so it must be here'
 
-t 'hop passes --select-1, which is what makes a unique query jump'
-assert_ge ${ARGV[(I)--select-1]} 1 'the fast path is --select-1 and nothing else'
+t 'the picker passes --exact to fzf'
+assert_eq 1 ${#${(M)ARGV:#--exact}} 'without --exact, fuzzy matching over a ~90-column line overmatches'
+
+t 'the picker passes --select-1, which is what makes a unique query jump'
+assert_eq 1 ${#${(M)ARGV:#--select-1}} 'the fast path is --select-1 and nothing else'
 
 if (( HAVE_FZF )); then
 	typeset -i xn fn

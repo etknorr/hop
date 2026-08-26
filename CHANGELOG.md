@@ -67,6 +67,20 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   and the overlay is passed the list of keys that picker really bound, which is the rule
   `_hop_header`'s own comment already stated for `M-a`. `M-a` was the fifth case and had been missed.
 
+- `hop` no longer hangs forever when no controlling terminal is available. A mistyped query was the
+  likeliest way to hit this: `hop -k tg zzzz` from a script, a cron job, a CI step or an agent's
+  shell blocked indefinitely instead of reporting that nothing matched. The picker deliberately
+  omits `--exit-0` so a typo can be corrected in place, which is right when a terminal exists and a
+  trap when one does not. A query matching many targets hung the same way. fzf does not error when
+  `/dev/tty` cannot be opened: it starts, writes nothing at all, and blocks on keys it can never
+  receive, so hop wedged with zero bytes on both stdout and stderr and nothing to diagnose it by.
+  hop now resolves the query headlessly with `fzf --filter` instead, and returns non-zero. Nothing
+  matched and several matched get different messages, because a typo wants correcting where a broad
+  query wants narrowing, and the latter names how many candidates there were. A query matching
+  exactly one target still jumps straight to it, exactly as `--select-1` did before, so
+  `hop <unique-query>` keeps working from a script. Redirected shapes such as `hop < /dev/null`,
+  `hop | cat`, `echo x | hop` and `hop 0<&-` are unaffected, because fzf reads keys from `/dev/tty`
+  rather than stdin and every one of those keeps its terminal.
 - The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
   command itself fails; it now names the failing tool on stderr and returns non-zero.
 - The edit verb (`alt-o`) no longer rejects an absolute-path `$EDITOR`/`$VISUAL` (e.g.
