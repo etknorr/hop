@@ -17,10 +17,15 @@ zmodload zsh/datetime 2>/dev/null
 # Seconds a verb must wait after an unparsed escape introducer before it counts as a real keypress.
 # - 0.15 was measured under a pty, not guessed, and the numbers below are from this machine.
 # - Forged letters inside one payload arrive 15-22ms apart, which is the fork cost of this script.
-# - So the threshold has about 7x headroom, which is what a loaded runner needs.
+# - So the threshold has about 7x headroom on an idle machine, and none at all on a loaded one.
+# - Measured at loadavg 35 this script's own fork took 425ms mean, which is past the threshold.
+# - A check that slow reads as a real keypress and fails OPEN, so heavy load reverts to the old nuisance.
+# - That is the direction deliberately chosen, because the alternative swallows keys you did press.
 # - The brief's own gate passes with room to spare: j j b at 60ms spacing still fires b.
 # - It fires because a plain letter never marks; only an alt-<char> nobody would press does.
 # - The cost is narrow and self-healing: one keypress within 150ms of a marked alt- key is lost.
+# - No test pins this 0.15, and none can: a refusal assertion crosses the very fork it is timing.
+# - tests/suite_guard.zsh pins an explicit window instead, and says so where it does it.
 # - HOP_GUARD_WINDOW=0 turns the guard off, because a timing heuristic must have an off switch.
 # - A malformed override falls back rather than aborting the caller with `bad math expression`.
 typeset raw=${HOP_GUARD_WINDOW:-0.15}
