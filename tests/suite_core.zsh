@@ -318,3 +318,35 @@ t 'a HOP_CONFIG assigned AFTER hop.zsh was sourced still reaches the reload chil
 out=$(co_run "HOP_CONFIG=${(q)CO_CFG}
 _hop_reload_cmd ${(q)CO_REPO} mine")
 assert_contains "$out" "$CO_CFG" 'the live value is what the child needs, not the one seen at source time'
+
+# ---------------------------------------------------------------------------
+# The default picker geometry, which the fixture's own pin takes out of every other probe.
+# ---------------------------------------------------------------------------
+# co_argv -> `reply` is the argv the stub fzf recorded last, one element per line.
+# - The $(<...) sits inside a function body because `zsh -n` evaluates it at the top level.
+co_argv() {
+	emulate -L zsh
+	reply=()
+	[[ -n ${CO_ARGV:-} && -r $CO_ARGV ]] || return 0
+	reply=("${(@f)$(<"$CO_ARGV")}")
+	return 0
+}
+
+# lib/ui.zsh's ${HOP_FZF_HEIGHT-80%} is the ONLY bare-dash expansion in the shipped source.
+# - Everything else reads `:-`, where an empty pin and an unset variable are indistinguishable.
+# - So pinning it empty is uniquely observable: it takes the --height branch out of every probe.
+# - Nothing asserted on --height before this, so a typo'd --heigth would have shipped green.
+# - The unset happens in the child, after the pins, which is what a user who never set it looks like.
+t 'with HOP_FZF_HEIGHT unset the picker still gets its default 80% geometry'
+co_run "unset HOP_FZF_HEIGHT
+hop -w" "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130' >/dev/null 2>&1
+co_argv
+assert_nonempty "${reply[*]}" 'the picker never ran, so neither assertion below means anything'
+assert_ne '' "${reply[(r)--height=80%]}" 'the default picker height never reached fzf'
+assert_ne '' "${reply[(r)--min-height=18]}" '--min-height rides with --height, and was dropped with it'
+
+t 'and an empty HOP_FZF_HEIGHT asks for no height at all, which is what a pty needs'
+co_run 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_HEIGHT=' 'HOP_FZF_EXIT=130' >/dev/null 2>&1
+co_argv
+assert_nonempty "${reply[*]}" 'the picker never ran, so the assertion below means nothing'
+assert_eq '' "${reply[(r)--height=*]}" 'an empty HOP_FZF_HEIGHT must drop --height, or a pty hangs on ESC[6n'
