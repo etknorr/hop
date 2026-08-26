@@ -250,7 +250,10 @@ typeset -i ELAPSED_MS=$(( (t1 - t0) * 1000 ))
 typeset verdict=over
 (( ELAPSED_MS <= 1000 )) && verdict=under
 
-t "default-kind enumeration is under 1000ms (measured ${ELAPSED_MS}ms)"
+# A test NAME must be byte-identical across runs, so a measured value belongs in the failure detail.
+# - A name carrying a duration cannot be addressed by HOP_T_FILTER, since you cannot predict it.
+# - It also defeats diffing one run's names against another's, which is how a phantom delta appears.
+t 'default-kind enumeration is under its 1000ms budget'
 assert_eq under "$verdict" "enumeration took ${ELAPSED_MS}ms against a 1000ms budget"
 
 t 'default-kind enumeration yields every target in the fixture, silently'
@@ -317,11 +320,12 @@ if (( HAVE_FZF )); then
 	xn=$(it_count "$(it_filter 'abg' "$IT_ROWS")")
 	fn=$(it_count "$(it_filter_fuzzy 'abg' "$IT_ROWS")")
 
-	t "--exact narrows 'abg' from ${fn} fuzzy rows to ${xn}"
-	assert_eq 1 $xn 'exact matching is what makes this query a single row'
-	assert_ge $fn 2 'if fuzzy also returned one row, this regression guard has stopped guarding'
+	t "--exact narrows 'abg' to a single row where fuzzy matches several"
+	assert_eq 1 $xn "exact matching is what makes this query a single row, got ${xn}"
+	assert_ge $fn 2 "if fuzzy also returned one row this guard has stopped guarding, got ${fn}"
 else
-	skip '--exact narrows abg to one row' 'fzf is not installed'
+	# The skip must carry the SAME name as the t above, or the name varies by environment instead.
+	skip "--exact narrows 'abg' to a single row where fuzzy matches several" 'fzf is not installed'
 fi
 
 # ---------------------------------------------------------------------------
@@ -335,7 +339,7 @@ rows=''
 [[ -r ${IT_FZF_STDIN:-} ]] && rows=$(it_slurp "$IT_FZF_STDIN")
 cnt_sub=$(it_count "$rows")
 
-t "hop -c in a subtree shows fewer rows than the repo root (${cnt_sub} vs ${cnt_root})"
+t 'hop -c in a subtree shows fewer rows than the repo root'
 assert_ge $cnt_sub 1 'the subtree does hold targets, so an empty list is a bug'
 assert_eq 1 $(( cnt_sub < cnt_root )) "scoping must strictly narrow: ${cnt_sub} vs ${cnt_root}"
 
@@ -545,7 +549,7 @@ if [[ -n $TESTREPO && -d $TESTREPO/.git ]]; then
 	verdict=over
 	(( ELAPSED_MS <= 2000 )) && verdict=under
 
-	t "real checkout: default-kind enumeration is under 2000ms (measured ${ELAPSED_MS}ms)"
+	t 'real checkout: default-kind enumeration is under its 2000ms budget'
 	assert_eq under "$verdict" "enumeration took ${ELAPSED_MS}ms at real scale"
 
 	t 'real checkout: enumeration is silent on stderr'
