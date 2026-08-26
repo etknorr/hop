@@ -25,7 +25,7 @@ co_stub_fzf() {
 		': > "$HOP_FZF_ARGV"' \
 		'for a in "$@"; do printf "%s\n" "$a" >> "$HOP_FZF_ARGV"; done' \
 		'# The real fzf reads no stdin for --version, and _hop_fzf_ver pipes it none.' \
-		'case "$1" in --version) exit ${HOP_FZF_EXIT:-1} ;; esac' \
+		'case " $* " in *" --version "*) exit ${HOP_FZF_EXIT:-1} ;; esac' \
 		'cat > "$HOP_FZF_STDIN"' \
 		'exit ${HOP_FZF_EXIT:-1}' > "$CO_STUBDIR/fzf"
 	chmod +x "$CO_STUBDIR/fzf" || return 1
@@ -341,18 +341,21 @@ co_argv() {
 # - So pinning it empty is uniquely observable: it takes the --height branch out of every probe.
 # - Nothing asserted on --height before this, so a typo'd --heigth would have shipped green.
 # - The unset happens in the child, after the pins, which is what a user who never set it looks like.
+# - Each arm opens on --ansi, a flag only the PICKER passes, rather than on argv being merely non-empty.
+# - `_hop_fzf_ver` runs `fzf --version` first, so a non-empty argv proves only that THAT call happened.
+# - Measured: with the weaker check, replacing the fzf call with `true` left the empty arm passing green.
 t 'with HOP_FZF_HEIGHT unset the picker still gets its default 80% geometry'
 co_run "unset HOP_FZF_HEIGHT
 hop -w" "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130' >/dev/null 2>&1
 co_argv
-assert_nonempty "${reply[*]}" 'the picker never ran, so neither assertion below means anything'
+assert_ne '' "${reply[(r)--ansi]}" 'the PICKER never ran, so neither assertion below means anything'
 assert_ne '' "${reply[(r)--height=80%]}" 'the default picker height never reached fzf'
 assert_ne '' "${reply[(r)--min-height=18]}" '--min-height rides with --height, and was dropped with it'
 
 t 'and an empty HOP_FZF_HEIGHT asks for no height at all, which is what a pty needs'
 co_run 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_HEIGHT=' 'HOP_FZF_EXIT=130' >/dev/null 2>&1
 co_argv
-assert_nonempty "${reply[*]}" 'the picker never ran, so the assertion below means nothing'
+assert_ne '' "${reply[(r)--ansi]}" 'the PICKER never ran, so the assertion below means nothing'
 assert_eq '' "${reply[(r)--height=*]}" 'an empty HOP_FZF_HEIGHT must drop --height, or a pty hangs on ESC[6n'
 
 # ---------------------------------------------------------------------------
@@ -374,6 +377,15 @@ hop_bound 5 env "HOP_FZF_ARGV=${CO_ARGV}" "HOP_FZF_STDIN=${CO_STDIN}" \
 	"$CO_STUBDIR/fzf" --version >/dev/null 2>&1 <> "$CO_NOFEED"
 st=$?
 assert_ne 142 "$st" 'the stub read stdin for a version query, which is the hang seen from a pipeline'
+
+# The guard matches --version anywhere in argv, not just as $1, and this is what holds it to that.
+# - `_hop_fzf_ver` happens to put it first today, so a $1-only guard would pass the case above.
+# - A future call growing one leading flag would then block again with no test having failed.
+t 'and it does so wherever --version sits in argv, not only as the first word'
+hop_bound 5 env "HOP_FZF_ARGV=${CO_ARGV}" "HOP_FZF_STDIN=${CO_STDIN}" \
+	"$CO_STUBDIR/fzf" --no-mouse --version >/dev/null 2>&1 <> "$CO_NOFEED"
+st=$?
+assert_ne 142 "$st" 'a version query behind another flag still read stdin, so the guard checks $1 only'
 
 t 'and a whole probe finishes when the runner is handed stdin that never reaches EOF'
 out=$(co_run 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130' <> "$CO_NOFEED"); st=$?
