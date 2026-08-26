@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Fixed
+
+- Four test assertions that could not fail, letting a shipped behaviour regress with the suite green.
+  The `--help` check for the opt-in `file` kind matched the usage line rather than the kinds registry,
+  so starring every kind still passed. Three modal-keymap checks compared a transform's output
+  against the same `HOP_VIM_*` variable the transform reads, and `lib/ui.zsh` declares those empty,
+  so `?` never opening the keys overlay, `?` never closing it and `enter` never switching kinds in
+  the `:` menu were each shippable without one failing test.
+- Two further keymap assertions of the same shape, for `HOP_VIM_TO_NORMAL` and `HOP_VIM_MENU_BACK`.
+  Both regressions were already caught elsewhere, so these now name the cause rather than add cover.
+
 ## [0.1.0] - 2026-08-25
 
 First release.

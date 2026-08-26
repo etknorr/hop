@@ -427,23 +427,37 @@ assert_ge "$(_km_dump_get "$KM_TF" 'LEN_ESC=')" 1 'the esc transform body was no
 assert_ge "$(_km_dump_get "$KM_TF" 'LEN_ENTER=')" 1 'the enter transform body was not found in the bind set'
 assert_ge "$(_km_dump_get "$KM_TF" 'LEN_HELP=')" 1 'the ? transform body was not found in the bind set'
 
+# Every EXPECT_* below is asserted non-empty BEFORE it is compared, and that is not belt-and-braces.
+# - Each pair compares a transform's OUTPUT against the HOP_VIM_* the transform reads, one probe.
+# - lib/ui.zsh declares all six as `local -x NAME=''`, so emptying one empties BOTH sides.
+# - Measured: blanking HOP_VIM_HELP_ON, HELP_OFF or PICK_KIND each left the suite at 446 passed, 0 failed.
+# - So `?` not opening the overlay, `?` not closing it, and enter in `:` not switching kinds all shipped green.
+# - TO_NORMAL and MENU_BACK were caught anyway, but by luck elsewhere rather than by these two assertions.
+# - TO_NORMAL by the rebind-shape test above; MENU_BACK by esc_act's `:-abort`, which made the sides differ.
+# - LEN_* above does NOT cover this: it proves the BODY was extracted, not that it prints anything.
+
 t 'esc in the kind menu goes back to the view you came from'
+assert_nonempty "$(_km_dump_get "$KM_TF" 'EXPECT_MENU_BACK=')" 'HOP_VIM_MENU_BACK is empty, so this comparison proves nothing'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_MENU_BACK=')" "$(_km_dump_get "$KM_TF" 'ESC_MENU=')"
 
 t 'esc in SEARCH (input enabled) returns to NORMAL and drops the filter'
+assert_nonempty "$(_km_dump_get "$KM_TF" 'EXPECT_TO_NORMAL=')" 'HOP_VIM_TO_NORMAL is empty, so this comparison proves nothing'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_TO_NORMAL=')" "$(_km_dump_get "$KM_TF" 'ESC_SEARCH=')"
 
 t 'esc in NORMAL (input disabled) quits'
 assert_eq 'abort' "$(_km_dump_get "$KM_TF" 'ESC_NORMAL=')"
 
 t 'enter in the kind menu switches to the picked kind'
+assert_nonempty "$(_km_dump_get "$KM_TF" 'EXPECT_PICK_KIND=')" 'HOP_VIM_PICK_KIND is empty, so this comparison proves nothing'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_PICK_KIND=')" "$(_km_dump_get "$KM_TF" 'ENTER_MENU=')"
 
 t 'enter outside the menu is a plain accept'
 assert_eq 'accept' "$(_km_dump_get "$KM_TF" 'ENTER_NORMAL=')"
 
 t '? opens the keys overlay when it is not already showing'
+assert_nonempty "$(_km_dump_get "$KM_TF" 'EXPECT_HELP_ON=')" 'HOP_VIM_HELP_ON is empty, so this comparison proves nothing'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_HELP_ON=')" "$(_km_dump_get "$KM_TF" 'HELP_ON=')"
 
 t '? closes the keys overlay and restores the real preview when it is showing'
+assert_nonempty "$(_km_dump_get "$KM_TF" 'EXPECT_HELP_OFF=')" 'HOP_VIM_HELP_OFF is empty, so this comparison proves nothing'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_HELP_OFF=')" "$(_km_dump_get "$KM_TF" 'HELP_OFF=')"
