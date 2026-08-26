@@ -50,14 +50,17 @@ _hop_vim_on() {
 	[[ ${HOP_VIM:-1} != 0 ]]
 }
 
-# _hop_vim_header <NORMAL|SEARCH> -> the mode legend, mode name first.
+# _hop_vim_header <NORMAL|SEARCH> [has-menu] -> the mode legend, mode name first.
 # - Mode name first because which mode is active is the one thing a user must never guess.
 # - The one-line form is 74 columns, so an 80-column terminal shows it without wrapping.
 # - Above 120 columns the preview takes 55% and the header pane is only 45% of the terminal.
 # - fzf CLIPS an over-long header rather than wrapping it, so a narrow pane re-flows the text.
+# - `: view` is omitted without a root to enumerate kinds from, which is _hop_header's own rule.
+# - The repo and workspace pickers pass no root, so `:` falls through to ignore in both of them.
+# - Those two are the pickers a newcomer meets first, and a legend naming a dead key is worse than none.
 _hop_vim_header() {
 	emulate -L zsh
-	local mode=$1
+	local mode=$1 menu=${2:-}
 	local -i cols=${COLUMNS:-80}
 	local -i avail=$cols
 	(( cols >= 120 )) && avail=$(( cols * 45 / 100 ))
@@ -73,11 +76,13 @@ _hop_vim_header() {
 			)
 		fi
 	else
-		lines=('NORMAL  j/k move  g/G top/bot  / search  : view  ? help  enter cd  q quit')
+		local view=''
+		[[ -n $menu ]] && view='  : view'
+		lines=("NORMAL  j/k move  g/G top/bot  / search${view}  ? help  enter cd  q quit")
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'NORMAL  j/k move  g/G top/bot'
-				'/ search  : view  ? help'
+				"/ search${view}  ? help"
 				'enter cd  q quit'
 			)
 		fi
@@ -94,9 +99,21 @@ _hop_vim_header() {
 _hop_vim_binds() {
 	emulate -L zsh
 	local prev_cmd=$1 reload=$2 root=$3 restore=$4 query=$5 drill=${6:-} up=${7:-} guard=${8:-}
-	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys"
 	local kinds_bin="${(q)HOP_HOME}/bin/hop-kinds"
 	local guard_bin="${(q)HOP_HOME}/bin/hop-guard"
+
+	# The five keys this picker may or may not have bound, named for the `?` overlay.
+	# - Each is gated below on one of _hop_run's arguments, so a picker without it leaves it on ignore.
+	# - _hop_header's own comment states the rule: the picker must not advertise a dead key.
+	# - The repo picker gets only h, and the workspace picker only l, so four of the five are dead there.
+	# - `-` rather than an empty word, because an empty trailing argument does not survive a bind string.
+	local -a live=()
+	[[ -n $restore ]] && live+=(r)
+	[[ -n $root ]] && live+=(':')
+	[[ -n $drill ]] && live+=(l)
+	[[ -n $up ]] && live+=(h)
+	[[ -n $reload ]] && live+=(M-a)
+	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys ${${(j:,:)live}:--}"
 
 	# The nine keys whose action leaves the picker, and so the nine the guard has to cover.
 	local -a guard_keys=(o O e y Y b l h q)
@@ -120,7 +137,7 @@ _hop_vim_binds() {
 	local rebind_all="rebind(${keys})+rebind(()+rebind())"
 
 	local nh sh
-	nh=$(_hop_vim_header NORMAL)
+	nh=$(_hop_vim_header NORMAL "$root")
 	sh=$(_hop_vim_header SEARCH)
 
 	local to_search="${unbind_all}+enable-search+change-prompt(/ )+change-header(${sh})+${prev_restore}"

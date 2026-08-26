@@ -528,6 +528,130 @@ assert_empty "$(_km_bind_action "$KM_PICK" alt-g)" 'alt-g inside the picker woul
 assert_empty "$(_km_bind_action "$KM_PICK" alt-b)" 'alt-b is fzf backward-word and SEARCH needs it'
 
 # ---------------------------------------------------------------------------
+# Tier 1e: the picker must not advertise a key it left bound to `ignore`.
+# ---------------------------------------------------------------------------
+
+# Five keys are gated on a _hop_run argument, so a given picker may bind none of them.
+# - r on restore, : on root, l on drill, h on up, and M-a on reload.
+# - The repo picker (hop -R) passes only up, and the workspace picker (hop -w) only drill.
+# - So four of the five were dead in both, while the NORMAL legend and the `?` overlay named them all.
+# - Pressing the key the header just told you to press, and getting no error and no beep, is the bug.
+
+# - _km_overlay_probe <reload> <root> <drill> <restore> <up> -> "ADV=<keys>\x1eBOUND=<keys>\x1eHDR=<legend>".
+# - ADV is read by actually RUNNING bin/hop-preview with the argument the `?` bind hands it.
+# - Nothing is inferred from the bind string: the overlay's real rendered text is what a user reads.
+# - BOUND is read from the same call's captured bind table, and from --bind=alt-a for M-a.
+# - Comparing the two sets IS the property, and neither side is written down twice.
+# - Argument order mirrors _hop_pick's, so a callsite in hop.zsh can be transcribed straight in.
+_km_overlay_probe() {
+	emulate -L zsh
+	local -x KM_RELOAD=$1 KM_ROOT=$2 KM_DRILL=$3 KM_RESTORE=$4 KM_UP=$5
+	hop_probe '
+		COLUMNS=200
+		typeset -ga KM_CAPTURED
+		typeset -g KM_HELP_ON="" KM_HEAD=""
+		fzf() {
+			KM_CAPTURED=("$@")
+			KM_HELP_ON=$HOP_VIM_HELP_ON
+			return 0
+		}
+		# NO pipeline: the last element of one runs in a subshell, so the captures would not survive.
+		_hop_pick "label" "header" "" "$KM_RELOAD" "$KM_ROOT" "$KM_DRILL" "$KM_RESTORE" "$KM_UP"
+
+		# The header fzf was actually given, which is the legend the user reads in the list pane.
+		local a
+		for a in "${KM_CAPTURED[@]}"; do
+			[[ $a == --header=* ]] && KM_HEAD=${a#--header=}
+		done
+
+		# The ? overlay command lives inside HOP_VIM_HELP_ON, which is where the transform reads it.
+		# - Both parens are QUOTED inside the pattern, which is not optional; see _km_split_bind above.
+		# - A literal ( typed straight into a pattern operand is an unbalanced glob group, not a paren.
+		# - Unquoted, this failed with `bad pattern` and every assertion below compared empty to empty.
+		local hc=${KM_HELP_ON#*"change-preview("}
+		hc=${hc%%")"*}
+		local out=""
+		[[ -n $hc ]] && out=$(eval "$hc" 2>/dev/null)
+		# Strip SGR so the key column is at a fixed offset regardless of colour.
+		# - extended_glob is needed for the # closure, and zsh -f does not set it.
+		setopt extended_glob
+		out=${out//$'"'"'\e'"'"'\[[0-9;]##m/}
+
+		# Columns 1-17 are the key field on every line of the overlay, and 18 on is prose.
+		# - Splitting that field on / is what makes the shared `l / h` line report BOTH keys.
+		local -a adv=()
+		local line tok
+		for line in ${(f)out}; do
+			[[ $line == "  "* ]] || continue
+			for tok in ${(s:/:)line[1,17]}; do
+				tok=${tok//[[:space:]]/}
+				[[ -n $tok ]] && adv+=("$tok")
+			done
+		done
+
+		# Only the five gated keys are compared; the always-bound ones are asserted elsewhere.
+		local -a want=(r : l h M-a) adv5=() bnd=()
+		local k
+		for k in "${want[@]}"; do
+			(( ${adv[(Ie)$k]} )) && adv5+=("$k")
+		done
+
+		# A key is BOUND when the picker gave it an action that is not `ignore`.
+		for k in r : l h; do
+			for a in "${KM_CAPTURED[@]}"; do
+				[[ $a == "--bind=${k}:"* ]] || continue
+				[[ $a == "--bind=${k}:ignore" ]] || bnd+=("$k")
+			done
+		done
+		# M-a is bound by _hop_pick itself rather than by the modal layer, so it is read separately.
+		for a in "${KM_CAPTURED[@]}"; do
+			[[ $a == --bind=alt-a:* ]] && bnd+=(M-a)
+		done
+
+		local -a out2=("ADV=${(j:,:)adv5}" "BOUND=${(j:,:)bnd}" "HDR=${KM_HEAD}")
+		print -rn -- "${(pj:\x1e:)out2}"
+	'
+}
+
+# The three real callsites, transcribed from hop.zsh rather than invented.
+# - _hop_run:        _hop_pick label header query reload root ''    restore up
+# - _hop_ws_picker:  _hop_pick label header query ''     ''   drill ''      ''
+# - _hop_repo_picker goes through _hop_run with reload, root and restore all empty, and up set.
+typeset KM_OV_MAIN KM_OV_REPO KM_OV_WS
+KM_OV_MAIN=$(_km_overlay_probe RELOADCMD /some/root '' RESTORECMD _hop_ws_picker)
+KM_OV_REPO=$(_km_overlay_probe '' '' '' '' _hop_ws_picker)
+KM_OV_WS=$(_km_overlay_probe '' '' drill '' '')
+
+# Asserted first: an overlay that rendered nothing would make every comparison below vacuous.
+t 'the overlay probe actually rendered the keys overlay'
+assert_eq 'r,:,h,M-a' "$(_km_dump_get "$KM_OV_MAIN" 'ADV=')" 'the main picker advertises four: _hop_run passes no drill target'
+assert_nonempty "$(_km_dump_get "$KM_OV_MAIN" 'HDR=')" 'no header reached fzf, so the legend checks prove nothing'
+
+# The invariant, stated once and checked per picker: advertised is exactly bound.
+t 'the ? overlay names exactly the gated keys the picker actually bound'
+assert_eq "$(_km_dump_get "$KM_OV_MAIN" 'BOUND=')" "$(_km_dump_get "$KM_OV_MAIN" 'ADV=')" 'main picker'
+assert_eq "$(_km_dump_get "$KM_OV_REPO" 'BOUND=')" "$(_km_dump_get "$KM_OV_REPO" 'ADV=')" 'repo picker (hop -R)'
+assert_eq "$(_km_dump_get "$KM_OV_WS" 'BOUND=')" "$(_km_dump_get "$KM_OV_WS" 'ADV=')" 'workspace picker (hop -w)'
+
+# Exact lists as well as set equality, so a regression that drops BOTH sides at once still fails.
+t 'the repo and workspace pickers advertise only the one gated key each really has'
+assert_eq 'h' "$(_km_dump_get "$KM_OV_REPO" 'ADV=')" 'hop -R has only h: r, :, l and M-a are all dead there'
+assert_eq 'l' "$(_km_dump_get "$KM_OV_WS" 'ADV=')" 'hop -w has only l: r, :, h and M-a are all dead there'
+
+# The NORMAL legend in the list pane, which is the line a user reads before ever pressing `?`.
+t 'the NORMAL legend names : view only where a root makes the kind menu real'
+assert_contains "$(_km_dump_get "$KM_OV_MAIN" 'HDR=')" ': view'
+assert_not_contains "$(_km_dump_get "$KM_OV_REPO" 'HDR=')" ': view' 'hop -R has no root, so : falls through to ignore'
+assert_not_contains "$(_km_dump_get "$KM_OV_WS" 'HDR=')" ': view' 'hop -w has no root, so : falls through to ignore'
+
+# The rest of the legend has to survive the edit that removed one token from the middle of it.
+t 'dropping : view leaves the rest of the NORMAL legend intact'
+assert_eq 'NORMAL  j/k move  g/G top/bot  / search  : view  ? help  enter cd  q quit' \
+	"$(_km_dump_get "$KM_OV_MAIN" 'HDR=')"
+assert_eq 'NORMAL  j/k move  g/G top/bot  / search  ? help  enter cd  q quit' \
+	"$(_km_dump_get "$KM_OV_REPO" 'HDR=')"
+
+# ---------------------------------------------------------------------------
 # Tier 2: the transform: action bodies, extracted and run directly as sh.
 # ---------------------------------------------------------------------------
 

@@ -54,6 +54,16 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- The picker no longer advertises keys it left bound to `ignore`. Five NORMAL-mode keys are gated on
+  whether the calling picker had anything for them to do: `r` needs a restore command, `:` a root to
+  enumerate kinds from, `l` a drill target, `h` an up-level target, and `M-a` a reload command. The
+  repo picker (`hop -R`) supplies only the up-level target and the workspace picker (`hop -w`) only the
+  drill target, yet the NORMAL legend named `:` and the `?` overlay named all five in both. So a user
+  pressed the key the header had just told them to press and got nothing, with no error and no beep, in
+  the two pickers a newcomer meets first. The legend now omits `: view` where there is no kind menu,
+  and the overlay is passed the list of keys that picker really bound, which is the rule
+  `_hop_header`'s own comment already stated for `M-a`. `M-a` was the fifth case and had been missed.
+
 - The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
   command itself fails; it now names the failing tool on stderr and returns non-zero.
 - The edit verb (`alt-o`) no longer rejects an absolute-path `$EDITOR`/`$VISUAL` (e.g.

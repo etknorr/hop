@@ -262,6 +262,12 @@ fzf has no key-sequence support, so there is no `gg`. `g` alone is first, `G` is
 | `?` | keymap overlay in the preview pane |
 | `q` or `esc` | quit |
 
+Five of those depend on which picker you are in. `r` needs a list it can regenerate, `:` needs a repo
+root to enumerate kinds from, `l` needs somewhere to drill into, `h` needs a level to go back out to,
+and `alt-a` needs a reload command. The repo picker (`hop -R`) has only `h` and the workspace picker
+(`hop -w`) has only `l`. Where a key is not bound, the legend and the `?` overlay both leave it out
+rather than name a key that does nothing.
+
 ### SEARCH
 
 Every printable key types. `esc` returns to NORMAL and clears the query.
