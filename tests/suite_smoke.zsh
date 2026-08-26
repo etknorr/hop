@@ -226,13 +226,29 @@ assert_not_contains "$filelines[1]" '*' 'file is opt-in, so it must not carry th
 # - XDG_* is scanned too, because every hop default path resolves through one of those three roots.
 # - Dropping the XDG_STATE_HOME or XDG_CACHE_HOME pin failed nothing until they were scanned here.
 t 'every hop setting the product reads is covered by the fixture pin list'
-typeset -a pinnames prodvars unpinned rawvars
+typeset -a pinnames prodvars unpinned rawvars expected
 fixture_sources shipped
 rawvars=(${(f)"$(grep -rhoE '(^|[^A-Za-z0-9_])(HOP|XDG)_[A-Z_]+' "${reply[@]}")"})
 prodvars=(${(u)rawvars/#[^A-Z_]/})
 prodvars=(${prodvars:#HOP_HOME})
 prodvars=(${prodvars:#HOP_VIM_*})
-assert_ge $#prodvars 15 'the scan found almost no settings, so it would pass while checking nothing'
+# The scanned set is written out in full, because a `>=` floor cannot fail upward.
+# - `assert_ge $#prodvars 15` passed whether the scan found 15 or 50, so a setting appearing in the
+#   source slid past it silently, and that is the one thing a drift detector exists to catch.
+# - It could not fail downward either until the count fell below the floor: at 17 real settings a
+#   scan degrading to 15 still passed, and `unpinned` was then empty for the wrong reason.
+# - A name added or removed here is therefore a deliberate edit, which is the point.
+expected=(
+	HOP_CLIPBOARD HOP_CONFIG HOP_DEBUG HOP_DEBUG_LOG HOP_DEFAULT_KINDS
+	HOP_FZF_HEIGHT HOP_FZF_MIN HOP_HISTFILE HOP_HIST_MAX HOP_HOPRC
+	HOP_REPOS HOP_VIM HOP_WORKSPACES HOP_WORKSPACES_FILE
+	XDG_CACHE_HOME XDG_CONFIG_HOME XDG_STATE_HOME
+)
+# Sorted through intermediate arrays, because a joining context silently drops the (o) flag.
+expected=(${(o)expected})
+prodvars=(${(o)prodvars})
+assert_eq "${(j:, :)expected}" "${(j:, :)prodvars}" \
+	'the settings the source reads drifted from this list: add or remove the name deliberately, and pin it'
 pinnames=(${${(f)"$(fixture_pin_pairs /nonexistent)"}%%=*})
 unpinned=(${prodvars:|pinnames})
 assert_empty "${(j:, :)unpinned}" 'a probe could inherit these from the developer running the suite'
