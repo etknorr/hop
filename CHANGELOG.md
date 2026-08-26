@@ -11,7 +11,6 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Added
 
-
 - An escape guard, so bytes a *terminal* prints can no longer run a hop verb. fzf cannot decode every
   escape sequence that arrives on its input, and the ones it cannot parse are delivered as ordinary
   keystrokes. In NORMAL mode letters are verbs, so a terminal answering a background-colour query with
@@ -47,7 +46,6 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Changed
 
-
 - The browse verb moved off `ctrl-g` and onto `alt-B` in SEARCH, because `ctrl-g` was reachable with
   no keypress at all. A single BEL byte (`0x07`) in anything a program prints arrives at fzf as
   `ctrl-g`, and hop passed `ctrl-g` on `--expect`, so a stray bell ran `gh browse` and opened a
@@ -60,7 +58,6 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   hop read as "do that again" when it was really the browse verb. It now means nothing there.
 
 ### Fixed
-
 
 - The picker no longer advertises keys it left bound to `ignore`. Five NORMAL-mode keys are gated on
   whether the calling picker had anything for them to do: `r` needs a restore command, `:` a root to
