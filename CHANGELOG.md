@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Added
+
+- `hop --doctor=short`, a paste-safe diagnostic mode for public bug reports: it omits `PWD`, the
+  git toplevel, workspace names and paths, and kind names, replacing them with counts, and shows
+  a config path only when it still matches hop's shipped default.
+
 ### Fixed
 
 - The copy verb (`y`/`Y`, `ctrl-y`/`alt-y`) no longer hard-requires `pbcopy`: it now falls back to

@@ -54,6 +54,7 @@ _hop_usage() {
 	print -r -- '  hop --no-vim        search-first fzf, no modal layer (same as HOP_VIM=0)'
 	print -r -- '  hop --vim           force the modal layer on when HOP_VIM=0 is set'
 	print -r -- '  hop --doctor        dump config, tools and kind counts for a bug report'
+	print -r -- '  hop --doctor=short  the same, minus paths and names; safe to paste publicly'
 	print -r -- '  HOP_DEBUG=1 hop     log every key dispatch, then read it with --doctor'
 	print -r -- '  hop -V, --version   print the installed version'
 	print -r -- '  hop -h, --help      this text'
@@ -305,7 +306,19 @@ hop() {
 				opts=1
 				shift
 				;;
+			--doctor=short)
+				_hop_doctor_short
+				return $?
+				;;
+			--doctor=*)
+				print -ru2 -- "hop: ${1}: unknown --doctor mode, want: --doctor=short"
+				return 2
+				;;
 			--doctor)
+				if [[ ${2:-} == short ]]; then
+					_hop_doctor_short
+					return $?
+				fi
 				_hop_doctor
 				return $?
 				;;
