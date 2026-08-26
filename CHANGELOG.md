@@ -44,6 +44,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   because if `bin/hop-guard` ever went missing a `transform:` would yield no action and take all nine
   guarded keys down with it, leaving `esc` as the only way out.
 
+  Note that the guard does not cover the bare control bytes, and structurally cannot. It works by
+  hooking the `alt-<char>` that an unparsed escape *introducer* produces, and `\a`, `\b` and `\f`
+  carry no introducer, so nothing is hooked and no mark is ever written. Binding the key to `ignore`
+  and relocating the verb, which is what `ctrl-g` got here, is the only remedy that class has.
+
 ### Changed
 
 - The browse verb moved off `ctrl-g` and onto `alt-B` in SEARCH, because `ctrl-g` was reachable with
