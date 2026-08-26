@@ -22,6 +22,12 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   Handed a live stdin, `tests/run core` discarded all 31 of its cases and took the full 120s bound, reporting `a test may await a terminal` when every probe was really waiting on an EOF that an open pipe never sends.
   Its own recording stub captured stdin even when answering `--version`, so each probe burned its bound until the suite bound killed the run.
   CI never saw it, because GitHub Actions hands the job `/dev/null`.
+- The picker-geometry tests were reading the wrong evidence, in the very pair written to stop exactly that.
+  Both opened by asserting the recorded fzf argv was non-empty, but the stub records every fzf call and `_hop_fzf_ver` runs `fzf --version` before the picker ever starts, so a non-empty argv proved only that the version probe had run.
+  Stubbing the picker's own call out entirely left the arm that checks an empty `HOP_FZF_HEIGHT` sends no `--height` passing green against an argv holding nothing but `--version`.
+  Each arm opens on `--ansi` now, a flag only the picker passes.
+- The core suite's stub matches a `--version` query anywhere in argv rather than only as the first word.
+  `_hop_fzf_ver` happens to put it first, so the narrower check was correct today and would have gone back to blocking on stdin the moment that call grew a leading flag.
 
 ## [0.1.1] - 2026-08-26
 
