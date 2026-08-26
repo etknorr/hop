@@ -316,6 +316,13 @@ deliberate paste to trigger, and NORMAL mode has search off, so pasting there is
 keys rather than binds. `--expect` outranks every bind and so cannot be guarded. Both are in-picker
 level navigation; moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0.
 
+**The guard does not cover the bare control bytes, and it structurally cannot.** It works by hooking
+the `alt-<char>` that an unparsed escape *introducer* produces. `\a`, `\b` and `\f` carry no
+introducer, so there is nothing to hook and no mark is ever written. Binding the key to `ignore` and
+relocating the verb, which is what `ctrl-g` got, is the only remedy that class has. The remaining two
+are deliberately not getting it in a patch release: relocating two documented keybindings is a worse
+trade than a recoverable change of list position.
+
 A **bare `ESC` byte** still closes the picker, because `esc` in NORMAL means quit and that is the
 documented binding. Measured: a lone `\e` or `\e\e` aborts, while a `\e` arriving at the tail of a
 truncated sequence does whatever `esc` means in the mode it lands in. `esc` is deliberately *not*
