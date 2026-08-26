@@ -28,9 +28,16 @@ one install works across every repo you own. See [Configuring kinds](#configurin
 
 ## Install
 
-Requires `zsh` and [`fzf`](https://github.com/junegunn/fzf); `git` does the enumeration.
-Optional: [`bat`](https://github.com/sharkdp/bat) for highlighted previews, `gh` for the browse
-verb, and VS Code's `code` for the open verbs.
+Requires `zsh` and [`fzf`](https://github.com/junegunn/fzf) **0.60.3 or newer**; `git` does the
+enumeration. Optional: [`bat`](https://github.com/sharkdp/bat) for highlighted previews, `gh` for
+the browse verb, and VS Code's `code` for the open verbs.
+
+That fzf floor is newer than what some distros package, and it is not arbitrary. The picker passes
+`--accept-nth` together with `--select-1`: `--accept-nth` arrived in fzf 0.60.0 and only worked
+alongside `--select-1` from 0.60.3. Debian and Ubuntu currently package 0.44.x, which rejects the
+flag outright, so `apt install fzf` is not enough — install an
+[upstream release](https://github.com/junegunn/fzf/releases). `hop` checks once per shell and says
+so, rather than letting fzf fail with a bare `unknown option`.
 
 A zsh plugin is always **a local checkout plus one line that sources it.** There is nothing to
 compile and no binary to put on `$PATH`. What a plugin manager adds is bookkeeping: it does the
@@ -138,15 +145,26 @@ A manual clone updates itself:
 
 ```zsh
 hop upgrade --check     # what is installed vs what is released; changes nothing
-hop upgrade             # move to the newest release
-hop upgrade 0.1.0       # pin to exactly that release
+hop upgrade             # fast-forward main to the newest release, staying on main
+hop upgrade 0.1.0       # pin to exactly that release, detached
 exec zsh                # reload; a sourced function cannot replace itself mid-call
 ```
 
+The two forms land in different places on purpose. Bare `hop upgrade` fast-forwards your local
+`main`, so `git pull` and the next `hop upgrade` both keep working. Naming a version is a **pin**,
+which detaches `HEAD` at that tag; a bare `hop upgrade` brings you back to `main`, saying so as it
+goes.
+
+Between releases, `main` is normally *ahead* of the newest tag. `hop upgrade` reports that as up to
+date rather than moving you backwards onto the tag.
+
 `hop upgrade` refuses rather than acts when the checkout is dirty, sits on a branch other than
-`main`, is detached somewhere that is not a release tag, or has no `origin` remote. It never runs
-`git clean`, never hard-resets and never forces anything, so the worst case is a refusal that
-explains itself. Untracked files are left where they are.
+`main`, is detached somewhere that is not a release tag, has no `origin` remote, or has a `main`
+that has diverged from the release. It never runs `git clean`, never hard-resets, never merges and
+never forces anything: `main` only ever moves by fast-forward. Untracked files are left where they
+are.
+
+`--check` never touches your worktree or `HEAD`. It does fetch tags, so it writes refs under `.git`.
 
 ### Completions
 
@@ -505,6 +523,7 @@ workspaces.example      a workspace list to copy
 | `HOP_HISTFILE` | `~/.local/state/hop/history` | frecency history |
 | `HOP_VIM` | `1` | `0` disables the modal layer |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
+| `HOP_FZF_MIN` | `0.60.3` | the fzf floor; lower it if the check is wrong about your build |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |
 
 ### `.hoprc` is opt-in
