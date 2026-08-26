@@ -222,9 +222,17 @@ _hop_tty_ok() {
 # - A ONE-ROW target list with an EMPTY query also auto-accepts today, and counting matches covers both.
 # - Zero or many cannot be resolved without a human, so both name the cause AND the count.
 # - A bare `no match` would be a lie when 37 rows matched, and the count is what ends the bug hunt.
-# - The four matcher flags below are duplicated from _hop_pick deliberately, not by oversight.
+# - Nothing matched and N matched get DIFFERENT messages, because the next move differs.
+# - A typo wants correcting; a broad query wants narrowing, and one string cannot say both.
+# - --filter ignores exactly one flag _hop_pick passes, which is --disabled.
+# - _hop_pick adds --disabled ONLY for an empty query, where every row matches either way.
+# - So that discrepancy is unreachable rather than merely unobserved, and needs no handling here.
+# - The five flags below are duplicated from _hop_pick deliberately, not by oversight.
 # - --filter is a separate fzf process, so it has to match rows exactly the way the picker would.
-# - Change --delimiter, --with-nth, --exact or --tiebreak there and this has to change with it.
+# - --delimiter, --with-nth, --accept-nth, --exact and --tiebreak MUST change together in both.
+# - Diverge them and this path silently matches differently from the picker it stands in for.
+# - tests/suite_nottty.zsh extracts both flag sets and fails when they stop being equal.
+# - One shared source for them is the real fix, and it needs lib/ui.zsh; filed as a follow-up.
 # - fzf's stderr is NOT suppressed, because --filter still parses every option it is handed.
 # - A genuine complaint about one of these flags has to reach the user, not look like an empty result.
 _hop_pick_headless() {

@@ -217,6 +217,36 @@ zzzz=0
 <empty>=4' "$NT_AGREE" 'the headless matcher must count rows exactly as --select-1 would'
 
 # ---------------------------------------------------------------------------
+# The headless flags are a COPY of the picker's, so a tripwire has to catch them drifting apart.
+# ---------------------------------------------------------------------------
+# _hop_pick_headless restates five flags _hop_pick owns, because --filter is a separate fzf process.
+# - Diverging them makes the headless path match differently from the picker it stands in for.
+# - That failure is silent: both sides still run, and only the row chosen is wrong.
+# - So both sets are extracted from the live function bodies and compared, rather than trusted.
+# - `functions` renders quoting canonically, so the two sides come out byte for byte identical.
+# - The picker's set is ALSO asserted against a literal, which is what stops this going vacuous.
+# - Without that, a typo'd pattern matching nothing on BOTH sides would compare equal and pass.
+# - Proven: breaking the pattern so both sides return empty fails the literal, not the comparison.
+# - Known limit: this pins the five flags that exist today, not a sixth added to one side only.
+typeset -g NT_MF_PAT='--(delimiter|with-nth|accept-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|smart-case)(=[^ )]*)?'
+typeset -a NT_MF_WANT=(
+	"--accept-nth='2,3'"
+	"--delimiter=\$'\\t'"
+	'--exact'
+	'--tiebreak=begin,length'
+	'--with-nth=1'
+)
+typeset NT_MF_PICK='' NT_MF_HEAD=''
+NT_MF_PICK=$(hop_probe "functions _hop_pick | grep -oE -- ${(q)NT_MF_PAT} | sort -u")
+NT_MF_HEAD=$(hop_probe "functions _hop_pick_headless | grep -oE -- ${(q)NT_MF_PAT} | sort -u")
+
+t "the picker's matcher flags are the set the headless path was written against"
+assert_eq "${(F)NT_MF_WANT}" "$NT_MF_PICK" 'the picker changed its matcher, so _hop_pick_headless must change with it'
+
+t 'the headless matcher flags have not drifted from the picker'
+assert_eq "$NT_MF_PICK" "$NT_MF_HEAD" 'the two fzf calls would now match rows differently, and silently'
+
+# ---------------------------------------------------------------------------
 # The predicate itself: a terminal, not stdin, is what it reads.
 # ---------------------------------------------------------------------------
 # fzf reads keys from /dev/tty and never from stdin, which is why every redirected shape works today.
