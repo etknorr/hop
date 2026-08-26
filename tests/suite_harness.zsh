@@ -68,3 +68,40 @@ t 'every zpty spawn in tests/lib/pty.zsh sits inside a function'
 HA_INFN=$(ha_spawns_in_functions)
 assert_eq 2 $HA_INFN 'zsh could not find both spawns in a function body, so one of them is at top level'
 assert_eq $HA_TEXT $HA_INFN 'a spawn exists in the file that no function body holds, which is the inherited-trap bug'
+
+# ---------------------------------------------------------------------------
+# Every recording stub writes its line in ONE append.
+# ---------------------------------------------------------------------------
+# The stubs used to write the name, then each argument, then the newline, as 2+N separate appends.
+# - A second stub landing between them spliced the two lines and corrupted the only field a check reads.
+# - Observed as `batgh browse` for `gh browse`, which read as a verb that never ran and misdirected #46.
+# - This is asserted STRUCTURALLY on purpose: the race is far too rare to hold a test to.
+# - Measured on the old stub at 60-way concurrency, an exact-line check caught it in 1 trial of 6.
+# - So a concurrency test would pass with the bug present most runs, which is not a guard at all.
+# - One append per call is the property that makes interleaving impossible, and it is deterministic.
+ha_appends() {
+	emulate -L zsh
+	local -a lines hits=()
+	local line
+	lines=("${(@f)$(<"$1")}")
+	for line in "${lines[@]}"; do
+		[[ ${line%%\#*} == *'>>'* ]] && hits+=("$line")
+	done
+	print -r -- $#hits
+}
+
+t 'the append scan counts appends, proven on a fixture whose count is known'
+# The positive control, and it is independent of the artifact under test.
+# - The assertion below is a count, so a scan that matched nothing would report 0 and read as healthy.
+# - This fixture also carries a COMMENTED append, so the scan is shown to ignore one rather than count it.
+typeset HA_PROBE
+fixture_tmpdir appendscan
+HA_PROBE="$REPLY/probe"
+print -rl -- 'printf x >> "$LOG"' '# a commented one >> "$LOG"' 'printf y >> "$LOG"' 'plain line' > "$HA_PROBE"
+assert_eq 2 $(ha_appends "$HA_PROBE") 'the scan miscounted a file whose appends are known by construction'
+
+t 'a generated stub appends exactly once, so two of them cannot interleave'
+stub_bin gh
+typeset HA_STUB="$HOP_FIX_STUBDIR/gh"
+assert_file "$HA_STUB"
+assert_eq 1 $(ha_appends "$HA_STUB") 'more than one append means a concurrent stub can splice the line'
