@@ -61,9 +61,10 @@ Keep the two in sync (`VERSION` says `0.1.0` exactly when the tag is `v0.1.0`), 
    git commit -m 'release 0.2.0'
    ```
 
-7. **Tag it**, with the `v` prefix, as an annotated tag:
+7. **Tag it**, with the `v` prefix, as an annotated tag. The message is `hop` plus the bare
+   version, matching `v0.1.0`; the `v` belongs to the tag name, not to the message:
    ```zsh
-   git tag -a v0.2.0 -m 'v0.2.0'
+   git tag -a v0.2.0 -m 'hop 0.2.0'
    ```
 
 8. **Push the commit, then the tag:**
@@ -73,9 +74,10 @@ Keep the two in sync (`VERSION` says `0.1.0` exactly when the tag is `v0.1.0`), 
    ```
 
 9. **Create the GitHub release**, using the tag and the matching `CHANGELOG.md` section as the
-   notes:
+   notes. `--notes-from-tag` is the wrong tool here: step 7's annotation is the single line
+   `hop 0.2.0`, so it would publish that as the entire release body. Pass the changelog section
+   instead:
    ```zsh
-   gh release create v0.2.0 --title v0.2.0 --notes-from-tag
+   awk '/^## \[0\.2\.0\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md > /tmp/notes-0.2.0.md
+   gh release create v0.2.0 --title v0.2.0 --notes-file /tmp/notes-0.2.0.md
    ```
-   or paste the `## [0.2.0]` section body into `--notes-file` if `--notes-from-tag` picks up the
-   annotated tag message instead of the changelog prose.
