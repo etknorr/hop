@@ -25,6 +25,26 @@ typeset -a entries
 # - Both modes are shown at once: the question "what does this key do" is usually about the other mode.
 # - Width is held under 50 columns so it survives a narrow preview pane without wrapping.
 if [[ $dir == '--keys' ]]; then
+	# $2 is the comma list of the five OPTIONAL keys the calling picker actually bound.
+	# - r, :, l, h and M-a are each gated on a _hop_run argument, so a picker may have none of them.
+	# - An overlay naming a key bound to `ignore` teaches a keystroke that silently does nothing.
+	# - The repo picker (hop -R) binds only h and the workspace picker (hop -w) only l.
+	# - `-` means none are live, and an ABSENT argument means all, which is the by-hand documentation case.
+	typeset -a live
+	if (( $# < 2 )); then
+		live=(r ':' l h M-a)
+	elif [[ $target == '-' ]]; then
+		live=()
+	else
+		live=(${(s:,:)target})
+	fi
+
+	# hop_live <key> -> 0 when the calling picker bound that key.
+	# - (Ie), never (I): an (I) subscript is a pattern, and this is a list of one-character keys.
+	hop_live() {
+		(( ${live[(Ie)$1]} ))
+	}
+
 	print -r -- "${HDR}hop keys${OFF}"
 	print -r -- "${RULE}──────────────────────────────────────────${OFF}"
 	print -r -- "${HDR}NORMAL${OFF}${SUB}  (search off, letters are verbs)${OFF}"
@@ -37,12 +57,20 @@ if [[ $dir == '--keys' ]]; then
 		"  ${KEY}O${OFF}              code the dir as a folder" \
 		"  ${KEY}e${OFF}              \$EDITOR the preview file" \
 		"  ${KEY}y${OFF} / ${KEY}Y${OFF}          copy dir / preview file" \
-		"  ${KEY}b${OFF}              gh browse" \
-		"  ${KEY}l${OFF} / ${KEY}h${OFF}          drill in / back out a level" \
-		"  ${KEY}p${OFF}              toggle the preview pane" \
-		"  ${KEY}r${OFF}              refresh the current view" \
-		"  ${KEY}/${OFF}              switch to SEARCH" \
-		"  ${KEY}:${OFF}              switch view, enter picks, esc back" \
+		"  ${KEY}b${OFF}              gh browse"
+	# l and h share a line only when both are live; a picker with one of them must not name the other.
+	if hop_live l && hop_live h; then
+		print -r -- "  ${KEY}l${OFF} / ${KEY}h${OFF}          drill in / back out a level"
+	elif hop_live l; then
+		print -r -- "  ${KEY}l${OFF}              drill in a level"
+	elif hop_live h; then
+		print -r -- "  ${KEY}h${OFF}              back out a level"
+	fi
+	print -r -- "  ${KEY}p${OFF}              toggle the preview pane"
+	hop_live r && print -r -- "  ${KEY}r${OFF}              refresh the current view"
+	print -r -- "  ${KEY}/${OFF}              switch to SEARCH"
+	hop_live ':' && print -r -- "  ${KEY}:${OFF}              switch view, enter picks, esc back"
+	print -rl -- \
 		"  ${KEY}?${OFF}              this help" \
 		"  ${KEY}q${OFF} / ${KEY}esc${OFF}        quit"
 	print -r -- ''
@@ -53,9 +81,9 @@ if [[ $dir == '--keys' ]]; then
 		"  ${KEY}^o${OFF} / ${KEY}^t${OFF}        code file / code dir" \
 		"  ${KEY}^y${OFF} / ${KEY}M-y${OFF}       copy dir / preview file" \
 		"  ${KEY}M-o${OFF}            \$EDITOR the preview file" \
-		"  ${KEY}^g${OFF}             gh browse" \
-		"  ${KEY}M-a${OFF}            add the conf kind" \
-		"  ${KEY}M-p${OFF}            toggle the preview pane"
+		"  ${KEY}M-B${OFF}            gh browse"
+	hop_live M-a && print -r -- "  ${KEY}M-a${OFF}            add the conf kind"
+	print -r -- "  ${KEY}M-p${OFF}            toggle the preview pane"
 	print -r -- ''
 	print -r -- "${SUB}HOP_VIM=0 or --no-vim turns the modal layer off.${OFF}"
 	exit 0

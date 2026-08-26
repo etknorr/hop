@@ -108,13 +108,16 @@ _km_bind_action() {
 # - _km_binds_probe <root> <restore> <drill> <up> -> \x1e-joined dump of every entry in the real --bind args array, plus HOP_VIM_TO_NORMAL and _HOP_VIM_KEYS tagged on the end.
 # - "local -a args" here, with no enclosing function, mirrors _hop_pick's own "local -a args" one call frame up from _hop_vim_binds.
 # - The whole file relies on that dynamic scoping (see its own header comment); this is the same trick, one frame further out again.
+# - The fifth argument is the escape-guard state file, and EVERY probe below leaves it empty.
+# - That is deliberate: with no guard file the keymap must fall back to the plain, unguarded actions.
+# - So every assertion in this tier doubles as proof of that fallback, and the guarded shape has its own probe.
 _km_binds_probe() {
 	emulate -L zsh
-	local -x KM_ROOT=$1 KM_RESTORE=$2 KM_DRILL=$3 KM_UP=$4
+	local -x KM_ROOT=$1 KM_RESTORE=$2 KM_DRILL=$3 KM_UP=$4 KM_GUARD=${5:-}
 	hop_probe '
 		COLUMNS=200
 		local -a args
-		_hop_vim_binds "preview-cmd" "" "$KM_ROOT" "$KM_RESTORE" "" "$KM_DRILL" "$KM_UP"
+		_hop_vim_binds "preview-cmd" "" "$KM_ROOT" "$KM_RESTORE" "" "$KM_DRILL" "$KM_UP" "$KM_GUARD"
 		args+=("KM_TO_NORMAL=${HOP_VIM_TO_NORMAL}")
 		args+=("KM_KEYS=${(j:,:)_HOP_VIM_KEYS}")
 		print -rn -- "${(pj:\x1e:)args}"
@@ -365,6 +368,293 @@ else
 	skip 'sanity: a bind action with a stray leading comma is rejected, not silently accepted' 'fzf is not installed'
 	skip 'sanity: a backslash-escaped comma inside unbind(...) is rejected, not silently accepted' 'fzf is not installed'
 fi
+
+# ---------------------------------------------------------------------------
+# Tier 1d: the escape guard, which is a SECOND keymap layered over the one above.
+# ---------------------------------------------------------------------------
+
+# The whole mechanism in one paragraph, because none of it is guessable from the bind strings.
+# - fzf cannot decode every inbound escape sequence, and what it cannot parse arrives as keystrokes.
+# - It DOES turn the unrecognised introducer into a bindable key, so `\e]` from an OSC reply is alt-].
+# - So every alt-<char> hop does not own writes a timestamp, and every verb checks it before running.
+# - A forged letter follows its introducer by ~20ms, a real one by however long the user took.
+typeset KM_GUARDED
+KM_GUARDED=$(_km_binds_probe /some/root RESTORECMD 1 1 /tmp/kmguard/mark)
+
+typeset -g KM_GPRE='transform:'
+typeset -g KM_GMID=' check /tmp/kmguard/mark '
+
+# _km_guarded <action> -> the exact bind string a guarded action must produce.
+# - Built from the same pieces lib/ui.zsh uses, so the test names the SHAPE and not one literal.
+_km_guarded() {
+	emulate -L zsh
+	print -rn -- "${KM_GPRE}${HOP_HOME}/bin/hop-guard${KM_GMID}'${1}'"
+}
+
+# Asserted first: a probe that captured nothing would make every check below vacuous.
+t 'the guarded probe produced a bind set at all'
+assert_nonempty "$(_km_bind_action "$KM_GUARDED" j)" 'the guarded probe captured no j bind, so it captured nothing'
+
+# Nine keys, not six: every action that LEAVES the picker, so a stray letter cannot exit it either.
+t 'every action that leaves the picker is wrapped in the guard'
+assert_eq "$(_km_guarded 'print(ctrl-o)+accept')" "$(_km_bind_action "$KM_GUARDED" o)"
+assert_eq "$(_km_guarded 'print(ctrl-t)+accept')" "$(_km_bind_action "$KM_GUARDED" O)"
+assert_eq "$(_km_guarded 'print(alt-o)+accept')" "$(_km_bind_action "$KM_GUARDED" e)"
+assert_eq "$(_km_guarded 'print(ctrl-y)+accept')" "$(_km_bind_action "$KM_GUARDED" y)"
+assert_eq "$(_km_guarded 'print(alt-y)+accept')" "$(_km_bind_action "$KM_GUARDED" Y)"
+assert_eq "$(_km_guarded 'print(ctrl-g)+accept')" "$(_km_bind_action "$KM_GUARDED" b)"
+assert_eq "$(_km_guarded 'print(ctrl-l)+accept')" "$(_km_bind_action "$KM_GUARDED" l)"
+assert_eq "$(_km_guarded 'print(ctrl-h)+accept')" "$(_km_bind_action "$KM_GUARDED" h)"
+assert_eq "$(_km_guarded abort)" "$(_km_bind_action "$KM_GUARDED" q)"
+
+# A fork on j is a fork on every cursor move, which is the one cost the picker cannot absorb.
+t 'the navigation keys stay fork-free, exactly as they were'
+assert_eq 'down+change-preview(preview-cmd)+change-preview-label()' "$(_km_bind_action "$KM_GUARDED" j)"
+assert_eq 'up+change-preview(preview-cmd)+change-preview-label()' "$(_km_bind_action "$KM_GUARDED" k)"
+assert_eq 'first+change-preview(preview-cmd)+change-preview-label()' "$(_km_bind_action "$KM_GUARDED" g)"
+assert_eq 'last+change-preview(preview-cmd)+change-preview-label()' "$(_km_bind_action "$KM_GUARDED" G)"
+assert_eq 'half-page-down+change-preview(preview-cmd)+change-preview-label()' "$(_km_bind_action "$KM_GUARDED" ctrl-d)"
+assert_eq 'half-page-up+change-preview(preview-cmd)+change-preview-label()' "$(_km_bind_action "$KM_GUARDED" ctrl-u)"
+
+# `r` reloads and stays unguarded: its action embeds a shell command holding $HOP_HOME and "$@".
+# - Re-quoting that through a transform body is a real hazard, and a redrawn list is not a side effect.
+t 'the in-picker actions are left alone, r included'
+assert_eq 'reload(RESTORECMD)' "$(_km_bind_action "$KM_GUARDED" r)" 'r must not be re-quoted through a transform'
+assert_eq 'toggle-preview' "$(_km_bind_action "$KM_GUARDED" p)"
+assert_not_contains "$(_km_bind_action "$KM_GUARDED" '?')" 'hop-guard' 'the help overlay is reversible, so it needs no guard'
+assert_not_contains "$(_km_bind_action "$KM_GUARDED" '/')" 'hop-guard' 'entering SEARCH is reversible with esc'
+assert_not_contains "$(_km_bind_action "$KM_GUARDED" ':')" 'hop-guard' 'the view menu is reversible with esc'
+
+# A gated-off key stays a plain ignore: guarding a dead key would be a fork that decides nothing.
+t 'a key gated off by its own missing target is never guarded'
+typeset KM_GUARDED_NONE
+KM_GUARDED_NONE=$(_km_binds_probe /some/root '' '' '' /tmp/kmguard/mark)
+assert_eq 'ignore' "$(_km_bind_action "$KM_GUARDED_NONE" l)" 'l has no drill target, so it must stay a bare ignore'
+assert_eq 'ignore' "$(_km_bind_action "$KM_GUARDED_NONE" h)" 'h has no up target, so it must stay a bare ignore'
+assert_eq 'ignore' "$(_km_bind_action "$KM_GUARDED_NONE" r)" 'r has no restore command, so it must stay a bare ignore'
+
+# The mark half. One rule over every alt-<char>, because fzf accepts ANY char after an unparsed ESC.
+# - Enumerating today's five introducers would leave the next one uncovered for no saving at all.
+t 'every escape introducer fzf can surface as alt-<char> writes a mark'
+typeset KM_MARK
+KM_MARK="execute-silent(${HOP_HOME}/bin/hop-guard mark /tmp/kmguard/mark)"
+typeset mk
+for mk in ']' 'P' '_' '^' 'X' '\' '[' '@' '(' ')' '*' '?' 'Q' '0' 'space'; do
+	if [[ $mk == '(' || $mk == ')' ]]; then
+		assert_empty "$(_km_bind_action "$KM_GUARDED" "alt-${mk}")" "alt-${mk} is skipped: a charset designation has a one-byte payload"
+	else
+		assert_eq "$KM_MARK" "$(_km_bind_action "$KM_GUARDED" "alt-${mk}")" "alt-${mk} must arm the guard"
+	fi
+done
+
+# An (I) subscript is a PATTERN, and this key list is indexed by ? * [ and \ among others.
+# - Measured: ${guard_keys[(I)?]} returns 9, so (I) would have wrapped `?` and skipped alt-*.
+t 'the guard lists are matched exactly, not as globs'
+assert_eq "$KM_MARK" "$(_km_bind_action "$KM_GUARDED" 'alt-*')" 'alt-* was skipped, so an (I) subscript matched it as a glob'
+assert_eq "$KM_MARK" "$(_km_bind_action "$KM_GUARDED" 'alt-?')" 'alt-? was skipped, so an (I) subscript matched it as a glob'
+assert_not_contains "$(_km_bind_action "$KM_GUARDED" '?')" 'hop-guard check' 'the ? overlay got guarded, so an (I) subscript matched it as a glob'
+
+# Marking a key hop or fzf already owns would either shadow a verb or cost a user their next keystroke.
+t 'the alt- keys hop and fzf already own are never turned into marks'
+typeset ok
+for ok in a o p y B b c d f g; do
+	assert_not_contains "$(_km_bind_action "$KM_GUARDED" "alt-${ok}")" 'hop-guard mark' "alt-${ok} is already taken and must not be a mark"
+done
+
+# Exact, never a floor: a count that only has to exceed something passes when half the set vanishes.
+# - Derived from the owned key list rather than hardcoded, so a key added to it must be marked too.
+# - The twelve taken keys are a o p y B b c d f g and the two ctrl- entries, which are not chars.
+t 'the mark set is exactly the owned key list minus the twelve already-taken keys'
+typeset -a km_items=("${(@ps:\x1e:)KM_GUARDED}")
+typeset -i km_marks=0 km_checks=0
+typeset ki
+for ki in "${km_items[@]}"; do
+	[[ $ki == --bind=alt-*'hop-guard mark'* ]] && (( km_marks++ ))
+	[[ $ki == *'hop-guard check'* ]] && (( km_checks++ ))
+done
+typeset -a km_owned=("${(f)$(_km_key_tokens "$(_km_dump_get "$KM_GUARDED" 'KM_KEYS=')")}")
+assert_eq $(( $#km_owned - 12 )) "$km_marks" 'the mark set is not the owned key list minus the twelve taken keys'
+assert_eq 83 "$km_marks" 'the mark count changed, so either the key list or the taken list moved'
+assert_eq 9 "$km_checks" 'exactly nine actions leave the picker and so exactly nine must be guarded'
+
+# ---------------------------------------------------------------------------
+# Tier 1c: the picker's OWN flags, one call frame further out than _hop_vim_binds.
+# ---------------------------------------------------------------------------
+
+# - _km_pick_probe <vim> -> \x1e-joined dump of the FULL argument list _hop_pick hands fzf.
+# - Tier 1's probe sees only what _hop_vim_binds appends, and --expect is not there.
+# - Every check below runs at HOP_VIM=1 AND at HOP_VIM=0, because --expect is passed unconditionally.
+# - An --expect key ignores the modal layer, so --no-vim never protected against one the way it does a letter.
+# - fixture_pins does not pin HOP_VIM, so exporting it here genuinely varies what the probe sees.
+_km_pick_probe() {
+	emulate -L zsh
+	local -x KM_VIM=$1
+	hop_probe '
+		COLUMNS=200
+		export HOP_VIM=$KM_VIM
+		typeset -ga KM_CAPTURED
+		fzf() { KM_CAPTURED=("$@"); return 0; }
+		_hop_pick "label" "header" "" "reloadcmd" "/some/root" "1" "restorecmd" "1"
+		print -rn -- "${(pj:\x1e:)KM_CAPTURED}"
+	'
+}
+
+typeset KM_PICK KM_PICK_NOVIM
+KM_PICK=$(_km_pick_probe 1)
+KM_PICK_NOVIM=$(_km_pick_probe 0)
+
+# Asserted first, because a probe that captured nothing would make every check below vacuous.
+t 'both picker probes captured a real argument list'
+assert_nonempty "$(_km_dump_get "$KM_PICK" '--expect=')" 'the HOP_VIM=1 probe captured no --expect at all'
+assert_nonempty "$(_km_dump_get "$KM_PICK_NOVIM" '--expect=')" 'the HOP_VIM=0 probe captured no --expect at all'
+
+# A single BEL byte (0x07) in anything the terminal prints arrives at fzf AS ctrl-g.
+# - Measured under a pty: a bare \a ran `gh browse`, at HOP_VIM=1 and at HOP_VIM=0 alike.
+# - `ignore` and not merely absent: unbound, fzf's own default for ctrl-g is `abort`.
+# - So leaving it out would make the same bell CLOSE the picker, which is a worse trade than a no-op.
+t 'ctrl-g is inert, so a bare BEL byte cannot reach the browse verb'
+assert_eq 'ignore' "$(_km_bind_action "$KM_PICK" ctrl-g)" 'ctrl-g must be bound to ignore, not left to fzf abort'
+assert_eq 'ignore' "$(_km_bind_action "$KM_PICK_NOVIM" ctrl-g)" 'the ctrl-g guard must not depend on the modal layer'
+
+# Exact lists, never a "does not contain ctrl-g" check, which would also pass on a key silently ADDED.
+t 'ctrl-g is gone from --expect, in both modes, because --expect outranks every bind'
+assert_eq 'ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y,ctrl-l,ctrl-h' "$(_km_dump_get "$KM_PICK" '--expect=')"
+assert_eq 'ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y,ctrl-l,ctrl-h' "$(_km_dump_get "$KM_PICK_NOVIM" '--expect=')"
+
+# print(ctrl-g)+accept rather than --expect=alt-B, which keeps _hop_dispatch's existing ctrl-g arm.
+# - A bind is also something a guard could wrap later, which an --expect key can never be.
+t 'browse moved to alt-B, printing the key _hop_dispatch already knows'
+assert_eq 'print(ctrl-g)+accept' "$(_km_bind_action "$KM_PICK" alt-B)"
+assert_eq 'print(ctrl-g)+accept' "$(_km_bind_action "$KM_PICK_NOVIM" alt-B)"
+
+# alt-g is the SHELL widget that launches hop, and alt-b is fzf's own backward-word.
+t 'browse did not land on alt-g or alt-b, which are both already taken'
+assert_empty "$(_km_bind_action "$KM_PICK" alt-g)" 'alt-g inside the picker would shadow the launcher key'
+assert_empty "$(_km_bind_action "$KM_PICK" alt-b)" 'alt-b is fzf backward-word and SEARCH needs it'
+
+# ---------------------------------------------------------------------------
+# Tier 1e: the picker must not advertise a key it left bound to `ignore`.
+# ---------------------------------------------------------------------------
+
+# Five keys are gated on a _hop_run argument, so a given picker may bind none of them.
+# - r on restore, : on root, l on drill, h on up, and M-a on reload.
+# - The repo picker (hop -R) passes only up, and the workspace picker (hop -w) only drill.
+# - So four of the five were dead in both, while the NORMAL legend and the `?` overlay named them all.
+# - Pressing the key the header just told you to press, and getting no error and no beep, is the bug.
+
+# - _km_overlay_probe <reload> <root> <drill> <restore> <up> -> "ADV=<keys>\x1eBOUND=<keys>\x1eHDR=<legend>".
+# - ADV is read by actually RUNNING bin/hop-preview with the argument the `?` bind hands it.
+# - Nothing is inferred from the bind string: the overlay's real rendered text is what a user reads.
+# - BOUND is read from the same call's captured bind table, and from --bind=alt-a for M-a.
+# - Comparing the two sets IS the property, and neither side is written down twice.
+# - Argument order mirrors _hop_pick's, so a callsite in hop.zsh can be transcribed straight in.
+_km_overlay_probe() {
+	emulate -L zsh
+	local -x KM_RELOAD=$1 KM_ROOT=$2 KM_DRILL=$3 KM_RESTORE=$4 KM_UP=$5
+	hop_probe '
+		COLUMNS=200
+		typeset -ga KM_CAPTURED
+		typeset -g KM_HELP_ON="" KM_HEAD=""
+		fzf() {
+			KM_CAPTURED=("$@")
+			KM_HELP_ON=$HOP_VIM_HELP_ON
+			return 0
+		}
+		# NO pipeline: the last element of one runs in a subshell, so the captures would not survive.
+		_hop_pick "label" "header" "" "$KM_RELOAD" "$KM_ROOT" "$KM_DRILL" "$KM_RESTORE" "$KM_UP"
+
+		# The header fzf was actually given, which is the legend the user reads in the list pane.
+		local a
+		for a in "${KM_CAPTURED[@]}"; do
+			[[ $a == --header=* ]] && KM_HEAD=${a#--header=}
+		done
+
+		# The ? overlay command lives inside HOP_VIM_HELP_ON, which is where the transform reads it.
+		# - Both parens are QUOTED inside the pattern, which is not optional; see _km_split_bind above.
+		# - A literal ( typed straight into a pattern operand is an unbalanced glob group, not a paren.
+		# - Unquoted, this failed with `bad pattern` and every assertion below compared empty to empty.
+		local hc=${KM_HELP_ON#*"change-preview("}
+		hc=${hc%%")"*}
+		local out=""
+		[[ -n $hc ]] && out=$(eval "$hc" 2>/dev/null)
+		# Strip SGR so the key column is at a fixed offset regardless of colour.
+		# - extended_glob is needed for the # closure, and zsh -f does not set it.
+		setopt extended_glob
+		out=${out//$'"'"'\e'"'"'\[[0-9;]##m/}
+
+		# Columns 1-17 are the key field on every line of the overlay, and 18 on is prose.
+		# - Splitting that field on / is what makes the shared `l / h` line report BOTH keys.
+		local -a adv=()
+		local line tok
+		for line in ${(f)out}; do
+			[[ $line == "  "* ]] || continue
+			for tok in ${(s:/:)line[1,17]}; do
+				tok=${tok//[[:space:]]/}
+				[[ -n $tok ]] && adv+=("$tok")
+			done
+		done
+
+		# Only the five gated keys are compared; the always-bound ones are asserted elsewhere.
+		local -a want=(r : l h M-a) adv5=() bnd=()
+		local k
+		for k in "${want[@]}"; do
+			(( ${adv[(Ie)$k]} )) && adv5+=("$k")
+		done
+
+		# A key is BOUND when the picker gave it an action that is not `ignore`.
+		for k in r : l h; do
+			for a in "${KM_CAPTURED[@]}"; do
+				[[ $a == "--bind=${k}:"* ]] || continue
+				[[ $a == "--bind=${k}:ignore" ]] || bnd+=("$k")
+			done
+		done
+		# M-a is bound by _hop_pick itself rather than by the modal layer, so it is read separately.
+		for a in "${KM_CAPTURED[@]}"; do
+			[[ $a == --bind=alt-a:* ]] && bnd+=(M-a)
+		done
+
+		local -a out2=("ADV=${(j:,:)adv5}" "BOUND=${(j:,:)bnd}" "HDR=${KM_HEAD}")
+		print -rn -- "${(pj:\x1e:)out2}"
+	'
+}
+
+# The three real callsites, transcribed from hop.zsh rather than invented.
+# - _hop_run:        _hop_pick label header query reload root ''    restore up
+# - _hop_ws_picker:  _hop_pick label header query ''     ''   drill ''      ''
+# - _hop_repo_picker goes through _hop_run with reload, root and restore all empty, and up set.
+typeset KM_OV_MAIN KM_OV_REPO KM_OV_WS
+KM_OV_MAIN=$(_km_overlay_probe RELOADCMD /some/root '' RESTORECMD _hop_ws_picker)
+KM_OV_REPO=$(_km_overlay_probe '' '' '' '' _hop_ws_picker)
+KM_OV_WS=$(_km_overlay_probe '' '' drill '' '')
+
+# Asserted first: an overlay that rendered nothing would make every comparison below vacuous.
+t 'the overlay probe actually rendered the keys overlay'
+assert_eq 'r,:,h,M-a' "$(_km_dump_get "$KM_OV_MAIN" 'ADV=')" 'the main picker advertises four: _hop_run passes no drill target'
+assert_nonempty "$(_km_dump_get "$KM_OV_MAIN" 'HDR=')" 'no header reached fzf, so the legend checks prove nothing'
+
+# The invariant, stated once and checked per picker: advertised is exactly bound.
+t 'the ? overlay names exactly the gated keys the picker actually bound'
+assert_eq "$(_km_dump_get "$KM_OV_MAIN" 'BOUND=')" "$(_km_dump_get "$KM_OV_MAIN" 'ADV=')" 'main picker'
+assert_eq "$(_km_dump_get "$KM_OV_REPO" 'BOUND=')" "$(_km_dump_get "$KM_OV_REPO" 'ADV=')" 'repo picker (hop -R)'
+assert_eq "$(_km_dump_get "$KM_OV_WS" 'BOUND=')" "$(_km_dump_get "$KM_OV_WS" 'ADV=')" 'workspace picker (hop -w)'
+
+# Exact lists as well as set equality, so a regression that drops BOTH sides at once still fails.
+t 'the repo and workspace pickers advertise only the one gated key each really has'
+assert_eq 'h' "$(_km_dump_get "$KM_OV_REPO" 'ADV=')" 'hop -R has only h: r, :, l and M-a are all dead there'
+assert_eq 'l' "$(_km_dump_get "$KM_OV_WS" 'ADV=')" 'hop -w has only l: r, :, h and M-a are all dead there'
+
+# The NORMAL legend in the list pane, which is the line a user reads before ever pressing `?`.
+t 'the NORMAL legend names : view only where a root makes the kind menu real'
+assert_contains "$(_km_dump_get "$KM_OV_MAIN" 'HDR=')" ': view'
+assert_not_contains "$(_km_dump_get "$KM_OV_REPO" 'HDR=')" ': view' 'hop -R has no root, so : falls through to ignore'
+assert_not_contains "$(_km_dump_get "$KM_OV_WS" 'HDR=')" ': view' 'hop -w has no root, so : falls through to ignore'
+
+# The rest of the legend has to survive the edit that removed one token from the middle of it.
+t 'dropping : view leaves the rest of the NORMAL legend intact'
+assert_eq 'NORMAL  j/k move  g/G top/bot  / search  : view  ? help  enter cd  q quit' \
+	"$(_km_dump_get "$KM_OV_MAIN" 'HDR=')"
+assert_eq 'NORMAL  j/k move  g/G top/bot  / search  ? help  enter cd  q quit' \
+	"$(_km_dump_get "$KM_OV_REPO" 'HDR=')"
 
 # ---------------------------------------------------------------------------
 # Tier 2: the transform: action bodies, extracted and run directly as sh.
