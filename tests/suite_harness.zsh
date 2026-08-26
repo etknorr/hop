@@ -46,7 +46,7 @@ print -r -- \$n"
 # tests/lib/pty.zsh: every zpty spawn must sit inside a function.
 # ---------------------------------------------------------------------------
 # `zpty -b` at a script's TOP LEVEL makes the spawned shell inherit the caller's EXIT trap.
-# - Measured in /private/tmp/hop-ptytrap/decide.zsh: top level fired the trap, in-function did not.
+# - Reproduce in ten lines rather than take this on trust: install an EXIT trap that prints, spawn `zpty -b P "zsh -f -c :"` at a script's top level and the trap fires, move that same spawn inside a function and it does not.
 # - pty.zsh's own EXIT trap removes the shared pty fixtures, which every pty test reads.
 # - So hoisting a spawn out of pty_open or pty_canary would delete those fixtures mid-run.
 # - Nothing enforced that: the safety was incidental and undocumented, which is what this pins.
