@@ -7,18 +7,16 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
-### Changed
+### Fixed
 
-- The browse verb moved off `ctrl-g` and onto `alt-B` in SEARCH, because `ctrl-g` was reachable with
-  no keypress at all. A single BEL byte (`0x07`) in anything a program prints arrives at fzf as
-  `ctrl-g`, and hop passed `ctrl-g` on `--expect`, so a stray bell ran `gh browse` and opened a
-  browser tab. `--expect` is passed unconditionally, so neither `HOP_VIM=0` nor `--no-vim` protected
-  against it the way they protect the NORMAL-mode letters. `ctrl-g` is now bound to `ignore` rather
-  than merely dropped: unbound, fzf's own default for it is `abort`, so the same bell would have
-  closed the picker instead. `b` in NORMAL is unchanged.
+- The test suite is safe to run from a shell pipeline again. Handed a live stdin, `tests/run core`
+  discarded all 31 cases and took the full 120s bound, and it blamed the wrong thing on the way out:
+  the runner reported `a test may await a terminal` when every probe was in fact waiting on an EOF
+  that an open pipe never sends. The stub fzf captured stdin even when answering `--version`, a query
+  the real fzf reads no stdin for and hop pipes none into, so each probe burned its own bound until
+  the suite bound killed the run. CI never saw it, because GitHub Actions hands the job `/dev/null`.
 
-  This also retires a documented confusion. `^G` launches hop from the shell, so `ctrl-g` *inside*
-  hop read as "do that again" when it was really the browse verb. It now means nothing there.
+## [0.1.1] - 2026-08-26
 
 ### Added
 
@@ -54,6 +52,24 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   still closes the picker, since `esc` in NORMAL means quit; `esc` is deliberately left unguarded
   because if `bin/hop-guard` ever went missing a `transform:` would yield no action and take all nine
   guarded keys down with it, leaving `esc` as the only way out.
+
+  Note that the guard does not cover the bare control bytes, and structurally cannot. It works by
+  hooking the `alt-<char>` that an unparsed escape *introducer* produces, and `\a`, `\b` and `\f`
+  carry no introducer, so nothing is hooked and no mark is ever written. Binding the key to `ignore`
+  and relocating the verb, which is what `ctrl-g` got here, is the only remedy that class has.
+
+### Changed
+
+- The browse verb moved off `ctrl-g` and onto `alt-B` in SEARCH, because `ctrl-g` was reachable with
+  no keypress at all. A single BEL byte (`0x07`) in anything a program prints arrives at fzf as
+  `ctrl-g`, and hop passed `ctrl-g` on `--expect`, so a stray bell ran `gh browse` and opened a
+  browser tab. `--expect` is passed unconditionally, so neither `HOP_VIM=0` nor `--no-vim` protected
+  against it the way they protect the NORMAL-mode letters. `ctrl-g` is now bound to `ignore` rather
+  than merely dropped: unbound, fzf's own default for it is `abort`, so the same bell would have
+  closed the picker instead. `b` in NORMAL is unchanged.
+
+  This also retires a documented confusion. `^G` launches hop from the shell, so `ctrl-g` *inside*
+  hop read as "do that again" when it was really the browse verb. It now means nothing there.
 
 ### Fixed
 
@@ -136,11 +152,17 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - The suite's per-child timeout is a real bound again. Six call sites used a shape where the timer
   lived inside the process being timed, so a child that ignored the signal ran unbounded and its
   grandchildren outlived the run. The timer now sits outside it and kills the whole process group.
-- `tests/run core` no longer hangs when the runner is handed a live stdin. `sleep 60 | tests/run core`
-  discarded every case in the suite and took the full 120s bound, because the stub fzf captured stdin
-  even when answering `--version`, a query the real fzf reads no stdin for and hop pipes none into. An
-  open pipe never sends the EOF that capture waited for, so each probe burned its own bound until the
-  suite bound killed the run. CI never saw it: GitHub Actions hands the job `/dev/null`.
+- The README's environment table omitted `HOP_HIST_MAX`, `HOP_DEBUG` and `HOP_DEBUG_LOG`, three
+  settings hop reads and documents elsewhere, so the one table a user consults to learn what is
+  tunable was the wrong place to look. `SMOKE.md` also undercounted its own automated keys.
+- Two gaps in the suite's own coverage, both of the shape that lets a shipped behaviour regress
+  with the suite green. Nothing asserted on the picker's geometry at all, so a typo'd `--heigth`
+  in `lib/ui.zsh` would have handed every picker fzf's default height with no test failing; the
+  default `80%` and the `--min-height` that rides with it are now both checked against the argv
+  fzf really received. And the tripwire on the settings scan was a `>= 15` floor against 17
+  settings found, so the scan could have decayed to fifteen and still reported healthy. It
+  asserts an exact sorted set now, so a setting entering or leaving the source forces a
+  deliberate edit rather than passing quietly.
 
 ## [0.1.0] - 2026-08-25
 
@@ -210,5 +232,6 @@ First release.
 
 [keepachangelog]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
-[Unreleased]: https://github.com/etknorr/hop/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/etknorr/hop/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/etknorr/hop/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/etknorr/hop/releases/tag/v0.1.0
