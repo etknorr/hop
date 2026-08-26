@@ -78,6 +78,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - The suite's per-child timeout is a real bound again. Six call sites used a shape where the timer
   lived inside the process being timed, so a child that ignored the signal ran unbounded and its
   grandchildren outlived the run. The timer now sits outside it and kills the whole process group.
+- `tests/run core` no longer hangs when the runner is handed a live stdin. `sleep 60 | tests/run core`
+  discarded every case in the suite and took the full 120s bound, because the stub fzf captured stdin
+  even when answering `--version`, a query the real fzf reads no stdin for and hop pipes none into. An
+  open pipe never sends the EOF that capture waited for, so each probe burned its own bound until the
+  suite bound killed the run. CI never saw it: GitHub Actions hands the job `/dev/null`.
 
 ## [0.1.0] - 2026-08-25
 
