@@ -18,6 +18,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - The integration suite no longer hangs when the runner's stdin never reaches EOF.
   `_hop_fzf_ver` is the one fzf call in the product that is never handed rows on a pipe, and the recording stub read stdin unconditionally, so it blocked on anything that never closes: under a fifo held open the suite took 81 seconds and failed seven of its tests.
   The stub answers a `--version` query without reading stdin now, which is what real fzf does.
+- The core suite no longer hangs either, for the same reason and with the same fix.
+  Handed a live stdin, `tests/run core` discarded all 31 of its cases and took the full 120s bound, reporting `a test may await a terminal` when every probe was really waiting on an EOF that an open pipe never sends.
+  Its own recording stub captured stdin even when answering `--version`, so each probe burned its bound until the suite bound killed the run.
+  CI never saw it, because GitHub Actions hands the job `/dev/null`.
 
 ## [0.1.1] - 2026-08-26
 
