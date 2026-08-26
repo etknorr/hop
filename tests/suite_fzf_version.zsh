@@ -152,6 +152,18 @@ st=$?
 assert_eq 0 "$st"
 assert_eq 1 "$(_fz_forks)"
 
+t 'the floor covers every fzf action the keymap uses, including search()'
+# An UNKNOWN action makes fzf refuse to START, so adding one to the keymap is a floor question.
+# - `search()` arrived in fzf 0.59.0, which the 0.60.3 floor already covers, so it did not move.
+out=$(_fz_probe '0.74.1' '
+_hop_vim_init
+_hop_vim_binds /bin/true "" "" "" "" "" ""
+print -r -- $HOP_VIM_TO_NORMAL')
+assert_contains "$out" 'search()' 'esc must re-match, or NORMAL is left holding an empty list'
+assert_contains "$out" 'clear-query+search()' 'search() before clear-query re-runs the dead query'
+out=$(_fz_probe '0.74.1' '_hop_ver_lt 0.59.0 $HOP_FZF_MIN && print -r -- covered')
+assert_eq covered "$out" 'the floor must be at or above 0.59.0, where search() was added'
+
 t 'HOP_FZF_MIN can be lowered, for an fzf that is fine despite its version string'
 out=$(_fz_probe '0.44.1' 'HOP_FZF_MIN=0.1.0 _hop_fzf_ok' 2>&1)
 st=$?

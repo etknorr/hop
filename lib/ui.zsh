@@ -111,7 +111,11 @@ _hop_vim_binds() {
 
 	# Esc clears the query on the way back to NORMAL, exactly as it drops the filter in k9s.
 	# - A query still displayed but no longer filtering anything is worse than no query at all.
-	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+clear-query+change-prompt(> )+change-header(${nh})+${prev_restore}"
+	# - The trailing `search()` re-matches, because `disable-search` only stops FUTURE matching.
+	# - Without it, esc out of a non-matching query left NORMAL holding a permanently empty list.
+	# - It has to come AFTER clear-query, or it re-runs the search that matched nothing.
+	# - `search()` needs fzf 0.59.0, which HOP_FZF_MIN already covers; an unknown action aborts fzf.
+	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+clear-query+search()+change-prompt(> )+change-header(${nh})+${prev_restore}"
 
 	# Esc has three meanings, resolved from fzf's own exported state rather than a file.
 	# - In the kind menu it goes back to the view you came from, which is the k9s behaviour.
