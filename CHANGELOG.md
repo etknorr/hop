@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- `hop --doctor` could hang forever and print nothing, which is the worst place for this bug: the issue template tells you to run exactly that command.
+  It asked six external tools for their versions with stdin inherited, and the `fzf` on your `PATH` is not always the real binary.
+  `fzf-tmux` ships alongside fzf and reads the caller's stdin with `cat <&0` whenever stdin is not a terminal, so `hop --doctor` from a script or a pipeline was enough to hang it with no output and nothing to report.
+  The picker's own fzf version check had the same shape.
+  Both read from `/dev/null` now, and each is covered by a test that hangs if its redirect is removed.
 - Eight more test assertions that a floor kept from failing.
   `assert_ge N` reads like a bound but asserts a size, so it passes on every larger value too: the modal keymap check sat at 90 against 97 real keys and stayed green with seven of them deleted, and the `--help` registry check sat at 2 against 8 kinds and stayed green with `helm` gone from the kind list entirely.
   Each is an exact set or an exact count now.

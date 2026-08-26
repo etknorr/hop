@@ -378,3 +378,131 @@ if (( ${+commands[python3]} )) && python3 -c 'import yaml' 2>/dev/null; then
 else
 	skip 'every .github yml file parses as YAML' 'python3 or its yaml module is not installed'
 fi
+
+# ---------------------------------------------------------------------------
+# A version probe must not be able to read the caller's stdin.
+# ---------------------------------------------------------------------------
+# The `fzf` on PATH is not always the real binary, and a wrapper that reads stdin never returns.
+# - fzf-tmux ships beside fzf and runs `cat <&0 > $fifo1` whenever stdin is not a tty.
+# - So `hop --doctor` from a script could hang forever, and that is the command a bug report asks for.
+# - _hop_doctor_tool probes SIX tools this way, so the drainer is installed as bat as well as fzf.
+# - A fix that special-cased fzf alone would leave bat hanging, and the --doctor cases below would catch it.
+# - The fifo is opened READ-WRITE, so EOF can never arrive and a reader blocks with no writer to wait on.
+typeset SM_DRAIN SM_NOFEED smt
+fixture_tmpdir drainer || return 1
+SM_DRAIN=$REPLY
+for smt in fzf bat; do
+	print -rl -- '#!/bin/sh' 'cat > /dev/null' 'echo "0.60.3 (drainer)"' > "$SM_DRAIN/$smt"
+	chmod +x "$SM_DRAIN/$smt" || return 1
+done
+# gh and code are inert rather than absent, so no real browser or editor is launched by a doctor probe.
+for smt in gh code; do
+	print -rl -- '#!/bin/sh' 'echo inert 1.0' > "$SM_DRAIN/$smt"
+	chmod +x "$SM_DRAIN/$smt" || return 1
+done
+fixture_tmpdir nofeed || return 1
+SM_NOFEED="$REPLY/pipe"
+mkfifo -- "$SM_NOFEED"
+
+# sm_drain <code> -> the child's status, with a draining fzf on PATH and stdin that never ends.
+# - The only assertion any caller makes is on 142, never on elapsed time.
+# - Measured: a healthy `hop --doctor` took 25.3s on a loaded box, so a tight bound reads as a false hang.
+# - It cds to the temp root first, because _hop_doctor_body counts rows per kind and so scales with PWD.
+sm_drain() {
+	emulate -L zsh
+	hop_bound 45 zsh -f -c "$(fixture_pins)
+export PATH=${(q)SM_DRAIN}:\$PATH
+builtin cd -q ${(q)HOP_FIX_TMPROOT}
+source ${(q)HOP_HOME}/hop.zsh || exit 97
+${1}" >/dev/null 2>&1 <> "$SM_NOFEED"
+	return $?
+}
+
+t 'the draining wrapper really is the only fzf a probe can see'
+typeset drainseen
+drainseen=$(hop_bound 20 zsh -f -c "$(fixture_pins)
+export PATH=${(q)SM_DRAIN}:\$PATH
+source ${(q)HOP_HOME}/hop.zsh || exit 97
+print -r -- \${commands[fzf]}" 2>/dev/null </dev/null)
+assert_eq "$SM_DRAIN/fzf" "$drainseen" 'the real fzf answers --version without reading, so it hides this defect'
+
+typeset -i drainst
+t '_hop_fzf_ver returns even when fzf is a wrapper that drains stdin'
+sm_drain '_hop_fzf_ver'
+drainst=$?
+assert_ne 142 "$drainst" 'the version probe inherited stdin, so any reading wrapper hangs hop for good'
+
+t 'hop --doctor returns too, which is the command a bug report is told to run'
+sm_drain 'hop --doctor'
+drainst=$?
+assert_ne 142 "$drainst" 'a hung --doctor gives a reporter no diagnostic at all, which is the worst case'
+
+t 'and hop --doctor=short returns, since both bodies share _hop_doctor_tool'
+sm_drain 'hop --doctor=short'
+drainst=$?
+assert_ne 142 "$drainst" 'the short body probes the same six tools through the same helper'
+
+# ---------------------------------------------------------------------------
+# An inventory of every fzf invocation in the shipped source.
+# ---------------------------------------------------------------------------
+# This detects an UNREVIEWED call site, and does NOT claim any call site is safe.
+# - A text match cannot claim that: `cmd 2>&1 | head -1 </dev/null` binds the redirect to head.
+# - That spelling looks fixed, leaves cmd inheriting stdin, and passes any grep for the redirect.
+# - It was written that way here first, and it hung 3 of 3 while looking correct.
+# - The executed cases above are the proof; this only asserts nobody added a site without review.
+# - lib/doctor.zsh runs git with stdin inherited too, excluded deliberately: git reads no stdin here.
+fixture_sources shipped
+typeset -a smshipped=("${reply[@]}")
+
+t 'the shipped file list found files, or the inventory below matches nothing and passes'
+assert_empty "$REPLY" 'a mistyped glob would make this inventory vacuous instead of failing'
+assert_ge $#smshipped 5 'too few shipped files for this to be the real tree'
+
+typeset -a fzfcalls=()
+typeset sf smrel smhits smline
+for sf in "${smshipped[@]}"; do
+	smrel=${sf#${HOP_HOME}/}
+	smhits=$(grep -E '(^[[:space:]]*|[|(][[:space:]]*)fzf[[:space:]]|_hop_doctor_tool[[:space:]]+fzf([[:space:]]|$)' -- "$sf" | sed 's/^[[:space:]]*//')
+	[[ -n $smhits ]] || continue
+	for smline in ${(f)smhits}; do
+		fzfcalls+=("${smrel}: ${smline}")
+	done
+done
+
+# Sorted through arrays, because `(o)` is silently dropped inside a quoted scalar expansion.
+typeset -a fzfexpected=(
+	'hop.zsh: out=$(print -r -- "$targets" | fzf --filter="$query" \'
+	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
+	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
+	'lib/ui.zsh: fzf "${args[@]}"'
+	'lib/ui.zsh: out=$(fzf --version </dev/null 2>/dev/null)'
+)
+typeset -a fzfexpsorted=(${(o)fzfexpected}) fzfgotsorted=(${(o)fzfcalls})
+
+t 'the fzf invocations in the shipped source are exactly the reviewed set'
+assert_eq "${(F)fzfexpsorted}" "${(F)fzfgotsorted}" \
+	'an fzf call site was added or changed; check whether it inherits stdin, then update this list'
+
+# ---------------------------------------------------------------------------
+# Every caller of _hop_pick pipes into it, which is what makes ITS inherited stdin correct.
+# ---------------------------------------------------------------------------
+# _hop_pick's own fzf MUST inherit stdin, because that is how the target rows arrive.
+# - So the safety property lives at the CALL SITE, as a pipe, and not on the fzf line itself.
+# - A new caller that forgot the pipe would leave the picker reading a terminal, or a script's stdin.
+# - That makes the whitelist a checked precondition rather than an exception to the rule above.
+typeset -a pickcalls=()
+for sf in "${smshipped[@]}"; do
+	smrel=${sf#${HOP_HOME}/}
+	smhits=$(grep -E '_hop_pick[[:space:]]+"' -- "$sf" | sed 's/^[[:space:]]*//')
+	[[ -n $smhits ]] || continue
+	for smline in ${(f)smhits}; do
+		pickcalls+=("${smrel}: ${smline}")
+	done
+done
+
+t 'every _hop_pick call site is fed by a pipe, so what it inherits is rows and never a terminal'
+assert_ge $#pickcalls 2 'the call-site scan found nothing, which would make the loop below vacuous'
+typeset pickcall
+for pickcall in "${pickcalls[@]}"; do
+	assert_contains "$pickcall" '| _hop_pick' 'this caller does not pipe, so the picker reads whatever stdin is'
+done
