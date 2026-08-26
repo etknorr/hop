@@ -9,6 +9,16 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- `hop` no longer hangs forever when no controlling terminal is available, which is the case in a
+  script, a cron job, a CI step or an agent's shell. fzf does not error when `/dev/tty` cannot be
+  opened: it starts, writes nothing at all, and blocks on keys it can never receive, so hop wedged
+  with zero bytes on both stdout and stderr and nothing at all to diagnose it by. hop now resolves
+  the query headlessly with `fzf --filter` instead. A query matching exactly one target still jumps
+  straight to it, exactly as `--select-1` did before, so `hop <unique-query>` keeps working from a
+  script. Zero or several matches print a diagnostic naming both the missing terminal and the number
+  of candidates, then return non-zero. Redirected shapes such as `hop < /dev/null`, `hop | cat`,
+  `echo x | hop` and `hop 0<&-` are unaffected, because fzf reads keys from `/dev/tty` rather than
+  stdin and every one of those keeps its terminal.
 - The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
   command itself fails; it now names the failing tool on stderr and returns non-zero.
 - The edit verb (`alt-o`) no longer rejects an absolute-path `$EDITOR`/`$VISUAL` (e.g.

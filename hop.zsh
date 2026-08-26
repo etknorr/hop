@@ -200,6 +200,62 @@ _hop_fzf_status() {
 	return 1
 }
 
+# _hop_tty_ok -> 0 when a terminal is reachable, so the interactive picker can actually run.
+# - fzf reads keys from /dev/tty and NOT from stdin, which is why every redirected shape still works.
+# - `hop < /dev/null`, `hop | cat`, `echo x | hop` and `hop 0<&-` all keep their controlling terminal.
+# - So this deliberately never looks at stdin, since a stdin test would refuse four shapes that work.
+# - The real failure is having no controlling terminal at all: a script, a cron job, a CI step.
+# - There fzf 0.73.1 does not error; it starts, writes nothing, and blocks forever on keys it cannot get.
+# - Measured OPENABLE under script(1), under screen(1), and in all four redirected shapes.
+# - CLOSED only with no ctty, where `: < /dev/tty` fails ENXIO as `device not configured`.
+_hop_tty_ok() {
+	{ : < /dev/tty } 2>/dev/null
+}
+
+# _hop_pick_headless <targets> <query> <label> -> resolve with no terminal, or explain and fail.
+# - --filter is the one fzf mode needing no terminal, and it honours --accept-nth.
+# - So a single match arrives in the very same dir<TAB>preview shape _hop_parse_result already reads.
+# - EXACTLY ONE match is dispatched as plain Enter, which is what --select-1 does today.
+# - That keeps `hop <unique-query>` working from a script, and preserving it is why this is a separate path.
+# - A guard in FRONT of the picker runs before uniqueness is known, so it would refuse that working case.
+# - The real rule is "exactly one match", not "a query was given", which is a genuine distinction.
+# - A ONE-ROW target list with an EMPTY query also auto-accepts today, and counting matches covers both.
+# - Zero or many cannot be resolved without a human, so both name the cause AND the count.
+# - A bare `no match` would be a lie when 37 rows matched, and the count is what ends the bug hunt.
+# - The four matcher flags below are duplicated from _hop_pick deliberately, not by oversight.
+# - --filter is a separate fzf process, so it has to match rows exactly the way the picker would.
+# - Change --delimiter, --with-nth, --exact or --tiebreak there and this has to change with it.
+# - fzf's stderr is NOT suppressed, because --filter still parses every option it is handed.
+# - A genuine complaint about one of these flags has to reach the user, not look like an empty result.
+_hop_pick_headless() {
+	emulate -L zsh
+	local targets=$1 query=${2:-} label=$3
+	local out
+	out=$(print -r -- "$targets" | fzf --filter="$query" \
+		--delimiter=$'\t' --with-nth=1 --accept-nth='2,3' --exact --tiebreak=begin,length)
+	local -a rows=("${(@f)out}")
+	rows=(${rows:#})
+	_hop_dbg "headless label=${label} rows=${#rows} query=${query}"
+
+	if (( $#rows == 1 )); then
+		local dir preview
+		IFS=$'\t' read -r dir preview <<< "${rows[1]}"
+		[[ -n $preview ]] || preview=$dir
+		# An empty key is plain Enter, the only verb allowed to cd; see _hop_dispatch.
+		_hop_dispatch '' "$dir" "$preview"
+		return $?
+	fi
+
+	print -ru2 -- 'hop: no terminal available, so the picker cannot run (/dev/tty could not be opened).'
+	if (( $#rows == 0 )); then
+		print -ru2 -- "hop: nothing matched${query:+ the query: $query}, so there was nothing to jump to."
+	else
+		print -ru2 -- "hop: ${#rows} targets matched${query:+ the query: $query}, and picking one needs a terminal."
+		print -ru2 -- 'hop: narrow the query until exactly one target matches and hop will jump straight to it.'
+	fi
+	return 1
+}
+
 # _hop_run <label> <query> <reload> <targets> [root] [restore]
 # - fzf's status is read by _hop_fzf_status, which this shares with _hop_ws_picker.
 # - _hop_key/_hop_dir/_hop_preview are local here so nothing leaks into the interactive shell.
@@ -211,6 +267,11 @@ _hop_run() {
 	local header out st
 	local -a trows=("${(f)targets}")
 	header=$(_hop_header "$reload")
+	# No terminal means the picker would block forever, so resolve headlessly instead of opening it.
+	if ! _hop_tty_ok; then
+		_hop_pick_headless "$targets" "$query" "$label"
+		return $?
+	fi
 	out=$(print -r -- "$targets" | _hop_pick "$label" "$header" "$query" "$reload" "$root" '' "$restore" "$up")
 	st=$?
 	_hop_fzf_status "$st" "$label" "${#trows}" "$query" || return $_hop_st
@@ -239,6 +300,11 @@ _hop_ws_picker() {
 
 	local -a rows=("${(f)targets}")
 	local label="workspaces  ${#rows}"
+	# Same headless resolve as _hop_run: this picker is a second entry point, not a special case.
+	if ! _hop_tty_ok; then
+		_hop_pick_headless "$targets" "$query" "$label"
+		return $?
+	fi
 	out=$(print -r -- "$targets" | _hop_pick "$label" "$(_hop_header)" "$query" '' '' drill)
 	st=$?
 	_hop_fzf_status "$st" "$label" "${#rows}" "$query" || return $_hop_st
