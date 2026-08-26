@@ -312,3 +312,33 @@ t 'a HOP_CONFIG assigned AFTER hop.zsh was sourced still reaches the reload chil
 out=$(co_run "HOP_CONFIG=${(q)CO_CFG}
 _hop_reload_cmd ${(q)CO_REPO} mine")
 assert_contains "$out" "$CO_CFG" 'the live value is what the child needs, not the one seen at source time'
+
+# ---------------------------------------------------------------------------
+# The picker's geometry: --height is the one setting whose default is default-if-UNSET.
+# ---------------------------------------------------------------------------
+# lib/ui.zsh reads ${HOP_FZF_HEIGHT-80%} with a BARE dash, the only such read in the shipped source.
+# - fixture_pins pins it EMPTY, and empty is not its default: it DROPS --height rather than defaulting.
+# - So every other probe took the no-height branch and `args+=(--height=...)` was exercised by
+#   nothing at all, which is how a typo'd --heigth would have shipped green.
+# - Unsetting it inside the probe is the only honest way to reach the default, exactly as co_dbg
+#   turns HOP_DEBUG on inside the probe rather than fighting the pin from outside.
+# - _hop_pick is called directly because it is the sole caller that adds the flags; driving it
+#   through `hop` would need a repo fixture and cover no extra line.
+# - The --ansi assertion is the tripwire: without it a _hop_pick that never reached fzf would leave
+#   an empty argv, and both arms below would pass while proving nothing.
+typeset -a coargs
+
+t 'the picker asks fzf for a height when HOP_FZF_HEIGHT is unset, which is every real user'
+co_run 'unset HOP_FZF_HEIGHT
+print -r -- $'\''x\tdir\t/tmp'\'' | _hop_pick lbl hdr' >/dev/null 2>&1
+coargs=("${(@f)$(cat -- "$CO_ARGV")}")
+assert_eq '--ansi' "${coargs[(r)--ansi]}" 'fzf was never invoked, so the height checks prove nothing'
+assert_eq '--height=80%' "${coargs[(r)--height=80%]}" 'the default height never reached fzf'
+assert_eq '--min-height=18' "${coargs[(r)--min-height=18]}" '--min-height rides with --height, equally unguarded'
+
+t 'HOP_FZF_HEIGHT set empty drops both flags, which is what lets a pty drive the real picker'
+co_run 'print -r -- $'\''x\tdir\t/tmp'\'' | _hop_pick lbl hdr' >/dev/null 2>&1
+coargs=("${(@f)$(cat -- "$CO_ARGV")}")
+assert_eq '--ansi' "${coargs[(r)--ansi]}" 'fzf was never invoked, so the absence checks prove nothing'
+assert_empty "${coargs[(r)--height=*]}" 'an empty HOP_FZF_HEIGHT must not send --height at all'
+assert_empty "${coargs[(r)--min-height=*]}" '--min-height without --height would re-enable height mode'
