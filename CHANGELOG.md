@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
+  command itself fails; it now names the failing tool on stderr and returns non-zero.
 - `HOP_CONFIG` and `HOP_HOPRC` are now exported, and `HOP_CONFIG` is forwarded explicitly into the
   reload child alongside `HOP_HOME`. Both were plain shell parameters, so a `HOP_CONFIG=~/mine.zsh`
   line in `.zshrc` never reached the two children that re-source `hop.zsh` to rebuild the kind
