@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - `hop --doctor=short`, a paste-safe diagnostic mode for public bug reports: it omits `PWD`, the
   git toplevel, workspace names and paths, and kind names, replacing them with counts, and shows
   a config path only when it still matches hop's shipped default.
+- Repo governance for the now-public project: README badges (CI, MIT license, zsh), a
+  `CONTRIBUTING.md`, GitHub issue and pull request templates, and a `.editorconfig` matching the
+  project's real per-file indentation.
 
 ### Fixed
 

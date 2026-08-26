@@ -1,5 +1,9 @@
 # hop
 
+[![CI](https://img.shields.io/github/actions/workflow/status/etknorr/hop/ci.yml?branch=main&label=CI)](https://github.com/etknorr/hop/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![shell: zsh](https://img.shields.io/badge/shell-zsh-89e051.svg)](https://www.zsh.org/)
+
 A modal, fzf-driven navigator for large configuration monorepos.
 
 `hop` answers one question fast: **which unit did I mean, and take me there.** In a repo with
@@ -90,6 +94,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `--vim` | force the modal layer on when `HOP_VIM=0` is set |
 | `--doctor` | dump config, tools and kind counts for a bug report |
 | `--doctor=short` | the same, minus paths and names; safe to paste publicly |
+| `-V`, `--version` | print the installed version |
 | `-h`, `--help` | usage, listing the kinds actually registered |
 
 `-c` is the one to remember. `hop -c -k file pr` finds a file by name inside the subtree you are

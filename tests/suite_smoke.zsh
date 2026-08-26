@@ -231,3 +231,38 @@ if (( ${+commands[fzf]} )); then
 else
 	skip 'fzf --filter matches a row without opening a terminal' 'fzf is not installed'
 fi
+
+# ---------------------------------------------------------------------------
+# Repo governance: the files a contributor or an issue reporter actually hits.
+# ---------------------------------------------------------------------------
+typeset -a governance=(
+	"$HOP_HOME/CONTRIBUTING.md"
+	"$HOP_HOME/.editorconfig"
+	"$HOP_HOME/.github/pull_request_template.md"
+	"$HOP_HOME/.github/ISSUE_TEMPLATE/bug_report.yml"
+	"$HOP_HOME/.github/ISSUE_TEMPLATE/feature_request.yml"
+	"$HOP_HOME/.github/ISSUE_TEMPLATE/config.yml"
+)
+
+typeset gf grel
+for gf in "${governance[@]}"; do
+	grel=${gf#${HOP_HOME}/}
+	t "${grel} exists"
+	assert_file "$gf"
+done
+
+# A missing python3, or a python3 with no PyYAML, is a skip here, not a failure.
+if (( ${+commands[python3]} )) && python3 -c 'import yaml' 2>/dev/null; then
+	typeset -a yamlfiles=("$HOP_HOME"/.github/**/*.yml(N))
+	t 'every .github yml file is a glob hit, not an empty list'
+	assert_ge $#yamlfiles 1 'a glob typo would make every yaml check vanish'
+
+	typeset yf yrel
+	for yf in "${yamlfiles[@]}"; do
+		yrel=${yf#${HOP_HOME}/}
+		t "${yrel} parses as YAML"
+		assert_status 0 python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$yf"
+	done
+else
+	skip 'every .github yml file parses as YAML' 'python3 or its yaml module is not installed'
+fi
