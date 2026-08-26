@@ -210,10 +210,12 @@ stub_reset() {
 # - HOP_HOPRC is forced empty, so a .hoprc in a fixture repo can never run inside a probe.
 # - HOP_CONFIG is forced too, because the default points at the USER'S OWN config.zsh.
 # - Without that the suite would assert against whatever kinds this laptop happens to declare.
+# - PATH is passed explicitly: a caller's `local PATH=` is dynamically scoped, not exported.
 hop_probe() {
 	emulate -L zsh
 	local code=$1
 	HOP_HOPRC='' HOP_HISTFILE=${HOP_HISTFILE:-/dev/null} HOP_CONFIG="$(_hop_fix_config)" \
+		PATH="$PATH" \
 		zsh -f -c "source ${(q)HOP_HOME}/hop.zsh || exit 97
 ${code}"
 }

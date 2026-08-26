@@ -93,6 +93,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `--no-vim` | search-first fzf, no modal layer, same as `HOP_VIM=0` |
 | `--vim` | force the modal layer on when `HOP_VIM=0` is set |
 | `--doctor` | dump config, tools and kind counts for a bug report |
+| `--doctor=short` | the same, minus paths and names; safe to paste publicly |
 | `-h`, `--help` | usage, listing the kinds actually registered |
 
 `-c` is the one to remember. `hop -c -k file pr` finds a file by name inside the subtree you are
@@ -397,6 +398,7 @@ workspaces.example      a workspace list to copy
 | `HOP_WORKSPACES` | unset | colon-separated workspaces, overrides the file |
 | `HOP_REPOS` | every repo in every workspace | colon-separated repo list for `-R` |
 | `HOP_HISTFILE` | `~/.local/state/hop/history` | frecency history |
+| `HOP_CLIPBOARD` | unset | overrides the copy verb's clipboard command, skipping the probe |
 | `HOP_VIM` | `1` | `0` disables the modal layer |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |
@@ -411,9 +413,11 @@ execution path, so it now requires `HOP_HOPRC=1`. Only enable it for repos you w
 ### Degradations
 
 Every dependency beyond `zsh`, `fzf` and `git` is optional and degrades to something that works: no
-`bat` means plain `cat`; no `gh` means the browse verb explains why; no `code` means `$EDITOR`. A
-kind whose families are absent from the current repo emits zero rows and **zero** stderr, which is
-what lets one config work across every repo without noise.
+`bat` means plain `cat`; no `gh` means the browse verb explains why; no `code` means `$EDITOR`; no
+clipboard tool means the copy verb names what to install instead of copying nothing silently. The
+copy verb itself tries `pbcopy`, `wl-copy`, `xclip`, `xsel`, then `clip.exe`, so it works unmodified
+on macOS, Wayland, X11 and WSL. A kind whose families are absent from the current repo emits zero
+rows and **zero** stderr, which is what lets one config work across every repo without noise.
 
 ---
 
@@ -448,7 +452,9 @@ HOP_DEBUG=1 hop      # reproduce the problem
 hop --doctor         # the last 15 dispatches are at the bottom
 ```
 
-`--doctor` output contains local paths. Read it before pasting anywhere public.
+`--doctor` output contains local paths, workspace names and kind names. Read it before pasting
+anywhere public. For a bug report, run `hop --doctor=short` instead: it withholds every path and
+name and reports counts in their place, so it is safe to paste into a public issue.
 
 ### Keys that get mixed up
 
