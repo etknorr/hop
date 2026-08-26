@@ -97,15 +97,23 @@ row_for() {
 	return 1
 }
 
-# check_rows <label> <rows> [zero-ok] -> the four invariants every row of every kind must satisfy.
+# check_rows <label> <rows> [zero-ok] -> the five invariants every row of every kind must satisfy.
 # - Each complaint list is asserted empty, so a failure names the offending paths, not just a count.
 # - A 0-byte preview gets its own assertion: a 0-byte main.tf renders as a blank pane.
 # - zero-ok is for `file` alone, whose row IS a file, so an empty tracked file is a valid answer.
+# - The row set itself is asserted non-empty FIRST, because every loop below is over "${rows[@]}".
+# - Measured: check_rows LABEL '' reported 4 passed and 0 failed, having examined nothing at all.
+# - That mattered in the HOP_TEST_REPO block, whose own comment says row counts are never asserted.
+# - Sabotage: _hop_generate returning immediately left 6 of the 7 real-checkout tests green.
 check_rows() {
 	emulate -L zsh
 	local label=$1
 	local -a rows=(${(f)2})
 	rows=(${rows:#})
+
+	t "${label}: the row set is not empty"
+	assert_ge $#rows 1 'four invariants over zero rows all pass while examining nothing'
+
 	local r dir prev
 	local -a f
 	local -a bad_fields=() bad_dir=() bad_prev=() zero_prev=()
@@ -605,15 +613,12 @@ scan_ls_callsites() {
 	return 0
 }
 
-typeset -a ENUMSRC=(
-	"$HOP_HOME"/hop.zsh
-	"$HOP_HOME"/lib/*.zsh(N)
-	"$HOP_HOME"/bin/*(N.)
-	"$HOP_HOME"/presets/*.zsh(N)
-)
+fixture_sources enum
+typeset -a ENUMSRC=("${reply[@]}")
 
-t 'the enumeration-source list is not silently empty'
-assert_ge $#ENUMSRC 10 'a glob typo would make the ls-files funnel check vacuous'
+# This runs FIRST, and no longer names a number: the old floor of 10 sat well below the real count.
+t 'every component of the enumeration-source list found files'
+assert_empty "$REPLY" 'a mistyped glob would make the ls-files funnel check vacuous'
 
 t 'only _hop_ls talks to git ls-files, across lib, bin and presets'
 scan_ls_callsites "${ENUMSRC[@]}"
@@ -655,6 +660,8 @@ if [[ -n $TESTREPO && -d $TESTREPO/.git ]]; then
 
 	t 'real checkout: every row points inside the repo it was asked about'
 	rows=$(gen "$TESTREPO" tg mod helm serverless puppet backstage dir)
+	# The loop below is over these rows, so zero of them would satisfy the assertion having read nothing.
+	assert_nonempty "$rows" 'no rows at all makes the escape check vacuous, not clean'
 	typeset bad='' rowdir r
 	for r in ${(f)rows}; do
 		[[ -n $r ]] || continue

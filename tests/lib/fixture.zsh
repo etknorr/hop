@@ -19,6 +19,10 @@ typeset -g  HOP_FIX_CONFIG=''
 # - Inheriting it would make every kind assertion depend on whose laptop the suite ran on.
 typeset -g HOP_FIX_NOCONFIG="${HOP_FIX_TMPROOT}/hop-tests-no-such-config.zsh"
 
+# A throwaway $HOME, because hop resolves EVERY default path through $HOME or an XDG variable.
+# - Created eagerly, since a lazy accessor called from $(...) would build a dir the parent forgets.
+typeset -g HOP_FIX_HOME=''
+
 # fixture_cleanup -> remove every directory a fixture created.
 # - The temp-root prefix check is the guard that makes a stray value unable to delete anything.
 fixture_cleanup() {
@@ -53,6 +57,22 @@ fixture_tmpdir() {
 	HOP_FIX_DIRS+=("$REPLY")
 	return 0
 }
+
+# _hop_fix_home_init -> build the throwaway $HOME every probe child is pinned to.
+# - The XDG directories are created too, so a child writing a default path lands inside this dir.
+# - `local REPLY` keeps this out of the global REPLY a suite is about to use for its own fixture.
+_hop_fix_home_init() {
+	emulate -L zsh
+	local REPLY
+	fixture_tmpdir home || return 1
+	HOP_FIX_HOME=$REPLY
+	mkdir -p -- "$REPLY/.config" "$REPLY/.local/state" "$REPLY/.cache" || return 1
+	return 0
+}
+if ! _hop_fix_home_init; then
+	print -ru2 -- 'fixture: could not build a throwaway $HOME, so no probe would be hermetic'
+	return 1
+fi
 
 # fixture_repo [label] -> REPLY is a fresh git repo with no commits yet; HOP_FIX_REPO points at it.
 # - Branch is forced to main so the init hint never appears in captured output.
@@ -145,6 +165,41 @@ _hop_fix_config() {
 	print -rn -- "${HOP_FIX_CONFIG:-$HOP_FIX_NOCONFIG}"
 }
 
+# fixture_sources <group> -> `reply` is every file in that group; REPLY names any empty component.
+# - Three suites scan a file list for a banned construct, and each guarded it with a hand floor.
+# - A floor drifts: one typo'd glob took a list from 18 files to 12, still over its floor of 10.
+# - The planted become() in lib/ went undetected while that guard reported healthy, so no constant.
+# - Every component is a whole-directory read, which has no subset for a typo to quietly select.
+# - It either names a real directory or matches nothing, and nothing is what REPLY reports.
+fixture_sources() {
+	emulate -L zsh
+	setopt local_options null_glob no_nomatch
+	local -a specs=()
+	case $1 in
+		# The executable source: what a ban on a construct has to be scanned across.
+		shipped) specs=('hop.zsh' 'lib/*(.)' 'presets/*(.)' 'bin/*(.)' 'completions/_*(.)') ;;
+		# The enumeration source: shipped minus completions, which never talks to git.
+		enum) specs=('hop.zsh' 'lib/*(.)' 'presets/*(.)' 'bin/*(.)') ;;
+		# Everything `zsh -n` must accept, the test harness included.
+		parseable) specs=('hop.zsh' 'config.example.zsh' 'lib/*(.)' 'presets/*(.)' 'bin/*(.)' \
+			'completions/_*(.)' 'tests/run' 'tests/lib/*(.)' 'tests/suite_*.zsh') ;;
+		*) print -ru2 -- "fixture_sources: unknown group: ${1}"; return 2 ;;
+	esac
+	reply=()
+	local spec
+	local -a hit=() empty=()
+	for spec in "${specs[@]}"; do
+		hit=($HOP_HOME/${~spec})
+		if (( $#hit == 0 )); then
+			empty+=("$spec")
+			continue
+		fi
+		reply+=("${hit[@]}")
+	done
+	REPLY=${(pj:\n:)empty}
+	(( $#empty == 0 ))
+}
+
 # stub_bin [name...] -> put recording no-op stubs for these commands first on PATH.
 # - The default list is every external command a hop action can shell out to.
 # - Each invocation appends one TAB-separated line to $HOP_FIX_LOG for later assertion.
@@ -201,22 +256,47 @@ stub_reset() {
 	: > "$HOP_FIX_LOG"
 }
 
+# fixture_pins -> `export` lines a child shell must run before it sources hop.zsh.
+# - Emitted as code for INSIDE the child, because a `local VAR=` is dynamically scoped, not exported.
+# - Measured: `local HOME=/nope; hop_probe 'print $HOME'` printed the REAL $HOME.
+# - Not delivered via `env`, because suite_clipboard hands a probe a PATH with no env on it.
+# - HOME and the XDG pins are load-bearing, not tidiness: every default path resolves through them.
+# - Unpinned, a probe READ the real ~/.config/hop/workspaces and SOURCED the real config.zsh.
+# - HOP_HOPRC is forced empty, so a .hoprc in a fixture repo can never run inside a probe.
+# - HOP_CONFIG is forced too, because the default points at the USER'S OWN config.zsh.
+# - Without that the suite would assert against whatever kinds this laptop happens to declare.
+# - HOP_DEBUG is forced OFF, so an exported HOP_DEBUG=1 cannot make a test write the real debug log.
+# - A test that WANTS logging sets HOP_DEBUG inside the probe code, where it is visible.
+# - HOP_HISTFILE defaults to /dev/null so a probe cannot touch the real frecency history.
+# - PATH is passed explicitly for the same dynamic-scope reason as HOME.
+fixture_pins() {
+	emulate -L zsh
+	local home=$HOP_FIX_HOME
+	local config="${home}/.config" state="${home}/.local/state" cache="${home}/.cache"
+	local hopconfig="$(_hop_fix_config)" hist=${HOP_HISTFILE:-/dev/null}
+	print -rl -- \
+		"export HOME=${(q)home}" \
+		"export XDG_CONFIG_HOME=${(q)config}" \
+		"export XDG_STATE_HOME=${(q)state}" \
+		"export XDG_CACHE_HOME=${(q)cache}" \
+		"export HOP_CONFIG=${(q)hopconfig}" \
+		"export HOP_HOPRC=''" \
+		"export HOP_DEBUG=''" \
+		"export HOP_HISTFILE=${(q)hist}" \
+		"export PATH=${(q)PATH}"
+}
+
 # hop_probe <zsh-code> -> run the code in a fresh shell with hop.zsh sourced, and print its output.
 # - A child shell means a provider under test cannot leave functions behind in the suite process.
 # - -f skips the user's rc files, which is what keeps a probe hermetic and fast.
 # - The child is non-interactive, so hop.zsh never reaches its bindkey block.
 # - Nothing here can start fzf: the caller supplies the code, and fzf only ever runs with --filter.
-# - HOP_HISTFILE defaults to /dev/null so a probe cannot touch the real frecency history.
-# - HOP_HOPRC is forced empty, so a .hoprc in a fixture repo can never run inside a probe.
-# - HOP_CONFIG is forced too, because the default points at the USER'S OWN config.zsh.
-# - Without that the suite would assert against whatever kinds this laptop happens to declare.
-# - PATH is passed explicitly: a caller's `local PATH=` is dynamically scoped, not exported.
+# - The environment is fixture_pins, where each pin says why it is not optional.
 hop_probe() {
 	emulate -L zsh
 	local code=$1
-	HOP_HOPRC='' HOP_HISTFILE=${HOP_HISTFILE:-/dev/null} HOP_CONFIG="$(_hop_fix_config)" \
-		PATH="$PATH" \
-		zsh -f -c "source ${(q)HOP_HOME}/hop.zsh || exit 97
+	zsh -f -c "$(fixture_pins)
+source ${(q)HOP_HOME}/hop.zsh || exit 97
 ${code}"
 }
 

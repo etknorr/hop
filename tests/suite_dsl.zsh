@@ -9,9 +9,10 @@
 
 setopt local_options no_nomatch null_glob
 
-typeset -g REPLY DSL_ERRTEXT DSL_ERRFILE
+typeset -g REPLY DSL_ERRFILE
 fixture_tmpdir dslerr
 DSL_ERRFILE="$REPLY/stderr"
+: > "$DSL_ERRFILE"
 
 # ---------------------------------------------------------------------------
 # Helpers.
@@ -30,7 +31,18 @@ dsl_gen() {
 	local root=$1
 	shift
 	hop_probe "_hop_generate ${(q)root} ${(j: :)${(@q)@}}" 2>"$DSL_ERRFILE"
-	DSL_ERRTEXT=$(<"$DSL_ERRFILE")
+	return 0
+}
+
+# dsl_err -> the stderr the last dsl_gen captured, re-read from the FILE.
+# - dsl_gen used to ASSIGN this to a global, and every caller runs it inside $(...).
+# - The assignment landed in the subshell, so the assertion read an initial empty value forever.
+# - Sabotage: making an absent --dirs base print to stderr left `assert_empty $DSL_ERRTEXT` green.
+# - A file crosses the fork, which is why it_err() and gen_err() were never exposed to this.
+dsl_err() {
+	emulate -L zsh
+	[[ -r $DSL_ERRFILE ]] || return 0
+	print -r -- "$(<"$DSL_ERRFILE")"
 	return 0
 }
 
@@ -174,7 +186,7 @@ t '--dirs on an absent base emits nothing, silently'
 dsl_kinds "hop_kind gone --dirs 'no-such-family' --desc 'absent'"
 dsl_names "$R" gone
 assert_empty "$REPLY"
-assert_empty "$DSL_ERRTEXT"
+assert_empty "$(dsl_err)" 'an absent base is a normal configuration, not something to warn about'
 
 # ---------------------------------------------------------------------------
 # --marker, layouts, and the path that matches none of them.
@@ -411,7 +423,7 @@ assert_empty "$REPLY"
 t 'asking for a kind nobody declared says so on stderr'
 dsl_kinds "hop_kind u --dirs 'units' --desc 'units'"
 dsl_gen "$R" nosuchkind >/dev/null
-assert_contains "$DSL_ERRTEXT" 'unknown kind: nosuchkind'
+assert_contains "$(dsl_err)" 'unknown kind: nosuchkind'
 
 t 'a bare _hop_provider_<name> function still works without any registration'
 # This fallback is what lets an opt-in .hoprc add a kind without touching the registry.

@@ -7,18 +7,13 @@
 # ---------------------------------------------------------------------------
 # Every file parses.
 # ---------------------------------------------------------------------------
-# bin/ and completions/ are globbed by content rather than listed, so a new file is covered free.
-typeset -a parseable=(
-	"$HOP_HOME/hop.zsh"
-	"$HOP_HOME"/lib/*.zsh(N)
-	"$HOP_HOME"/presets/*.zsh(N)
-	"$HOP_HOME"/config.example.zsh(N)
-	"$HOP_HOME"/bin/*(N.)
-	"$HOP_HOME"/completions/_*(N.)
-	"$HOP_TESTS/run"
-	"$HOP_TESTS"/lib/*.zsh(N)
-	"$HOP_TESTS"/suite_*.zsh(N)
-)
+# Directories are read whole rather than listed, so a new file is covered free.
+fixture_sources parseable
+typeset -a parseable=("${reply[@]}")
+
+# This runs BEFORE the parse loop, because a short list makes every check below vacuous.
+t 'every component of the file list found files'
+assert_empty "$REPLY" 'a mistyped glob would make these parse checks vanish without a failure'
 
 typeset f rel
 for f in "${parseable[@]}"; do
@@ -26,9 +21,6 @@ for f in "${parseable[@]}"; do
 	t "zsh -n  ${rel}"
 	assert_status 0 zsh -n "$f"
 done
-
-t 'the file list is not silently empty'
-assert_ge $#parseable 8 'a glob typo would make every parse check vanish'
 
 # ---------------------------------------------------------------------------
 # The two helpers fzf execs must be executable.
@@ -54,14 +46,22 @@ assert_empty "$noise"
 
 # A stale HOP_HOME naming an OLD install location made `source ~/.zshrc` fail on every lib.
 # - It must be overridden by this file's own path, never honoured, or a move breaks a live shell.
+# - These two cannot use hop_probe, which derives HOP_HOME rather than letting a caller set it.
+# - They take fixture_pins anyway: unpinned, both SOURCED the real config.zsh and ran the user's code.
+# - Measured unpinned: the child registered 11 kinds instead of the shipped 8.
+typeset stalepins="$(fixture_pins)"$'\n''export HOP_HOME=/nonexistent/hop'
+
 t 'an inherited HOP_HOME naming the wrong install is overridden, not honoured'
 typeset stale
-stale=$(HOP_HOME=/nonexistent/hop zsh -f -c "source ${(q)HOP_HOME}/hop.zsh 2>&1; print -r -- \$HOP_HOME")
+stale=$(zsh -f -c "${stalepins}
+source ${(q)HOP_HOME}/hop.zsh 2>&1
+print -r -- \$HOP_HOME")
 assert_eq "$HOP_HOME" "$stale" 'a stale HOP_HOME was honoured, so every lib source would fail'
 
 t 'sourcing with a stale HOP_HOME emits nothing on stderr'
 typeset stalenoise
-stalenoise=$(HOP_HOME=/nonexistent/hop zsh -f -c "source ${(q)HOP_HOME}/hop.zsh" 2>&1 >/dev/null)
+stalenoise=$(zsh -f -c "${stalepins}
+source ${(q)HOP_HOME}/hop.zsh" 2>&1 >/dev/null)
 assert_empty "$stalenoise"
 
 t 'hop --help exits 0 and lists the registry, not a hardcoded kind list'
@@ -77,6 +77,7 @@ t 'hop --help marks the default kinds with a star and names the config path'
 # The star column is what tells you which kinds a bare `hop` will search.
 assert_contains "$help" '* tg'
 assert_contains "$help" '* dir'
+assert_contains "$help" "$HOP_FIX_NOCONFIG" 'the help must name the config file you would create'
 
 # --doctor is the only way a bug report can carry the shell state, since fzf cannot be captured.
 t 'hop --doctor exits 0 and reports install, config, tools and the confusable keys'
@@ -88,24 +89,35 @@ assert_contains "$doc" 'tools'
 assert_contains "$doc" 'keys people mix up'
 
 t 'hop --doctor works outside a git repo, where it is most often needed'
+# This case previously carried one real assertion plus one about --help, which reported here on failure.
 typeset docout
+typeset -i docst
 docout=$(hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor" 2>&1)
+docst=$?
+assert_eq 0 $docst 'outside a repo is the case a bug reporter is most often in'
 assert_contains "$docout" 'NONE, so hop opens the workspace or repo picker'
-assert_contains "$help" "$HOP_FIX_NOCONFIG" 'the help must name the config file you would create'
+assert_contains "$docout" 'HOP_HOME' 'the install location must still be reported outside a repo'
+assert_contains "$docout" 'keys people mix up'
 
 # --doctor=short is the mode a public issue form tells reporters to paste.
 
+# The sentinel sits in the probe's OWN $HOME, which is a fixture dir, never the real one.
 t 'hop --doctor collapses $HOME to ~ and never prints it literally'
 typeset dochome
-dochome=$(HOP_DEBUG_LOG="${HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor')
-assert_not_contains "$dochome" "$HOME"
+dochome=$(HOP_DEBUG_LOG="${HOP_FIX_HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor')
+assert_not_contains "$dochome" "$HOP_FIX_HOME"
 assert_contains "$dochome" '~/hop-doctor-sentinel.log'
 
+# There was a literal `/Users/` scan here, and it was green for two accidents rather than one reason.
+# - --doctor=short shows the INSTALL path in full on purpose, so an absolute path is expected output.
+# - It only passed because HOME was inherited, which collapsed a checkout under HOME to ~.
+# - On macOS CI, where the checkout IS under /Users, pinning HOME made the accident visible.
+# - It could never fail on Linux either way, so the Ubuntu leg was never checking it.
+# - The probe's own HOME is the whole claim, and the assert below covers every path under it.
 t 'hop --doctor=short never prints $HOME, even forced to try'
 typeset docshortplain
-docshortplain=$(HOP_DEBUG_LOG="${HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor=short')
-assert_not_contains "$docshortplain" "$HOME"
-assert_not_contains "$docshortplain" '/Users/'
+docshortplain=$(HOP_DEBUG_LOG="${HOP_FIX_HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor=short')
+assert_not_contains "$docshortplain" "$HOP_FIX_HOME"
 assert_contains "$docshortplain" '(customised, withheld)' 'a forced custom path must be withheld, not shown'
 
 t 'hop --doctor=short exits 0, inside and outside a git repo'
