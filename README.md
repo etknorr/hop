@@ -262,6 +262,12 @@ fzf has no key-sequence support, so there is no `gg`. `g` alone is first, `G` is
 | `?` | keymap overlay in the preview pane |
 | `q` or `esc` | quit |
 
+Five of those depend on which picker you are in. `r` needs a list it can regenerate, `:` needs a repo
+root to enumerate kinds from, `l` needs somewhere to drill into, `h` needs a level to go back out to,
+and `alt-a` needs a reload command. The repo picker (`hop -R`) has only `h` and the workspace picker
+(`hop -w`) has only `l`. Where a key is not bound, the legend and the `?` overlay both leave it out
+rather than name a key that does nothing.
+
 ### SEARCH
 
 Every printable key types. `esc` returns to NORMAL and clears the query.
@@ -272,10 +278,50 @@ Every printable key types. `esc` returns to NORMAL and clears the query.
 | `ctrl-o` / `ctrl-t` | open the file / the directory in your editor |
 | `alt-o` | open the file in `$EDITOR` |
 | `ctrl-y` / `alt-y` | copy the directory / the file path |
-| `ctrl-g` | open on your git host |
+| `alt-B` | open on your git host |
 | `alt-a` | reload with every registered kind |
 | `ctrl-r` | refresh the preview |
 | `alt-p` or `ctrl-/` | toggle the preview pane |
+
+### The escape guard
+
+NORMAL mode makes letters into verbs, and that creates a problem no keymap can fix on its own: fzf
+cannot decode every escape sequence that arrives on its input, and the ones it cannot parse are
+delivered as ordinary keystrokes. A terminal answering a background-colour query with
+`\e]11;rgb:1e1e/1e1e/1e1e\e\\` therefore types `11;rgb:1e1e/1e1e/1e1e` into the picker, and the `b`
+in `rgb` used to run `gh browse`. Nobody touched a key. An `\e]52;...` clipboard reply reached the
+copy verb through its `Y`, and a `\eP...` version reply reached `$EDITOR` through its `e`.
+
+fzf does surface the part it could not parse: an unrecognised `ESC <char>` becomes a bindable
+`alt-<char>`, so `\e]` arrives as `alt-]`. hop binds every such key to a stamp of the clock, and
+every verb that would leave the picker checks that stamp before it runs. A forged letter follows its
+introducer by about 20 milliseconds, which is the cost of the check itself. A real keypress follows
+whatever the user did last by however long they took. `HOP_GUARD_WINDOW` is where that line sits.
+
+The guard fails open by design. With no clock, no stamp or a malformed window it runs the verb,
+because swallowing a real keypress is worse than the nuisance it prevents. `HOP_GUARD_WINDOW=0`
+turns it off entirely.
+
+Navigation keys are deliberately outside it. `j`, `k`, `g` and `G` must not fork a process on every
+cursor move, and `/` and `:` are both undone by `esc`. So a hostile sequence can still scroll the
+list or switch mode. It cannot open an editor, write your clipboard or open a browser tab.
+
+Three gaps remain, all nuisance-level and all deliberate for now.
+
+A **bracketed paste** wraps its payload in `\e[200~` and `\e[201~`, which are well-formed CSI
+sequences that fzf parses and discards, so there is no introducer left to hook. It also takes a
+deliberate paste to trigger, and NORMAL mode has search off, so pasting there is meaningless anyway.
+
+`\b` and `\f`, if a program prints them raw, still read as `ctrl-h` and `ctrl-l`, which are `--expect`
+keys rather than binds. `--expect` outranks every bind and so cannot be guarded. Both are in-picker
+level navigation; moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0.
+
+A **bare `ESC` byte** still closes the picker, because `esc` in NORMAL means quit and that is the
+documented binding. Measured: a lone `\e` or `\e\e` aborts, while a `\e` arriving at the tail of a
+truncated sequence does whatever `esc` means in the mode it lands in. `esc` is deliberately *not*
+guarded, and that is a safety property rather than an oversight: if `bin/hop-guard` were ever missing
+or lost its executable bit, a `transform:` yields no output, fzf treats that as no action, and all
+nine guarded keys go dead at once. `esc` is then the only way out of the picker.
 
 ### The `:` kind menu
 
@@ -534,6 +580,7 @@ workspaces.example      a workspace list to copy
 | `HOP_FZF_HEIGHT` | `80%` | picker height; **empty means fullscreen** |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
 | `HOP_FZF_MIN` | `0.60.3` | the fzf floor; lower it if the check is wrong about your build |
+| `HOP_GUARD_WINDOW` | `0.15` | seconds the escape guard refuses a verb for; `0` disables it |
 | `HOP_DEBUG` | unset | `1` logs every key dispatch, readable via `--doctor` |
 | `HOP_DEBUG_LOG` | `~/.local/state/hop/debug.log` | where that log goes |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |
@@ -613,8 +660,8 @@ name and reports counts in their place, so it is safe to paste into a public iss
 
 ### Keys that get mixed up
 
-`^G` launches hop from the shell, so `ctrl-g` *inside* hop reads as "do that again". It is not — it
-is the browse verb. Navigation is `l`/`h` in NORMAL and `ctrl-l`/`ctrl-h` in SEARCH.
+`^G` launches hop from the shell, and it no longer means anything *inside* hop: browse is `b` in
+NORMAL and `alt-B` in SEARCH. Navigation is `l`/`h` in NORMAL and `ctrl-l`/`ctrl-h` in SEARCH.
 
 ### Nothing appears at all
 

@@ -1,0 +1,69 @@
+#!/usr/bin/env zsh
+# hop escape guard: tells a forged keystroke from a real one by WHEN it arrived.
+# - fzf does not decode every inbound escape sequence, and what it cannot parse arrives as keystrokes.
+# - So `\e]11;rgb:1e1e/1e1e/1e1e\e\\` from a colour query types `11;rgb:...` into the picker.
+# - In NORMAL mode those letters are verbs, so `b` in that payload ran `gh browse` with no keypress.
+# - fzf DOES turn the unrecognised introducer into a bindable key: `\e]` arrives as alt-].
+# - So the payload is always preceded, within microseconds, by an alt-<char> nobody would ever press.
+# - `mark` records that moment, and `check` refuses any verb that lands too soon after it.
+# - Standalone on purpose: fzf runs a bind's command in a fresh $SHELL -c that inherits no functions.
+# - Self-healing by construction: a stale mark simply expires, so there is no re-arm event to get wrong.
+# - Never fails CLOSED. With no clock, no mark or a malformed window it prints the action and lets it run.
+# - That direction is deliberate: a heuristic that swallows real keypresses is worse than the nuisance it prevents.
+
+emulate -L zsh
+zmodload zsh/datetime 2>/dev/null
+
+# Seconds a verb must wait after an unparsed escape introducer before it counts as a real keypress.
+# - 0.15 was measured under a pty, not guessed, and the numbers below are from this machine.
+# - Forged letters inside one payload arrive 15-22ms apart, which is the fork cost of this script.
+# - So the threshold has about 7x headroom, which is what a loaded runner needs.
+# - The brief's own gate passes with room to spare: j j b at 60ms spacing still fires b.
+# - It fires because a plain letter never marks; only an alt-<char> nobody would press does.
+# - The cost is narrow and self-healing: one keypress within 150ms of a marked alt- key is lost.
+# - HOP_GUARD_WINDOW=0 turns the guard off, because a timing heuristic must have an off switch.
+# - A malformed override falls back rather than aborting the caller with `bad math expression`.
+typeset raw=${HOP_GUARD_WINDOW:-0.15}
+[[ $raw == (<->|<->.<->|.<->) ]] || raw=0.15
+typeset -F window=$raw
+
+typeset cmd=${1:-} f=${2:-}
+
+# _hg_pass <action> -> print the action and exit, which is every fail-open path in this file.
+_hg_pass() {
+	print -rn -- "$1"
+	exit 0
+}
+
+case $cmd in
+	mark)
+		[[ -n $f ]] || exit 0
+		print -rn -- "${EPOCHREALTIME:-}" > "$f" 2>/dev/null
+		exit 0
+		;;
+	check)
+		typeset act=${3:-}
+		# Nothing to print is not an error, so say nothing rather than printing `ignore`.
+		[[ -n $act ]] || exit 0
+		[[ -n ${EPOCHREALTIME:-} && -n $f ]] || _hg_pass "$act"
+		(( window > 0 )) || _hg_pass "$act"
+		typeset mark=''
+		[[ -r $f ]] && read -r mark < "$f" 2>/dev/null
+		# No mark means no unparsed escape has arrived this session, so the key is the user's.
+		[[ $mark == (<->|<->.<->|.<->) ]] || _hg_pass "$act"
+		typeset -F age=$(( EPOCHREALTIME - mark ))
+		# A negative age means the clock moved backwards, which must not quarantine the verbs forever.
+		(( age >= 0 && age < window )) || _hg_pass "$act"
+		# A suppressed key re-arms the window, so ONE mark covers a payload of any length.
+		# - Without this the window is measured from the introducer, and every check costs a fork.
+		# - Measured: successive payload letters arrived 19ms apart, so a 20-letter payload reaches 380ms.
+		# - Letters past the threshold would then have fired a verb, which is the whole bug again.
+		# - Re-arming makes the test "how long since the last SUPPRESSED key", which chains indefinitely.
+		# - It cannot lock the picker out: a real key that passes never re-arms, so the chain ends there.
+		print -rn -- "$EPOCHREALTIME" > "$f" 2>/dev/null
+		print -rn -- ignore
+		exit 0
+		;;
+esac
+
+exit 0

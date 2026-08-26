@@ -7,6 +7,7 @@
 # - Each line is <= 35 columns, which survives a 36-column pane.
 # - M-a is omitted when nothing is bound to it, so the picker cannot advertise a dead key.
 # - This is the non-modal legend, used when HOP_VIM=0 or --no-vim turns the modal layer off.
+# - Browse is M-B, not ^G: a bare BEL byte in the terminal's output IS ctrl-g, so ^G ran the verb.
 _hop_header() {
 	emulate -L zsh
 	local -a lines=(
@@ -14,9 +15,9 @@ _hop_header() {
 		'^Y copy · M-y copy file · M-o edit'
 	)
 	if [[ -n ${1:-} ]]; then
-		lines+=('^G github · M-a +conf · M-p preview')
+		lines+=('M-B github · M-a +conf · M-p preview')
 	else
-		lines+=('^G github · M-p preview')
+		lines+=('M-B github · M-p preview')
 	fi
 	print -rn -- "${(pj:\n:)lines}"
 }
@@ -49,34 +50,39 @@ _hop_vim_on() {
 	[[ ${HOP_VIM:-1} != 0 ]]
 }
 
-# _hop_vim_header <NORMAL|SEARCH> -> the mode legend, mode name first.
+# _hop_vim_header <NORMAL|SEARCH> [has-menu] -> the mode legend, mode name first.
 # - Mode name first because which mode is active is the one thing a user must never guess.
 # - The one-line form is 74 columns, so an 80-column terminal shows it without wrapping.
 # - Above 120 columns the preview takes 55% and the header pane is only 45% of the terminal.
 # - fzf CLIPS an over-long header rather than wrapping it, so a narrow pane re-flows the text.
+# - `: view` is omitted without a root to enumerate kinds from, which is _hop_header's own rule.
+# - The repo and workspace pickers pass no root, so `:` falls through to ignore in both of them.
+# - Those two are the pickers a newcomer meets first, and a legend naming a dead key is worse than none.
 _hop_vim_header() {
 	emulate -L zsh
-	local mode=$1
+	local mode=$1 menu=${2:-}
 	local -i cols=${COLUMNS:-80}
 	local -i avail=$cols
 	(( cols >= 120 )) && avail=$(( cols * 45 / 100 ))
 	(( avail = avail - 4 ))
 	local -a lines
 	if [[ $mode == SEARCH ]]; then
-		lines=('SEARCH  type to filter  esc normal  enter cd  ^o code  ^y yank  ^g browse')
+		lines=('SEARCH  type to filter  esc normal  enter cd  ^o code  ^y yank  M-B browse')
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'SEARCH  type to filter'
 				'esc normal  enter cd'
-				'^o code  ^y yank  ^g browse'
+				'^o code  ^y yank  M-B browse'
 			)
 		fi
 	else
-		lines=('NORMAL  j/k move  g/G top/bot  / search  : view  ? help  enter cd  q quit')
+		local view=''
+		[[ -n $menu ]] && view='  : view'
+		lines=("NORMAL  j/k move  g/G top/bot  / search${view}  ? help  enter cd  q quit")
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'NORMAL  j/k move  g/G top/bot'
-				'/ search  : view  ? help'
+				"/ search${view}  ? help"
 				'enter cd  q quit'
 			)
 		fi
@@ -84,15 +90,43 @@ _hop_vim_header() {
 	print -rn -- "${(pj:\n:)lines}"
 }
 
-# _hop_vim_binds <preview-cmd> <reload> <root> <restore> <query> [drill] [up]
+# _hop_vim_binds <preview-cmd> <reload> <root> <restore> <query> [drill] [up] [guard]
 # - Appends the whole modal --bind set to `args`, which is local in _hop_pick.
 # - Also fills _hop_vim_prompt, _hop_vim_head, and the four HOP_VIM_* exports declared there.
 # - Dynamic scoping is the established pattern in this file; see _hop_parse_result.
+# - guard is the escape-guard state file, passed EXPLICITLY rather than read from the caller's frame.
+# - An implicit read would let a probe that forgot it silently test the unguarded keymap instead.
 _hop_vim_binds() {
 	emulate -L zsh
-	local prev_cmd=$1 reload=$2 root=$3 restore=$4 query=$5 drill=${6:-} up=${7:-}
-	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys"
+	local prev_cmd=$1 reload=$2 root=$3 restore=$4 query=$5 drill=${6:-} up=${7:-} guard=${8:-}
 	local kinds_bin="${(q)HOP_HOME}/bin/hop-kinds"
+	local guard_bin="${(q)HOP_HOME}/bin/hop-guard"
+
+	# The five keys this picker may or may not have bound, named for the `?` overlay.
+	# - Each is gated below on one of _hop_run's arguments, so a picker without it leaves it on ignore.
+	# - _hop_header's own comment states the rule: the picker must not advertise a dead key.
+	# - The repo picker gets only h, and the workspace picker only l, so four of the five are dead there.
+	# - `-` rather than an empty word, because an empty trailing argument does not survive a bind string.
+	local -a live=()
+	[[ -n $restore ]] && live+=(r)
+	[[ -n $root ]] && live+=(':')
+	[[ -n $drill ]] && live+=(l)
+	[[ -n $up ]] && live+=(h)
+	[[ -n $reload ]] && live+=(M-a)
+	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys ${${(j:,:)live}:--}"
+
+	# The nine keys whose action leaves the picker, and so the nine the guard has to cover.
+	local -a guard_keys=(o O e y Y b l h q)
+
+	# The alt- keys hop or fzf already owns, which must therefore not become mark binds.
+	# - alt-a reload, alt-p toggle-preview, alt-B browse, and alt-o/alt-y are hop's own --expect verbs.
+	# - alt-b/alt-d/alt-f are fzf's backward-word, kill-word and forward-word, which SEARCH needs.
+	# - alt-g and alt-c are left out because they are muscle memory: the shell's hop and fzf-cd widgets.
+	# - Those are ZLE widgets, and ZLE is not reading the keyboard while fzf owns the tty, so no conflict.
+	# - Marking them would still cost a user who presses one out of habit their very next keystroke.
+	# - Nothing leaks either way: no ESC <lowercase> sequence carries a string payload to leak.
+	# - ctrl-d/ctrl-u are in _HOP_VIM_KEYS but are not chars, so `alt-ctrl-d` is not a thing to bind.
+	local -a guard_own=(a o p y B b c d f g ctrl-d ctrl-u)
 
 	# Restoring the real preview on every nav key is what closes the `?` overlay, per the spec.
 	# - change-preview with the same command is ~free: moving the focus re-runs the preview anyway.
@@ -104,7 +138,7 @@ _hop_vim_binds() {
 	local rebind_all="rebind(${keys})+rebind(()+rebind())"
 
 	local nh sh
-	nh=$(_hop_vim_header NORMAL)
+	nh=$(_hop_vim_header NORMAL "$root")
 	sh=$(_hop_vim_header SEARCH)
 
 	local to_search="${unbind_all}+enable-search+change-prompt(/ )+change-header(${sh})+${prev_restore}"
@@ -183,9 +217,35 @@ _hop_vim_binds() {
 			'?') act=$help_act ;;
 			':') act=$kind_act ;;
 		esac
+		# Every action that LEAVES the picker rides the escape guard; nav keys must stay fork-free.
+		# - The fork is free on these nine: each is followed by accept or abort, which spawns anyway.
+		# - `r` is deliberately NOT here: its action embeds a shell command holding $HOP_HOME and "$@".
+		# - Re-quoting that through a transform body is a real hazard for a verb that only redraws a list.
+		# - An empty act means the key was gated off above, so it stays a plain `ignore` and unguarded.
+		# - (Ie), never (I): an (I) subscript is a PATTERN, and this list is indexed by ? * [ and \.
+		# - Measured: ${guard_keys[(I)?]} returns 9, because ? matches any single-character element.
+		# - So (I) would have wrapped `?`'s help overlay in the guard and skipped alt-* below.
+		if [[ -n $guard && -n $act ]] && (( ${guard_keys[(Ie)$k]} )); then
+			act="transform:${guard_bin} check ${(q)guard} ${(qq)act}"
+		fi
 		args+=(--bind="${k}:${act:-ignore}")
 	done
 	args+=(--bind='(:ignore' --bind='):ignore')
+
+	# The mark half of the guard: every alt-<char> that hop does not itself own records the moment.
+	# - fzf turns ANY ESC it cannot parse into a bindable alt-<char>, whatever that char happens to be.
+	# - One rule therefore covers OSC (\e]), DCS (\eP), PM (\e^), APC (\e_), SOS (\eX) and ST (\e\).
+	# - Enumerating today's five introducers would leave the next one uncovered for no saving.
+	# - execute-silent BLOCKS fzf until it returns, and that is load-bearing rather than incidental.
+	# - An async mark would race the payload letters that follow it in the very same burst.
+	# - ( and ) are skipped: `\e(B` charset designation has a one-byte payload, so nothing leaks.
+	if [[ -n $guard ]]; then
+		local ak
+		for ak in "${_HOP_VIM_KEYS[@]}"; do
+			(( ${guard_own[(Ie)$ak]} )) && continue
+			args+=(--bind="alt-${ak}:execute-silent(${guard_bin} mark ${(q)guard})")
+		done
+	fi
 	# clear-query+search() runs unconditionally, BEFORE the transform picks one of esc's three jobs.
 	# - It has to be static: fzf ignores a `search()` that a transform emits, which is the live bug.
 	# - It has to come after clear-query, or search() re-runs the query that matched nothing.
@@ -283,7 +343,8 @@ _hop_pick() {
 	local prev_cmd="${(q)HOP_HOME}/bin/hop-preview {2} {3}"
 
 	# Built once because repeated --expect flags have ambiguous merge semantics, and ctrl-l is gated on drill.
-	local _hop_expect='ctrl-o,ctrl-t,ctrl-y,ctrl-g,alt-o,alt-y'
+	# - ctrl-g is deliberately NOT here any more; see the ctrl-g:ignore bind below for why.
+	local _hop_expect='ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y'
 	[[ -n $drill ]] && _hop_expect+=',ctrl-l'
 	[[ -n $up ]] && _hop_expect+=',ctrl-h'
 
@@ -314,6 +375,17 @@ _hop_pick() {
 		--bind='ctrl-/:toggle-preview'
 		--bind='alt-p:toggle-preview'
 		--bind='ctrl-r:refresh-preview'
+		# Browse lives on M-B because ctrl-g was reachable with no keypress at all.
+		# - A single BEL byte (0x07) in anything the terminal prints IS ctrl-g as far as fzf is concerned.
+		# - Measured under a pty: a bare \a made hop run `gh browse`, and --expect made it do so
+		#   whether or not the modal layer was on, so HOP_VIM=0 and --no-vim did not protect either.
+		# - `ignore` rather than fzf's default `abort`, so a stray bell does nothing at all.
+		#   Leaving ctrl-g unbound would make the same bell CLOSE the picker, which is a worse trade.
+		# - print(ctrl-g)+accept rather than --expect, so _hop_dispatch needs no new arm and, unlike
+		#   an --expect key, this one is a bind and could be guarded later.
+		# - Not alt-g: that is the shell widget that LAUNCHES hop. Not alt-b: that is fzf's backward-word.
+		--bind='ctrl-g:ignore'
+		--bind='alt-B:print(ctrl-g)+accept'
 	)
 	# HOP_FZF_HEIGHT is a real knob: set it EMPTY and fzf takes the whole screen.
 	# - Default-if-unset, not :-, because empty has to stay a distinguishable answer.
@@ -329,8 +401,24 @@ _hop_pick() {
 	local _hop_vim_prompt='hop ▸ ' _hop_vim_head=$header
 	local -x HOP_VIM_TO_NORMAL='' HOP_VIM_HELP_ON='' HOP_VIM_HELP_OFF=''
 	local -x HOP_VIM_TO_MENU='' HOP_VIM_PICK_KIND='' HOP_VIM_MENU_BACK=''
+
+	# The escape guard's state file: one private directory per picker, gone when the picker exits.
+	# - mktemp -d, not a predictable name: at mode 700 no other local user can write the mark.
+	# - A shared /tmp path would let anyone on the box hold the mark fresh and quarantine every verb.
+	# - Empty on failure, and _hop_vim_binds then emits the UNGUARDED keymap rather than a broken one.
+	# - emulate -L zsh sets localtraps, so this EXIT trap fires when _hop_pick returns and no sooner.
+	# - HUP covers closing the terminal window, which would otherwise leave the directory behind.
+	# - INT is deliberately absent: fzf catches ctrl-C itself and exits 130, so EXIT already covers cancel.
+	# - Measured, both halves: a 130 return runs the trap, and a raw SIGINT with no INT trap does not.
+	# - Adding INT would buy only that raw path, at the price of changing SIGINT in the enclosing $( ).
+	local guard_dir='' guard_f=''
 	if _hop_vim_on; then
-		_hop_vim_binds "$prev_cmd" "$reload" "$root" "$restore" "$query" "$drill" "$up"
+		guard_dir=$(mktemp -d "${${TMPDIR:-/tmp}:A}/hop-guard.XXXXXX" 2>/dev/null) || guard_dir=''
+		if [[ -n $guard_dir ]]; then
+			guard_f="${guard_dir}/mark"
+			trap "rm -rf -- ${(q)guard_dir} 2>/dev/null" EXIT HUP TERM
+		fi
+		_hop_vim_binds "$prev_cmd" "$reload" "$root" "$restore" "$query" "$drill" "$up" "$guard_f"
 	fi
 	args+=(--prompt="$_hop_vim_prompt" --header="$_hop_vim_head")
 
