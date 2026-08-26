@@ -55,6 +55,7 @@ _hop_usage() {
 	print -r -- '  hop --vim           force the modal layer on when HOP_VIM=0 is set'
 	print -r -- '  hop --doctor        dump config, tools and kind counts for a bug report'
 	print -r -- '  HOP_DEBUG=1 hop     log every key dispatch, then read it with --doctor'
+	print -r -- '  hop -V, --version   print the installed version'
 	print -r -- '  hop -h, --help      this text'
 	print -r -- ''
 	print -r -- '  kinds, * being in the default set:'
@@ -82,6 +83,25 @@ _hop_usage() {
 	print -r -- '  ^G and alt-g launch hop from a half-typed command line.'
 	print -r -- '  ^G replaces zsh send-break; use ^C to abandon a line, or rebind hop-widget.'
 	print -r -- '  A repo-root .hoprc is OPT-IN: it runs code, so set HOP_HOPRC=1 to allow it.'
+}
+
+# _hop_version -> print "hop X.Y.Z", plus "(describe)" when this install is a git checkout.
+# - VERSION is read with a zsh builtin `read`, never `cat`: no fork, even though this path is cold.
+# - Works with VERSION missing (falls back to 'unknown') and with git missing (drops the suffix).
+_hop_version() {
+	emulate -L zsh
+	local v='unknown' f="$HOP_HOME/VERSION" line
+	if [[ -r $f ]]; then
+		read -r line < "$f"
+		[[ -n $line ]] && v=$line
+	fi
+	local desc
+	desc=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null)
+	if [[ -n $desc ]]; then
+		print -r -- "hop ${v} (${desc})"
+	else
+		print -r -- "hop ${v}"
+	fi
 }
 
 _hop_repos() {
@@ -249,6 +269,10 @@ hop() {
 		case $1 in
 			-h | --help)
 				_hop_usage
+				return 0
+				;;
+			-V | --version)
+				_hop_version
 				return 0
 				;;
 			-a | --all)
