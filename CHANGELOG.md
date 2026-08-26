@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- The recording stubs the test suite uses now write each logged call in a single append, so two of them running at once can no longer splice their lines together.
+  Each stub wrote the command name, then every argument, then the newline, as separate appends, and a second stub landing between them corrupted the line.
+  The preview pane runs one of those stubs on every render, so this was reachable rather than theoretical: it recorded `batgh browse` in place of `gh browse`, which read as a verb that never ran and sent an entire investigation after the wrong component.
+  The race is far too rare to hold a test to, measured at one corrupted trial in six under sixty-way concurrency, so what is asserted instead is the property that makes interleaving impossible: exactly one append per call.
 - `hop --doctor` could hang forever and print nothing, which is the worst place for this bug: the issue template tells you to run exactly that command.
   It asked six external tools for their versions with stdin inherited, and the `fzf` on your `PATH` is not always the real binary.
   `fzf-tmux` ships alongside fzf and reads the caller's stdin with `cat <&0` whenever stdin is not a terminal, so `hop --doctor` from a script or a pipeline was enough to hang it with no output and nothing to report.
