@@ -336,12 +336,8 @@ pty_key() {
 		space) key=' ' ;;
 	esac
 	zpty -w -n "$HOP_PTY_NAME" "$key" || return 1
-	if [[ -n $want ]]; then
-		pty_wait_lines "$want" || return 1
-		# The event fired, but a long action chain can still have change-prompt etc. to go.
-		pty_settle 0.15
-		return 0
-	fi
+	# With a barrier the caller owns the settling, so do NOT sleep here as well.
+	[[ -n $want ]] && { pty_wait_lines "$want"; return $? }
 	pty_settle
 }
 
@@ -420,7 +416,7 @@ _hop_pty_kill() {
 
 # pty_close -> reap the child's whole process group, then drop the pty.
 # - `zpty -d` was proven NOT to reap: it leaves fzf orphaned and hung, reparented to init.
-# - The driver records its own $$ and zpty makes it a session leader, so -PID is the group.
+# - The driver records its own $$, which _hop_pty_kill resolves to the real group; it is NOT one.
 pty_close() {
 	emulate -L zsh
 	local p=''
@@ -466,13 +462,16 @@ pty_env() {
 	_hop_pty_shared || return 1
 	fixture_tmpdir ptyhome || return 1
 	export HOME=$REPLY
-	mkdir -p "$HOME/.config" "$HOME/.local/state" || return 1
+	mkdir -p "$HOME/.config" "$HOME/.local/state" "$HOME/.cache" || return 1
 	export XDG_CONFIG_HOME="$HOME/.config"
 	export XDG_STATE_HOME="$HOME/.local/state"
+	export XDG_CACHE_HOME="$HOME/.cache"
 	export HOP_CONFIG="$HOP_FIX_NOCONFIG"
 	export HOP_HISTFILE=/dev/null
 	export HOP_HOPRC=''
 	export HOP_VIM=1
+	# Pinned for the same reason fixture_pins pins it: an inherited HOP_DEBUG=1 makes hop log.
+	export HOP_DEBUG=''
 	# Empty, not unset: this is the one flag that keeps ESC[6n out of the pty.
 	export HOP_FZF_HEIGHT=''
 	export EDITOR="${HOP_PTY_SHARED}/editor" VISUAL="${HOP_PTY_SHARED}/editor"

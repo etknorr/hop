@@ -1,5 +1,9 @@
 # hop
 
+[![CI](https://img.shields.io/github/actions/workflow/status/etknorr/hop/ci.yml?branch=main&label=CI)](https://github.com/etknorr/hop/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![shell: zsh](https://img.shields.io/badge/shell-zsh-89e051.svg)](https://www.zsh.org/)
+
 A modal, fzf-driven navigator for large configuration monorepos.
 
 `hop` answers one question fast: **which unit did I mean, and take me there.** In a repo with
@@ -28,30 +32,155 @@ one install works across every repo you own. See [Configuring kinds](#configurin
 
 ## Install
 
-Requires `zsh` and [`fzf`](https://github.com/junegunn/fzf); `git` does the enumeration.
-Optional: [`bat`](https://github.com/sharkdp/bat) for highlighted previews, `gh` for the browse
-verb, and VS Code's `code` for the open verbs.
+Requires `zsh` and [`fzf`](https://github.com/junegunn/fzf) **0.60.3 or newer**; `git` does the
+enumeration. Optional: [`bat`](https://github.com/sharkdp/bat) for highlighted previews, `gh` for
+the browse verb, and VS Code's `code` for the open verbs.
+
+That fzf floor is newer than what some distros package, and it is not arbitrary. The picker passes
+`--accept-nth` together with `--select-1`: `--accept-nth` arrived in fzf 0.60.0 and only worked
+alongside `--select-1` from 0.60.3. Debian and Ubuntu currently package 0.44.x, which rejects the
+flag outright, so `apt install fzf` is not enough — install an
+[upstream release](https://github.com/junegunn/fzf/releases). `hop` checks once per shell and says
+so, rather than letting fzf fail with a bare `unknown option`.
+
+A zsh plugin is always **a local checkout plus one line that sources it.** There is nothing to
+compile and no binary to put on `$PATH`. What a plugin manager adds is bookkeeping: it does the
+clone, it can pin you to a released version, and it updates everything with one command. If you
+already use one, use it here. If you do not, the [manual clone](#manual-clone) is exactly what the
+others do underneath, and [`hop upgrade`](#updating) covers pinning and updating yourself.
+
+`hop` has to run **inside your interactive shell**, because its whole purpose is to `cd`. Anything
+that runs it in a subprocess or a container cannot work, which is also why there is no Homebrew
+formula and no container image.
+
+Each recipe below is given twice. Unpinned follows the default branch and changes when it changes;
+pinned sits on a release tag until you move it. Pinning is the better default for something you
+launch from muscle memory.
+
+### zinit
 
 ```zsh
-git clone git@github.com:etknorr/hop.git ~/.local/share/hop
+# follows main
+zinit light etknorr/hop
+
+# pinned to a release
+zinit ice ver'v0.1.0'
+zinit light etknorr/hop
 ```
 
-Add one line to `.zshrc`:
+### antidote
+
+In your plugin file, usually `~/.zsh_plugins.txt`:
+
+```
+# follows main
+etknorr/hop
+
+# pinned to a release
+etknorr/hop branch:v0.1.0
+```
+
+The annotation is called `branch:`, but it is handed straight to `git clone`, so a tag pins fine.
+
+### sheldon
+
+In `~/.config/sheldon/plugins.toml`:
+
+```toml
+# follows main
+[plugins.hop]
+github = "etknorr/hop"
+
+# pinned to a release
+[plugins.hop]
+github = "etknorr/hop"
+tag = "v0.1.0"
+```
+
+Then `sheldon lock --update`.
+
+### oh-my-zsh
+
+Oh-my-zsh has no fetcher, so the clone into its custom plugins directory is yours to make:
+
+```zsh
+# follows main
+git clone https://github.com/etknorr/hop.git \
+  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
+
+# pinned to a release
+git clone --branch v0.1.0 https://github.com/etknorr/hop.git \
+  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
+```
+
+Then add it to the list in `.zshrc`, **before** `source $ZSH/oh-my-zsh.sh`:
+
+```zsh
+plugins=(git hop)
+```
+
+### Manual clone
+
+No manager, one line of `.zshrc`, and nothing between you and the checkout:
+
+```zsh
+# follows main
+git clone https://github.com/etknorr/hop.git ~/.local/share/hop
+
+# pinned to a release
+git clone --branch v0.1.0 https://github.com/etknorr/hop.git ~/.local/share/hop
+```
 
 ```zsh
 source ~/.local/share/hop/hop.zsh
 ```
 
-That is the whole install. `HOP_HOME` resolves to `hop.zsh`'s own directory, so the install can live
-anywhere and be moved without editing anything.
+`HOP_HOME` resolves to `hop.zsh`'s own directory, so the checkout can live anywhere and be moved
+without editing anything. `hop.plugin.zsh` sits alongside it purely because that is the filename
+plugin managers look for; both do the same thing.
 
-**Completions** need `hop.zsh` sourced *before* `compinit`. `hop.zsh` adds `$HOP_HOME/completions`
-to `fpath`, which only takes effect if `compinit` has not already run. If your `.zshrc` calls
-`compinit` first, symlink into a directory already on `fpath` instead:
+### Updating
+
+A manager owns the checkouts it made, so update there: `zinit update etknorr/hop`,
+`antidote update`, `sheldon lock --update`, or re-clone the oh-my-zsh directory. Bump the pinned
+version in your config first if you set one.
+
+A manual clone updates itself:
+
+```zsh
+hop upgrade --check     # what is installed vs what is released; changes nothing
+hop upgrade             # fast-forward main to the newest release, staying on main
+hop upgrade 0.1.0       # pin to exactly that release, detached
+exec zsh                # reload; a sourced function cannot replace itself mid-call
+```
+
+The two forms land in different places on purpose. Bare `hop upgrade` fast-forwards your local
+`main`, so `git pull` and the next `hop upgrade` both keep working. Naming a version is a **pin**,
+which detaches `HEAD` at that tag; a bare `hop upgrade` brings you back to `main`, saying so as it
+goes.
+
+Between releases, `main` is normally *ahead* of the newest tag. `hop upgrade` reports that as up to
+date rather than moving you backwards onto the tag.
+
+`hop upgrade` refuses rather than acts when the checkout is dirty, sits on a branch other than
+`main`, is detached somewhere that is not a release tag, has no `origin` remote, or has a `main`
+that has diverged from the release. It never runs `git clean`, never hard-resets, never merges and
+never forces anything: `main` only ever moves by fast-forward. Untracked files are never touched —
+if one sits where the new release ships a file, that is a refusal too.
+
+`--check` never touches your worktree or `HEAD`. It does fetch tags, so it writes refs under `.git`.
+
+### Completions
+
+Completions need `hop.zsh` sourced *before* `compinit`. `hop.zsh` adds `$HOP_HOME/completions` to
+`fpath`, which only takes effect if `compinit` has not already run. Most managers handle this. If
+your `.zshrc` calls `compinit` first, symlink into a directory already on `fpath` instead:
 
 ```zsh
 ln -s ~/.local/share/hop/completions/_hop ~/.zfunc/_hop
 ```
+
+### Configuring it
 
 With no config at all, `hop` loads every shipped preset and works immediately in any repo following
 a common convention. To teach it your own layout:
@@ -73,6 +202,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `hop /` or `hopr` | `cd` to the repo root |
 | `hop -` | `cd -` |
 | `hopw` | `cd` to the workspace containing `$PWD`, deepest match winning |
+| `hop upgrade` | move a manual clone to the newest release; see [Updating](#updating) |
 | `^G` or `alt-g` | open `hop` from a half-typed command line, which survives |
 
 `^G` replaces zsh's `send-break`. Use `^C` to abandon a line, or rebind `hop-widget`.
@@ -90,6 +220,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `--vim` | force the modal layer on when `HOP_VIM=0` is set |
 | `--doctor` | dump config, tools and kind counts for a bug report |
 | `--doctor=short` | the same, minus paths and names; safe to paste publicly |
+| `-V`, `--version` | print the installed version |
 | `-h`, `--help` | usage, listing the kinds actually registered |
 
 `-c` is the one to remember. `hop -c -k file pr` finds a file by name inside the subtree you are
@@ -365,11 +496,13 @@ every day.
 
 ```
 hop.zsh                 entry point: hop, hopr, hopw, the ^G widget, config loading
+hop.plugin.zsh          the name plugin managers look for; sources hop.zsh and nothing else
 lib/dsl.zsh             the hop_kind registry and the generic enumeration engine
 lib/providers.zsh       row primitives, plus families too irregular to declare
 lib/ui.zsh              the single fzf call and the whole modal keymap
 lib/actions.zsh         the verbs: cd, open, edit, copy, browse, and frecency
 lib/workspaces.zsh      workspace config parsing and lookup
+lib/upgrade.zsh         hop upgrade: the release-tag self-update, and every refusal it makes
 presets/                shipped kind declarations, loaded with hop_preset
 bin/hop-kinds           renders the `:` menu and reloads rows; never runs fzf
 bin/hop-preview         the preview pane, and the `?` keymap overlay
@@ -394,9 +527,11 @@ workspaces.example      a workspace list to copy
 | `HOP_WORKSPACES` | unset | colon-separated workspaces, overrides the file |
 | `HOP_REPOS` | every repo in every workspace | colon-separated repo list for `-R` |
 | `HOP_HISTFILE` | `~/.local/state/hop/history` | frecency history |
+| `HOP_CLIPBOARD` | unset | overrides the copy verb's clipboard command, skipping the probe |
 | `HOP_VIM` | `1` | `0` disables the modal layer |
 | `HOP_FZF_HEIGHT` | `80%` | picker height; **empty means fullscreen** |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
+| `HOP_FZF_MIN` | `0.60.3` | the fzf floor; lower it if the check is wrong about your build |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |
 
 ### `HOP_FZF_HEIGHT`
@@ -420,9 +555,11 @@ execution path, so it now requires `HOP_HOPRC=1`. Only enable it for repos you w
 ### Degradations
 
 Every dependency beyond `zsh`, `fzf` and `git` is optional and degrades to something that works: no
-`bat` means plain `cat`; no `gh` means the browse verb explains why; no `code` means `$EDITOR`. A
-kind whose families are absent from the current repo emits zero rows and **zero** stderr, which is
-what lets one config work across every repo without noise.
+`bat` means plain `cat`; no `gh` means the browse verb explains why; no `code` means `$EDITOR`; no
+clipboard tool means the copy verb names what to install instead of copying nothing silently. The
+copy verb itself tries `pbcopy`, `wl-copy`, `xclip`, `xsel`, then `clip.exe`, so it works unmodified
+on macOS, Wayland, X11 and WSL. A kind whose families are absent from the current repo emits zero
+rows and **zero** stderr, which is what lets one config work across every repo without noise.
 
 ---
 

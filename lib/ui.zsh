@@ -111,7 +111,11 @@ _hop_vim_binds() {
 
 	# Esc clears the query on the way back to NORMAL, exactly as it drops the filter in k9s.
 	# - A query still displayed but no longer filtering anything is worse than no query at all.
-	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+clear-query+change-prompt(> )+change-header(${nh})+${prev_restore}"
+	# - The trailing `search()` re-matches, because `disable-search` only stops FUTURE matching.
+	# - Without it, esc out of a non-matching query left NORMAL holding a permanently empty list.
+	# - It has to come AFTER clear-query, or it re-runs the search that matched nothing.
+	# - `search()` needs fzf 0.59.0, which HOP_FZF_MIN already covers; an unknown action aborts fzf.
+	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+clear-query+search()+change-prompt(> )+change-header(${nh})+${prev_restore}"
 
 	# Esc has three meanings, resolved from fzf's own exported state rather than a file.
 	# - In the kind menu it goes back to the view you came from, which is the k9s behaviour.
@@ -198,6 +202,67 @@ _hop_vim_binds() {
 		_hop_vim_head=$nh
 		args+=(--disabled)
 	fi
+}
+
+# The oldest fzf that can run the picker below, and why it is this exact patch release.
+# - 0.60.0 added `--accept-nth`, which is how a row's dir and preview reach the parent shell.
+# - 0.60.3 made `--accept-nth` work alongside `--select-1`, and _hop_pick passes BOTH every call.
+# - So 0.60.0 would break `hop vpc prod` jumping to a unique match, which is hop's best trick.
+# - Debian and Ubuntu package 0.44.x, where the picker dies with `unknown option: --accept-nth`.
+# - Sources: fzf CHANGELOG, "Added `--accept-nth`" under 0.60.0, and #4287 under 0.60.3.
+# - Overridable, because a guard that locks out a working fzf is worse than the bug it prevents.
+typeset -g HOP_FZF_MIN=${HOP_FZF_MIN:-0.60.3}
+
+# _hop_ver_lt <a> <b> -> 0 when dotted version a is older than b, comparing three fields.
+# - Non-digits are stripped per field rather than evaluated, because HOP_FZF_MIN is user-settable.
+# - A bare `local -i` here made `0.60.3rc1` abort the caller with `bad math expression`.
+_hop_ver_lt() {
+	emulate -L zsh
+	local -a x=(${(s:.:)1}) y=(${(s:.:)2})
+	local -i i
+	local a b
+	for i in 1 2 3; do
+		a=${${x[i]:-0}//[^0-9]/}
+		b=${${y[i]:-0}//[^0-9]/}
+		(( ${a:-0} < ${b:-0} )) && return 0
+		(( ${a:-0} > ${b:-0} )) && return 1
+	done
+	return 1
+}
+
+# _hop_fzf_ver -> REPLY is fzf's dotted version, memoized so a shell forks for it at most once.
+# - hop.zsh is sourced by EVERY interactive shell, so this must never run at source time.
+# - An empty REPLY means "could not tell", and every caller treats that as permission to proceed.
+_hop_fzf_ver() {
+	emulate -L zsh
+	if (( ${+_HOP_FZF_VER} )); then
+		REPLY=$_HOP_FZF_VER
+		return 0
+	fi
+	local out v
+	out=$(fzf --version 2>/dev/null)
+	# fzf prints `0.60.3 (abc1234)`, so only the leading run of digits and dots is ever read.
+	v=${out%%[^0-9.]*}
+	[[ $v == <->.<->(.<->|) ]] || v=''
+	typeset -g _HOP_FZF_VER=$v
+	REPLY=$v
+	return 0
+}
+
+# _hop_fzf_ok -> 0 when the installed fzf can run the picker, else it explains and fails.
+# - Called from hop(), never from this file's top level, so a shell that never hops never forks.
+_hop_fzf_ok() {
+	emulate -L zsh
+	local REPLY
+	_hop_fzf_ver
+	local v=$REPLY
+	[[ -n $v ]] || return 0
+	_hop_ver_lt "$v" "$HOP_FZF_MIN" || return 0
+	print -ru2 -- "hop: fzf ${v} is too old; hop needs ${HOP_FZF_MIN} or newer."
+	print -ru2 -- 'hop: the picker passes --accept-nth with --select-1, which older fzf mishandles.'
+	print -ru2 -- 'hop: a distro package is the usual cause; Debian and Ubuntu ship fzf 0.44.x.'
+	print -ru2 -- 'hop: install an upstream release: https://github.com/junegunn/fzf/releases'
+	return 1
 }
 
 # _hop_pick <label> <header> [query] [reload] [root] [drill] [restore] [up]  <targets on stdin

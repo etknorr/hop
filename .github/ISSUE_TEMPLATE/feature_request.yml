@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a new capability, verb, or kind shape for hop.
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before requesting a new kind *shape*, check whether `--dirs`, `--files`, `--marker`, or
+        `--fn` in your own `config.zsh` already covers it — most repo-specific navigation belongs
+        there, not in hop itself. See the README's "Configuring kinds" section.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do that hop doesn't support today?
+      description: Describe the workflow, not just the missing feature. What does hop do instead right now?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: What would the new command, flag, or hop_kind option do? A worked example (a config snippet or a keystroke sequence) is more useful than a description.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried instead?
+      description: Existing hop_kind options, config, or workarounds you've already ruled out.
+    validations:
+      required: false
