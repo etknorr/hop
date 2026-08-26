@@ -22,7 +22,6 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   Both read from `/dev/null` now, and each is covered by a test that hangs if its redirect is removed.
 - Eight more test assertions that a floor kept from failing.
   `assert_ge N` reads like a bound but asserts a size, so it passes on every larger value too: the modal keymap check sat at 90 against 97 real keys and stayed green with seven of them deleted, and the `--help` registry check sat at 2 against 8 kinds and stayed green with `helm` gone from the kind list entirely.
-  The `.github` YAML check sat at 1, so a glob rotted to one subdirectory left the workflow file parsed by nothing and reported by nothing.
   Each is an exact set or an exact count now.
   A floor of 1 used honestly, to prove evidence exists before asserting over it, is kept and spelled that way.
 - One integration test was reading the wrong evidence rather than too little of it.
