@@ -1,0 +1,130 @@
+suite_cache
+  ✓ a kind with zero targets warms to a real 0 and is then hidden
+  ✓ git add with HEAD unchanged surfaces a newly staged kind instead of hiding it forever
+suite_clipboard
+  ✓ pbcopy is chosen when every candidate is present
+  ✓ wl-copy is chosen when pbcopy is absent
+  ✓ xclip is chosen when pbcopy and wl-copy are absent
+  ✓ xsel is chosen when pbcopy, wl-copy and xclip are absent
+  ✓ clip.exe is the last resort, chosen only when nothing else is present
+  ✓ HOP_CLIPBOARD overrides the probe even when pbcopy is available
+  ✓ HOP_CLIPBOARD word-splits so extra arguments reach the command
+  ✓ the exact text handed to hop is what reaches the clipboard tool, unmodified
+  ✓ the copy is a stdin pipe, never an argv, even for tools that take extra flags
+  ✓ no clipboard tool available: one clear stderr line, non-zero exit, nothing invoked
+  ✓ no clipboard tool available: the message names install options, not a stack trace
+  ✓ a failing clipboard command is reported, not swallowed as success
+suite_completions
+  ✓ _hop_versions offers every tag, newest first, by default
+  ✓ _hop_versions still offers every tag as SEPARATE candidates under column.ui=always
+  ✓ _hop_versions has nothing to offer when the repo has no release tags
+suite_core
+  ✓ the stub fzf really is the only fzf a probe can see
+  ✓ hop -w reports a non-zero fzf status instead of swallowing it
+  ✗ hop -R reports the same status the same way, so the two pickers cannot drift
+      assert_contains: substring not found
+      - needle: hop: fzf exited with status 2
+      + haystack: 
+      assert_eq: values differ
+      - expected: 2
+      + actual: 142
+  ✗ hop -w on a no-match says so, rather than printing nothing at all
+      assert_contains: substring not found
+      - needle: hop: no match for: nosuchworkspace
+      + haystack: 
+      assert_eq: values differ
+      - expected: 1
+      + actual: 142
+  ✓ hop -w on a user cancel stays silent and succeeds
+  ✓ esc out of the repo picker is silent too, which is what makes 130 a shared rule
+  ✓ both pickers route through the one _hop_fzf_status, so the ladder cannot be duplicated
+  ✓ _hop_ws_picker leaves no _hop_key or _hop_st behind in the calling shell
+  ✓ HOP_DEBUG=1 logs a pick that found no match, which used to log nothing at all
+  ✓ HOP_DEBUG=1 logs a user cancel, so an abandoned pick is distinguishable from a crash
+  ✓ HOP_DEBUG=1 logs a hard fzf failure, the case a bug report cannot diagnose without it
+  ✓ the row count reaches the log, so "empty list" and "list did not match" are tellable apart
+  ✗ suite_core: suite did not finish (exit 142)
+      group killed by the 120s bound; a test may await a terminal
+
+### capture metadata
+run: 25
+exit: 142
+elapsed_s: 401
+loadavg_before:  85.42 101.33 79.74 
+loadavg_after:  88.04 96.62 85.14 
+date_utc: 2026-08-26T18:24:35Z
+### failure snapshot
+--- failing tests:
+  ✗ hop -R reports the same status the same way, so the two pickers cannot drift
+  ✗ hop -w on a no-match says so, rather than printing nothing at all
+  ✗ suite_core: suite did not finish (exit 142)
+--- failure context (5 lines after each):
+  ✗ hop -R reports the same status the same way, so the two pickers cannot drift
+      assert_contains: substring not found
+      - needle: hop: fzf exited with status 2
+      + haystack: 
+      assert_eq: values differ
+      - expected: 2
+--
+  ✗ hop -w on a no-match says so, rather than printing nothing at all
+      assert_contains: substring not found
+      - needle: hop: no match for: nosuchworkspace
+      + haystack: 
+      assert_eq: values differ
+      - expected: 1
+--
+  ✗ suite_core: suite did not finish (exit 142)
+      group killed by the 120s bound; a test may await a terminal
+
+### capture metadata
+run: 25
+exit: 142
+--
+  ✗ hop -R reports the same status the same way, so the two pickers cannot drift
+  ✗ hop -w on a no-match says so, rather than printing nothing at all
+  ✗ suite_core: suite did not finish (exit 142)
+--- failure context (5 lines after each):
+--- processes:
+38047 84926       20:01 /bin/zsh -c source /Users/eknorr/.claude/shell-snapshots/snapshot-zsh-1787599189442-z8a0jl.sh 2>/dev/null || true && setopt NO_EXTENDED_
+38051 38047       20:01 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+75609     1       00:54 zsh /private/tmp/hop-wt-flake/tests/run --_suite /private/tmp/hop-wt-flake/tests/suite_dsl.zsh
+76282 53684       00:22 perl -e \012\011\011my $secs = shift @ARGV;\012\011\011my $pid = fork();\012\011\011die "fork: $!" unless defined $pid;\012\011\011if ($
+76287 76282       00:22 zsh /private/tmp/hop-changelog/tests/run --_suite /private/tmp/hop-changelog/tests/suite_pty.zsh
+76822 76816       00:00 perl -e \012\011\011my $secs = shift @ARGV;\012\011\011my $pid = fork();\012\011\011die "fork: $!" unless defined $pid;\012\011\011if ($
+76832 76822       00:00 zsh -f -c export HOME=/private/tmp/hoprel/arm_AFTER/tmp/hop-home.gzEvp6\012export XDG_CONFIG_HOME=/private/tmp/hoprel/arm_AFTER/tmp/hop-
+76320 38051       00:22 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+76323 76320       00:22 zsh -f /private/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T/hop-ptyshared.6Lvd9U/driver.zsh
+76814 76323       00:01 /bin/sh /private/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T/hop-ptyshared.6Lvd9U/gh browse -- terraform/alpha/vpc
+76750 76287       00:04 zsh /private/tmp/hop-changelog/tests/run --_suite /private/tmp/hop-changelog/tests/suite_pty.zsh
+76753 76750       00:04 fzf --no-height --layout=reverse --bind o:print(ctrl-o)+accept
+--- surviving fixture dirs under TMPDIR:
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.4IZXca
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.6lt0aT
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.Du8wF6
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.FmX3D7
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.IRDtsb
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.JABIIs
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.Ye5nYK
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.BMl5Lh
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.GYTk36
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.P1ZJIQ
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.UU6E6Q
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.WYEdbT
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.asScOK
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.c7gh2a
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.GbPFOI
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.IuBNaw
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.TLrA18
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.s39wEM
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.x91F7g
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-config.BUTd1a
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-config.RYaGo1
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-config.xGywGP
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-core.Sc6Itk
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-core.nLMXFA
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-core.p6T4xv
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.07ox2I
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0BFXsT
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0ENxSS
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0Edb7L
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0HrLtG

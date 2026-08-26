@@ -1,0 +1,34 @@
+commit: 87be1ed
+runs requested: 45
+started: 2026-08-26T17:32:30Z
+
+run-1      ok       57s  load=  ok  567 passed, 0 failed, 7 skipped  in 57.18s
+run-2      ok       61s  load=  ok  567 passed, 0 failed, 7 skipped  in 61.01s
+run-3      ok       57s  load=  ok  567 passed, 0 failed, 7 skipped  in 57.30s
+run-4      FAIL     58s  load=  FAIL  566 passed, 1 failed, 7 skipped  in 57.73s
+run-5      ok       58s  load=  ok  567 passed, 0 failed, 7 skipped  in 58.01s
+run-6      ok       54s  load=  ok  567 passed, 0 failed, 7 skipped  in 53.86s
+run-7      ok       55s  load=  ok  567 passed, 0 failed, 7 skipped  in 54.46s
+run-8      ok       57s  load=  ok  567 passed, 0 failed, 7 skipped  in 57.37s
+run-9      ok       55s  load=  ok  567 passed, 0 failed, 7 skipped  in 55.36s
+run-10     ok       57s  load=  ok  567 passed, 0 failed, 7 skipped  in 56.53s
+run-11     ok       56s  load=  ok  567 passed, 0 failed, 7 skipped  in 55.67s
+run-12     FAIL     54s  load=  FAIL  566 passed, 1 failed, 7 skipped  in 54.56s
+run-13     ok       55s  load=  ok  567 passed, 0 failed, 7 skipped  in 54.15s
+run-14     ok       61s  load=  ok  567 passed, 0 failed, 7 skipped  in 61.47s
+run-15     ok       93s  load=  ok  567 passed, 0 failed, 7 skipped  in 92.70s
+run-16     FAIL     84s  load=  FAIL  566 passed, 1 failed, 7 skipped  in 83.80s
+run-17     ok       86s  load=  ok  567 passed, 0 failed, 7 skipped  in 85.72s
+run-18     ok       79s  load=  ok  567 passed, 0 failed, 7 skipped  in 79.07s
+run-19     FAIL     85s  load=  FAIL  566 passed, 1 failed, 7 skipped  in 85.50s
+run-20     ok      205s  load=  ok  567 passed, 0 failed, 7 skipped  in 205.57s
+run-21     ok       69s  load=  ok  567 passed, 0 failed, 7 skipped  in 68.80s
+run-22     FAIL    400s  load=  
+run-23     FAIL    400s  load=  
+run-24     FAIL    409s  load=  
+run-25     FAIL    401s  load=  
+run-26     FAIL    249s  load=  FAIL  556 passed, 1 failed, 7 skipped  in 248.97s
+run-27     ok       69s  load=  ok  567 passed, 0 failed, 7 skipped  in 69.23s
+run-28     ok       79s  load=  ok  567 passed, 0 failed, 7 skipped  in 78.58s
+run-29     ok      485s  load=  ok  567 passed, 0 failed, 7 skipped  in 484.77s
+run-30     ok       70s  load=  ok  567 passed, 0 failed, 7 skipped  in 70.68s

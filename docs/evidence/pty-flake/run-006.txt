@@ -1,0 +1,603 @@
+suite_cache
+  ✓ a kind with zero targets warms to a real 0 and is then hidden
+  ✓ git add with HEAD unchanged surfaces a newly staged kind instead of hiding it forever
+suite_clipboard
+  ✓ pbcopy is chosen when every candidate is present
+  ✓ wl-copy is chosen when pbcopy is absent
+  ✓ xclip is chosen when pbcopy and wl-copy are absent
+  ✓ xsel is chosen when pbcopy, wl-copy and xclip are absent
+  ✓ clip.exe is the last resort, chosen only when nothing else is present
+  ✓ HOP_CLIPBOARD overrides the probe even when pbcopy is available
+  ✓ HOP_CLIPBOARD word-splits so extra arguments reach the command
+  ✓ the exact text handed to hop is what reaches the clipboard tool, unmodified
+  ✓ the copy is a stdin pipe, never an argv, even for tools that take extra flags
+  ✓ no clipboard tool available: one clear stderr line, non-zero exit, nothing invoked
+  ✓ no clipboard tool available: the message names install options, not a stack trace
+  ✓ a failing clipboard command is reported, not swallowed as success
+suite_completions
+  ✓ _hop_versions offers every tag, newest first, by default
+  ✓ _hop_versions still offers every tag as SEPARATE candidates under column.ui=always
+  ✓ _hop_versions has nothing to offer when the repo has no release tags
+suite_core
+  ✓ the stub fzf really is the only fzf a probe can see
+  ✓ hop -w reports a non-zero fzf status instead of swallowing it
+  ✓ hop -R reports the same status the same way, so the two pickers cannot drift
+  ✓ hop -w on a no-match says so, rather than printing nothing at all
+  ✓ hop -w on a user cancel stays silent and succeeds
+  ✓ esc out of the repo picker is silent too, which is what makes 130 a shared rule
+  ✓ both pickers route through the one _hop_fzf_status, so the ladder cannot be duplicated
+  ✓ _hop_ws_picker leaves no _hop_key or _hop_st behind in the calling shell
+  ✓ HOP_DEBUG=1 logs a pick that found no match, which used to log nothing at all
+  ✓ HOP_DEBUG=1 logs a user cancel, so an abandoned pick is distinguishable from a crash
+  ✓ HOP_DEBUG=1 logs a hard fzf failure, the case a bug report cannot diagnose without it
+  ✓ the row count reaches the log, so "empty list" and "list did not match" are tellable apart
+  ✓ HOP_DEBUG unset still writes nothing, so the new call site stays opt-in
+  ✓ the fixture really is reached through a symlink, or the cases below prove nothing
+  ✓ hop -c finds targets in a subtree entered through a symlink
+  ✓ and the surviving rows are the ones under that subtree, not the whole repo
+  ✓ hop -c still narrows, so the symlink fix did not turn the filter off
+  ✓ hop -c under a subtree with no targets still says so, by its own message
+  ✓ a directory whose name holds a backslash is not mangled, which awk -v did
+  ✓ and that backslash subtree offers its own row, not a sibling
+  ✓ the -c filter no longer forks awk, per the same rule providers.zsh already follows
+  ✓ a plainly assigned HOP_CONFIG is exported, which is what a .zshrc line needs
+  ✓ HOP_HOPRC is not invented when it was never set
+  ✓ HOP_HOPRC is exported once the user does set it, so the opt-in survives into a child
+  ✓ bin/hop-kinds sees the user kinds, which is what the : menu renders
+  ✓ the reload command forwards HOP_CONFIG, so alt-a regenerates with the user kinds
+  ✓ and running that reload command really does emit the user rows, not unknown kind
+  ✓ the reload child keeps zsh -f, so a reload can never source the user rc files
+  ✓ a HOP_CONFIG assigned AFTER hop.zsh was sourced still reaches the reload child
+  ✓ with HOP_FZF_HEIGHT unset the picker still gets its default 80% geometry
+  ✓ and an empty HOP_FZF_HEIGHT asks for no height at all, which is what a pty needs
+  ✓ the stub answers --version without reading stdin, exactly as the real fzf does
+  ✓ and a whole probe finishes when the runner is handed stdin that never reaches EOF
+suite_dsl
+  ✓ --dirs emits one row per child directory
+  ✓ --dirs at --depth 2 names parent/child, and never the container alone
+  ✓ --dirs at depth 1 over the same tree returns the containers instead
+  ✓ --dirs takes a comma-separated list of bases
+  ✓ --dirs on an absent base emits nothing, silently
+  ✓ --marker maps path segments onto columns through the matching layout
+  ✓ a shorter layout catches a shorter path
+  ✓ layouts are tried LONGEST first, so a deep path cannot fall into a shallow layout
+  ✓ a trailing ... joins every remaining segment into the name
+  ✓ a path matching NO layout is not a target, which is what excludes a shared include
+  ✓ with no --layout at all the name is the basename and the scope its parent
+  ✓ a marker with no --under scans the whole repo
+  ✓ --files maps segments onto columns, and - discards one
+  ✓ --strip-ext runs before the layout, so the extension never lands in a column
+  ✓ without --strip-ext the extension stays in the column it landed in
+  ✓ --files rows point at the file, with its directory as the cd target
+  ✓ --name-template composes a name out of other columns
+  ✓ --trim strips a naming prefix off a column
+  ✓ --name-template runs AFTER --trim, so it sees the trimmed value
+  ✓ --exclude drops a matching path before it becomes a row
+  ✓ without --exclude that same path IS a row, so the option is doing the work
+  ✓ --scope-literal overrides the scope column on every row
+  ✓ --preview walks its candidate list in order
+  ✓ a 0-byte candidate is SKIPPED, because an empty pane is worse than the next candidate
+  ✓ a glob candidate expands alphabetically and also skips 0-byte files
+  ✓ --preview-skip removes a generated file from a glob match
+  ✓ without --preview-skip that generated file wins, so the option is doing the work
+  ✓ a directory with no candidate at all falls back to the directory itself
+  ✓ redeclaring a kind REPLACES it rather than adding a second entry
+  ✓ and it keeps its ORIGINAL position in the menu order
+  ✓ the redeclaration is what takes effect
+  ✓ a redeclaration can also change the default flag
+  ✓ hop_kind with no shape option is rejected
+  ✓ hop_kind with an unknown option is rejected, and the option is named
+  ✓ a value-taking option with no value is rejected rather than eating the next flag
+  ✓ --fn naming an undefined function is rejected
+  ✓ --fn naming a real function is accepted
+  ✓ a non-numeric --depth is rejected
+  ✓ a zero --depth is rejected, since depth 0 would name the base itself
+  ✓ a missing kind name is rejected
+  ✓ hop_preset on an unknown name fails loudly rather than loading nothing
+  ✓ hop_preset loads the kinds a shipped preset declares
+  ✓ asking for a kind nobody declared says so on stderr
+  ✓ a bare _hop_provider_<name> function still works without any registration
+suite_editor_path
+  ✓ _hop_need accepts a bare name found on PATH
+  ✓ _hop_need rejects a bare name missing from PATH, with the original wording
+  ✓ _hop_need accepts an absolute path to an executable
+  ✓ _hop_need rejects an absolute path that does not exist, without claiming "not installed"
+  ✓ _hop_need rejects an absolute path that exists but is not executable
+  ✓ _hop_need accepts a relative path (contains a slash) resolved against the cwd
+  ✓ a real absolute-path $EDITOR is invoked to edit a file (alt-o)
+  ✓ an absolute-path $EDITOR that does not exist fails, and the editor is never invoked
+suite_fzf_version
+  ✓ the fzf stub is in place, so nothing below touches the real fzf
+  ✓ the only fzf a probe can reach is the stub
+  ✓ the stub refuses to emulate the picker, so a stray UI call fails instead of passing
+  ✓ sourcing hop.zsh forks nothing, because every shell pays for that
+  ✓ an fzf older than the minimum is refused, with the version, the need and the fix
+  ✓ the message names the flag combination that actually breaks
+  ✓ the exact minimum passes
+  ✓ one patch release below the minimum is refused
+  ✓ a newer fzf passes, including a two-digit minor
+  ✓ a major-version bump passes rather than reading as older
+  ✓ a two-field version is compared as if the patch were zero
+  ✓ an unparseable version proceeds, because locking out a working fzf is worse
+  ✓ no version output at all also proceeds
+  ✓ the version is read at most once per shell, however often hop runs
+  ✓ an unparseable version is memoized too, so it cannot fork on every call
+  ✓ the floor covers every fzf action the keymap uses, including search()
+  ✓ HOP_FZF_MIN can be lowered, for an fzf that is fine despite its version string
+  ✓ a HOP_FZF_MIN with a non-numeric field still returns a verdict, not a math error
+  ✓ a garbage HOP_FZF_MIN fails open rather than blocking every hop
+  ✓ the shipped minimum is the one the changelog justifies
+  ✓ _hop_ver_lt orders versions field by field, not as strings
+  ✓ _hop_ver_lt is false for equal and for newer versions
+  ✓ hop itself refuses on a too-old fzf, before it reaches the picker
+  - hop refuses when fzf is absent (skipped: taking the stub off PATH finds the REAL fzf and hangs)
+suite_guard
+  ✓ bin/hop-guard is executable
+  ✓ mark writes a clock reading a check can compare against
+  ✓ a verb landing inside the window is refused
+  ✓ the same verb outside the window runs untouched
+  ✓ the window is a real threshold, not a constant answer
+  ✓ a refused verb pushes the window forward, so a long payload cannot outlast it
+  ✓ a verb that RUNS does not re-arm, so the chain ends at the first real keypress
+  ✓ no mark at all means no escape arrived, so the verb runs
+  ✓ an unreadable state file fails open rather than closed
+  ✓ a corrupt mark fails open instead of aborting
+  ✓ a mark from the future fails open, so a backwards clock cannot quarantine the verbs
+  ✓ a malformed window falls back to the default instead of aborting
+  ✓ HOP_GUARD_WINDOW=0 is the off switch a timing heuristic has to have
+  ✓ check with no action prints nothing, rather than inventing an ignore
+  ✓ an unknown subcommand is silent and successful, since fzf shows a bind error as a dead key
+suite_integration
+  ✓ default-kind enumeration is under its 5000ms budget
+  ✓ default-kind enumeration yields every target in the fixture, silently
+  ✓ every enumerated row carries an absolute dir that exists
+  ✓ 'network staging' matches exactly one row under --exact
+  ✓ hop network staging cds straight to the match with no interaction
+  ✓ 'queueing' matches exactly one row under --exact
+  ✓ hop queueing cds straight to the match with no interaction
+  ✓ a --version query neither reads stdin nor erases the records the other tests read
+  ✓ the stub exits on a --version query even when stdin never reaches EOF
+  ✓ the recorded fzf call is the interactive picker, not the headless matcher
+  ✓ the picker passes --exact to fzf
+  ✓ the picker passes --select-1, which is what makes a unique query jump
+  ✓ --exact narrows 'abg' to a single row where fuzzy matches several
+  ✓ hop -c in a subtree shows fewer rows than the repo root
+  ✓ every row hop -c offers is inside $PWD
+  ✓ hop -c with no match in the subtree says so and returns non-zero
+  ✓ hopr cds to the repo root from a nested directory
+  ✓ hopr outside a git repo says so and returns non-zero
+  ✓ hopw cds to the workspace containing $PWD
+  ✓ hopw outside every configured workspace errors cleanly
+  ✓ a scratch repo produces no rows for the shaped kinds
+  ✓ hop in a scratch repo degrades to one stderr line and a non-zero exit
+  ✓ the dir kind still gets a scratch repo out of trouble
+  ✓ the worktree fixture is a real second checkout
+  ✓ enumerating a worktree yields paths inside the worktree, never the main checkout
+  ✓ the worktree preview target is the worktree copy of the file
+  ✓ every component of the become() scan list found files
+  ✓ no become() anywhere in the executable source
+  ✓ the no-bat PATH really has no bat on it
+  ✓ hop-preview on a directory exits 0 with empty stderr
+  ✓ hop-preview on a text file exits 0 with empty stderr and shows the content
+  ✓ hop-preview on a missing path exits 0 with empty stderr and one warning
+  ✓ hop-preview with no arguments exits 0 with empty stderr
+  ✓ hop-preview --keys renders both modes for the ? overlay
+  - real checkout: hop stays fast and quiet at real scale (skipped: set HOP_TEST_REPO to a git checkout to enable these)
+suite_keymap
+  ✓ j is down, restoring the preview
+  ✓ k is up, restoring the preview
+  ✓ g is first, restoring the preview
+  ✓ G is last, restoring the preview
+  ✓ ctrl-d is half-page-down, restoring the preview
+  ✓ ctrl-u is half-page-up, restoring the preview
+  ✓ o prints ctrl-o and accepts (open in code)
+  ✓ O prints ctrl-t and accepts (open folder)
+  ✓ e prints alt-o and accepts (edit)
+  ✓ y prints ctrl-y and accepts (copy)
+  ✓ Y prints alt-y and accepts (copy file)
+  ✓ b prints ctrl-g and accepts (browse/github)
+  ✓ p toggles the preview
+  ✓ q aborts
+  ✓ r reloads the restore command, when one was given
+  ✓ l prints ctrl-l and accepts, when a drill target was given
+  ✓ h prints ctrl-h and accepts, when an up-level target was given
+  ✓ ? toggles the keys overlay, reading its own state from FZF_PREVIEW_LABEL
+  ✓ esc resolves from FZF_PROMPT and FZF_INPUT_STATE, never a file
+  ✓ esc re-matches from a STATIC prefix, because fzf ignores search() from a transform
+  ✓ / switches to SEARCH: unbinds the vim keys, enables search, re-prompts
+  ✓ : switches to the kind menu in place, reloading from hop-kinds
+  ✓ unmapped letters, digits and symbols default to ignore
+  ✓ with no drill, up or restore target, l, h and r all fall back to ignore
+  ✓ l is live only when a drill target was actually given
+  ✓ h is live only when an up-level target was actually given
+  ✓ r is live only when a restore command was actually given
+  ✓ with no root, : falls back to ignore (no menu to switch into)
+  ✓ with no root, enter is never bound at all (plain accept needs no help)
+  ✓ every key unbound entering SEARCH is rebound returning to NORMAL, and both match the owned key list
+  ✓ the real, full bind set parses against this machine's installed fzf
+  ✓ sanity: a bind action with a stray leading comma is rejected, not silently accepted
+  ✓ sanity: a backslash-escaped comma inside unbind(...) is rejected, not silently accepted
+  ✓ the guarded probe produced a bind set at all
+  ✓ every action that leaves the picker is wrapped in the guard
+  ✓ the navigation keys stay fork-free, exactly as they were
+  ✓ the in-picker actions are left alone, r included
+  ✓ a key gated off by its own missing target is never guarded
+  ✓ every escape introducer fzf can surface as alt-<char> writes a mark
+  ✓ the guard lists are matched exactly, not as globs
+  ✓ the alt- keys hop and fzf already own are never turned into marks
+  ✓ the mark set is exactly the owned key list minus the twelve already-taken keys
+  ✓ both picker probes captured a real argument list
+  ✓ ctrl-g is inert, so a bare BEL byte cannot reach the browse verb
+  ✓ ctrl-g is gone from --expect, in both modes, because --expect outranks every bind
+  ✓ browse moved to alt-B, printing the key _hop_dispatch already knows
+  ✓ browse did not land on alt-g or alt-b, which are both already taken
+  ✓ the overlay probe actually rendered the keys overlay
+  ✓ the ? overlay names exactly the gated keys the picker actually bound
+  ✓ the repo and workspace pickers advertise only the one gated key each really has
+  ✓ the NORMAL legend names : view only where a root makes the kind menu real
+  ✓ dropping : view leaves the rest of the NORMAL legend intact
+  ✓ all three transform bodies were actually extracted from the bind set
+  ✓ esc in the kind menu goes back to the view you came from
+  ✓ esc in SEARCH (input enabled) returns to NORMAL and drops the filter
+  ✓ esc in NORMAL (input disabled) quits
+  ✓ enter in the kind menu switches to the picked kind
+  ✓ enter outside the menu is a plain accept
+  ✓ ? opens the keys overlay when it is not already showing
+  ✓ ? closes the keys overlay and restores the real preview when it is showing
+suite_nottty
+  ✓ no ctty, MULTI-match query: a diagnostic naming the count, not a hang
+  ✓ no ctty, EMPTY query: the diagnostic still names the count
+  ✓ no ctty, ZERO-match query: says nothing matched rather than hanging
+  ✓ no ctty, UNIQUE-match query: still cds, exactly as before the fix
+  ✓ no ctty, ONE-ROW list and an EMPTY query: still cds
+  ✓ no ctty, WORKSPACE picker: a diagnostic naming the count, not a hang
+  ✓ --filter and --select-1 agree on what "unique" means
+  ✓ the picker's matcher flags are the set the headless path was written against
+  ✓ the headless matcher flags have not drifted from the picker
+  ✓ no ctty: the predicate is false in every redirected shape
+  ✓ the predicate reads /dev/tty and never tests a file descriptor
+  ✓ a ctty present: the predicate is true in every redirected shape
+suite_providers
+  ✓ the shipped presets register exactly the kinds the repo ships
+  ✓ every registered kind declares both a shape and a description
+  ✓ the default kind set comes from --default, not from a hardcoded list
+  ✓ a fixture config REPLACES the shipped presets, so this suite is hermetic
+  ✓ and clearing the fixture config brings the shipped presets back
+  ✓ tg: emits zero rows when its family is absent
+  ✓ tg: emits zero stderr bytes when its family is absent
+  ✓ mod: emits zero rows when its family is absent
+  ✓ mod: emits zero stderr bytes when its family is absent
+  ✓ helm: emits zero rows when its family is absent
+  ✓ helm: emits zero stderr bytes when its family is absent
+  ✓ serverless: emits zero rows when its family is absent
+  ✓ serverless: emits zero stderr bytes when its family is absent
+  ✓ puppet: emits zero rows when its family is absent
+  ✓ puppet: emits zero stderr bytes when its family is absent
+  ✓ backstage: emits zero rows when its family is absent
+  ✓ backstage: emits zero stderr bytes when its family is absent
+  ✓ dir: a config-free repo yields exactly the <root> row
+  ✓ file: a config-free repo yields exactly its one tracked file
+  ✓ every shipped kind together emits zero stderr bytes in a config-free repo
+  ✓ tg: emits the expected number of rows from the fixture
+  ✓ tg: the row set is not empty
+  ✓ tg: every row has exactly 3 non-empty tab-separated fields
+  ✓ tg: every dir field exists on disk
+  ✓ tg: every preview field is an existing file or directory
+  ✓ tg: no preview resolves to a zero-byte file
+  ✓ tg: emits zero stderr bytes from the fixture
+  ✓ mod: emits the expected number of rows from the fixture
+  ✓ mod: the row set is not empty
+  ✓ mod: every row has exactly 3 non-empty tab-separated fields
+  ✓ mod: every dir field exists on disk
+  ✓ mod: every preview field is an existing file or directory
+  ✓ mod: no preview resolves to a zero-byte file
+  ✓ mod: emits zero stderr bytes from the fixture
+  ✓ helm: emits the expected number of rows from the fixture
+  ✓ helm: the row set is not empty
+  ✓ helm: every row has exactly 3 non-empty tab-separated fields
+  ✓ helm: every dir field exists on disk
+  ✓ helm: every preview field is an existing file or directory
+  ✓ helm: no preview resolves to a zero-byte file
+  ✓ helm: emits zero stderr bytes from the fixture
+  ✓ serverless: emits the expected number of rows from the fixture
+  ✓ serverless: the row set is not empty
+  ✓ serverless: every row has exactly 3 non-empty tab-separated fields
+  ✓ serverless: every dir field exists on disk
+  ✓ serverless: every preview field is an existing file or directory
+  ✓ serverless: no preview resolves to a zero-byte file
+  ✓ serverless: emits zero stderr bytes from the fixture
+  ✓ puppet: emits the expected number of rows from the fixture
+  ✓ puppet: the row set is not empty
+  ✓ puppet: every row has exactly 3 non-empty tab-separated fields
+  ✓ puppet: every dir field exists on disk
+  ✓ puppet: every preview field is an existing file or directory
+  ✓ puppet: no preview resolves to a zero-byte file
+  ✓ puppet: emits zero stderr bytes from the fixture
+  ✓ backstage: emits the expected number of rows from the fixture
+  ✓ backstage: the row set is not empty
+  ✓ backstage: every row has exactly 3 non-empty tab-separated fields
+  ✓ backstage: every dir field exists on disk
+  ✓ backstage: every preview field is an existing file or directory
+  ✓ backstage: no preview resolves to a zero-byte file
+  ✓ backstage: emits zero stderr bytes from the fixture
+  ✓ dir: emits the expected number of rows from the fixture
+  ✓ dir: the row set is not empty
+  ✓ dir: every row has exactly 3 non-empty tab-separated fields
+  ✓ dir: every dir field exists on disk
+  ✓ dir: every preview field is an existing file or directory
+  ✓ dir: no preview resolves to a zero-byte file
+  ✓ dir: emits zero stderr bytes from the fixture
+  ✓ file: emits the expected number of rows from the fixture
+  ✓ file: the row set is not empty
+  ✓ file: every row has exactly 3 non-empty tab-separated fields
+  ✓ file: every dir field exists on disk
+  ✓ file: every preview field is an existing file or directory
+  - file: no preview resolves to a zero-byte file (skipped: an empty tracked file is a valid file target)
+  ✓ file: emits zero stderr bytes from the fixture
+  ✓ tg: the four-segment layout fills scope, env and region
+  ✓ tg: an env wider than its column is clipped with an ellipsis, never overflowed
+  ✓ tg: the row still carries the FULL path, so clipping is display-only
+  ✓ tg: the two-segment layout renders env and region as -
+  ✓ tg: a trailing ... renders a nested unit as parent/child
+  ✓ tg: a shared include at depth 1 matches no layout and is excluded
+  ✓ tg: a dir with a .tf but no terragrunt.hcl is not a target
+  ✓ tg: a 0-byte main.tf loses to a real .tf beside it
+  ✓ tg: a --preview-skip pattern loses to a real .tf that sorts after it
+  ✓ tg: a unit with no .tf at all falls back to its terragrunt.hcl
+  ✓ mod: --depth 2 names a module namespace/module, never the namespace alone
+  ✓ mod: a module with no .tf falls back to its README
+  ✓ helm: a dir whose only tracked file is .gitkeep is skipped
+  ✓ helm: a chart one level deeper renders as parent/child
+  ✓ helm: the file-per-app family is one row per FILE, with the dir as the cd target
+  ✓ helm: a tests/ dir under the app family is not an app
+  ✓ helm: a 0-byte values.yaml loses to a real file beside it
+  ✓ helm: the one-chart-plus-templates family emits one row per template
+  ✓ serverless: a README at the family root is a file, not a unit
+  ✓ serverless: a unit with no serverless.yml falls through to template.yaml
+  ✓ puppet: top-level modules/ is the family, not terraform/modules
+  ✓ backstage: --name-fn takes the name from metadata.name, not the filename
+  ✓ backstage: a file with no metadata.name falls back to its basename
+  ✓ backstage: a key nested under something other than metadata cannot win
+  ✓ backstage: dir is the containing dir and preview is the file
+  ✓ backstage: --scope-literal puts the same scope on every row
+  ✓ dir: the root row comes first and previews the README
+  ✓ dir: build output and scratch space are not destinations
+  ✓ dir: every tracked top-level directory is offered
+  ✓ file: dir is the containing directory and preview is the file itself
+  ✓ file: a root-level file has the repo root as its dir
+  ✓ file: even a 0-byte tracked file is offered, because the question is "which file"
+  ✓ a repo-root .hoprc is not sourced when HOP_HOPRC is unset
+  ✓ the unopted kind is genuinely undefined, not silently empty
+  ✓ HOP_HOPRC=1 sources .hoprc, so the opt-in really is the only difference
+  ✓ every component of the enumeration-source list found files
+  ✓ only _hop_ls talks to git ls-files, across lib, bin and presets
+  ✓ _hop_ls adds :(glob), so a * in a magic-free spec cannot cross /
+  ✓ _hop_ls still matches at the depth a spec actually names
+  - real checkout: the shipped kinds hold their contract on real data (skipped: set HOP_TEST_REPO to a git checkout to enable these)
+  - a preview pane actually renders its file (skipped: needs a real terminal; see SMOKE.md section 3)
+  - the : kind picker adds a kind and the count goes up (skipped: needs a real terminal; see SMOKE.md section 3)
+suite_pty
+  ✓ pty: canary reaches fzf with one keystroke
+  ✓ pty: j moves the cursor in NORMAL
+  ✓ pty: o fires the open verb on the focused row
+  ✓ pty: enter cds to the focused row
+  ✓ pty: / enters SEARCH and letters type
+  ✓ pty: esc returns to NORMAL and clears the query
+  ✓ pty: j moves again after the SEARCH round trip
+  ✓ pty: the : view menu comes back with esc
+suite_pty_escape
+  ✓ pty-esc: a bare BEL byte reaches no verb
+  ✓ pty-esc: an OSC 11 background-colour reply reaches no verb
+  ✓ pty-esc: the same OSC 11 reply BEL-terminated reaches no verb
+  ✓ pty-esc: a truncated OSC 11 reply reaches no verb
+  ✓ pty-esc: an OSC 10 foreground-colour reply reaches no verb
+  ✓ pty-esc: an OSC 52 clipboard reply reaches no verb
+  ✓ pty-esc: a DCS version reply reaches no verb
+  ✓ pty-esc: a long APC payload cannot outlast the guard
+  ✓ pty-esc: a real b still browses, so the negatives are not vacuous
+  ✓ pty-esc: a real y still copies, so the negatives are not vacuous
+  ✓ pty-esc: with the guard off, the same reply DOES reach the browse verb
+suite_pty_reload
+  ✓ pty: alt-a reloads with the user config, not the shipped presets
+suite_smoke
+  ✓ every component of the file list found files
+  ✓ zsh -n  hop.zsh
+  ✓ zsh -n  config.example.zsh
+  ✓ zsh -n  lib/actions.zsh
+  ✓ zsh -n  lib/doctor.zsh
+  ✓ zsh -n  lib/dsl.zsh
+  ✓ zsh -n  lib/providers.zsh
+  ✓ zsh -n  lib/ui.zsh
+  ✓ zsh -n  lib/upgrade.zsh
+  ✓ zsh -n  lib/workspaces.zsh
+  ✓ zsh -n  presets/backstage.zsh
+  ✓ zsh -n  presets/dir.zsh
+  ✓ zsh -n  presets/file.zsh
+  ✓ zsh -n  presets/helm.zsh
+  ✓ zsh -n  presets/puppet.zsh
+  ✓ zsh -n  presets/serverless.zsh
+  ✓ zsh -n  presets/terraform-modules.zsh
+  ✓ zsh -n  presets/terragrunt.zsh
+  ✓ zsh -n  bin/hop-guard
+  ✓ zsh -n  bin/hop-kinds
+  ✓ zsh -n  bin/hop-preview
+  ✓ zsh -n  completions/_hop
+  ✓ zsh -n  tests/run
+  ✓ zsh -n  tests/lib/assert.zsh
+  ✓ zsh -n  tests/lib/bound.zsh
+  ✓ zsh -n  tests/lib/fixture.zsh
+  ✓ zsh -n  tests/lib/pty.zsh
+  ✓ zsh -n  tests/suite_cache.zsh
+  ✓ zsh -n  tests/suite_clipboard.zsh
+  ✓ zsh -n  tests/suite_completions.zsh
+  ✓ zsh -n  tests/suite_core.zsh
+  ✓ zsh -n  tests/suite_dsl.zsh
+  ✓ zsh -n  tests/suite_editor_path.zsh
+  ✓ zsh -n  tests/suite_fzf_version.zsh
+  ✓ zsh -n  tests/suite_guard.zsh
+  ✓ zsh -n  tests/suite_integration.zsh
+  ✓ zsh -n  tests/suite_keymap.zsh
+  ✓ zsh -n  tests/suite_nottty.zsh
+  ✓ zsh -n  tests/suite_providers.zsh
+  ✓ zsh -n  tests/suite_pty.zsh
+  ✓ zsh -n  tests/suite_pty_escape.zsh
+  ✓ zsh -n  tests/suite_pty_reload.zsh
+  ✓ zsh -n  tests/suite_smoke.zsh
+  ✓ zsh -n  tests/suite_upgrade.zsh
+  ✓ zsh -n  tests/suite_workspaces.zsh
+  ✓ bin/hop-preview is executable
+  ✓ bin/hop-kinds is executable
+  ✓ sourcing hop.zsh defines hop, hopr and hopw
+  ✓ sourcing hop.zsh in a non-interactive shell is silent
+  ✓ an inherited HOP_HOME naming the wrong install is overridden, not honoured
+  ✓ sourcing with a stale HOP_HOME emits nothing on stderr
+  ✓ hop --help exits 0 and lists the registry, not a hardcoded kind list
+  ✓ hop --help marks the default kinds with a star and names the config path
+  ✓ hop --doctor exits 0 and reports install, config, tools and the confusable keys
+  ✓ hop --doctor works outside a git repo, where it is most often needed
+  ✓ hop --doctor collapses $HOME to ~ and never prints it literally
+  ✓ hop --doctor=short never prints $HOME, even forced to try
+  ✓ hop --doctor=short exits 0, inside and outside a git repo
+  ✓ hop --doctor=short omits a sentinel kind name and workspace name that hop --doctor shows
+  ✓ VERSION is a bare semver, no v prefix
+  ✓ hop --version exits 0 and contains the VERSION contents
+  ✓ hop -V is the same as --version
+  ✓ CHANGELOG.md keeps an Unreleased heading, so a release cannot strand entries
+  ✓ hop --help does not star an opt-in kind
+  ✓ every hop setting the product reads is covered by the fixture pin list
+  ✓ the fzf settings hop never names, and so cannot be scanned for, are pinned anyway
+  ✓ a probe child gets the throwaway $HOME and XDG roots, never the real ones
+REPLY=''
+  ✓ fixture_repo builds a throwaway git repo
+  ✓ the fixture repo is under the temp root, never anywhere in $HOME
+  ✓ _hop_generate runs against a fixture with no interactive fzf
+  ✓ stub_bin shadows code, gh and bat on PATH
+  ✓ a stubbed command records its argv and opens nothing
+  ✓ stub_bin redirects $EDITOR away from a real editor
+  ✓ fzf --filter matches a row without opening a terminal
+  ✓ CONTRIBUTING.md exists
+  ✓ .editorconfig exists
+  ✓ .github/pull_request_template.md exists
+  ✓ .github/ISSUE_TEMPLATE/bug_report.yml exists
+  ✓ .github/ISSUE_TEMPLATE/feature_request.yml exists
+  ✓ .github/ISSUE_TEMPLATE/config.yml exists
+  - every .github yml file parses as YAML (skipped: python3 or its yaml module is not installed)
+suite_upgrade
+  ✓ the fixture remote really has two release tags
+  ✓ a HOP_HOME that is not a git checkout is refused
+  ✓ a copy vendored inside another repo is refused, so that repo is never moved
+  ✓ a checkout with no origin remote is refused
+  ✓ a dirty install is refused and the local edit survives
+  ✓ a side branch is refused, because that is work in progress
+  ✓ HEAD detached at a commit that is not a release tag is refused
+  ✓ an unknown release is refused, and the ones that exist are named
+  ✓ a prerelease or topic tag can never become the newest release
+  ✓ a tag origin does not publish cannot become the newest release
+  ✓ a column.ui setting cannot hide every release tag
+  ✓ a tag.sort setting cannot reorder the releases
+  ✓ detached at a tag that is not a release reads as loose, and is refused
+  ✓ --check with a version is a usage error, not a report about the wrong thing
+  ✓ a dirty install hears about the dirt, not about the network
+  ✓ a malformed version is rejected before anything is fetched
+  ✓ an unknown option is rejected with status 2
+  ✓ two versions at once is rejected
+  ✓ a remote with no release tags is refused rather than guessed at
+  ✓ --check on an older pin reports both versions and exits 0
+  ✓ the installed version is read from VERSION, not inferred from the tag
+  ✓ with no VERSION file the version falls back to git describe
+  ✓ --check on the newest release says up to date, and still exits 0
+  ✓ --check leaves a dirty tree alone and still reports
+  ✓ --check against a remote with no releases exits 0 and says so
+  ✓ --check on a checkout that is not a git repo fails, since there is nothing to report
+  ✓ a bare upgrade fast-forwards main and LEAVES YOU ON IT
+  ✓ a bare upgrade never merges: main advances by fast-forward only
+  ✓ a bare upgrade from a pin says it is leaving the pin, and returns to main
+  ✓ upgrade to a bare semver pins to that exact release
+  ✓ upgrade to a v-prefixed version pins to the same release
+  ✓ naming a version pins the install, detached, and says how to get back
+  ✓ a main already ahead of the newest release is up to date, not an error
+  ✓ --check on a main ahead of the newest release also says up to date
+  ✓ a main that has diverged from the release is refused, never rebased or merged
+  ✓ a bare upgrade from a pin fast-forwards the main REF, not just the worktree
+  ✓ an untracked file the release also ships is refused BEFORE the pin is left
+  ✓ a pin with no local main branch is refused, and is told how to make one
+  ✓ upgrading to the release already pinned changes nothing
+  ✓ pinning to the release main is already standing on still detaches
+  ✓ an untracked file does not block an upgrade, and is not removed by one
+  ✓ upgrade --help prints usage and exits 0 without touching anything
+  ✓ the upgrade code never cleans, hard-resets or forces anything
+  ✓ sourcing hop.zsh defines _hop_upgrade
+  ✓ the usage text lists the upgrade verb
+  ✓ the completion offers upgrade and can list local release tags
+  ✓ hop.plugin.zsh parses, and is nothing but a shim onto hop.zsh
+  ✓ upgrade is only the verb as the first word, so a query can still contain it
+suite_workspaces
+  ✓ a config full of shell payloads yields only the legitimate entry
+  ✓ parsing a payload config says nothing on stderr
+  ✓ nothing executes from the backtick payload
+  ✓ nothing executes from the dollar-paren payload
+  ✓ nothing executes from the semicolon payload
+  ✓ nothing executes from the and payload
+  ✓ nothing executes from the pipe payload
+  ✓ nothing executes from the continuation payload
+  ✓ nothing executes from the newline-escape payload
+  ✓ nothing executes from the redirect payload
+  ✓ nothing executes from the builtin-subst payload
+  ✓ no payload of any shape reached a shell
+  ✓ the sentinel mechanism can actually detect execution
+  ✓ _hop_ws_for over a payload config executes nothing
+  ✓ _hop_ws_repos and _hop_provider_ws over a payload config execute nothing
+  ✓ a payload in the NAME field is inert text, not a command
+  ✓ name = path, a bare path, tab separators and no spaces all parse
+  ✓ a RUN of leading and trailing spaces is stripped, not a single space
+  ✓ the first = splits, so a path may contain = itself
+  ✓ a full-line comment and an indented one are dropped
+  ✓ a trailing comment is dropped but a # inside a path survives
+  ✓ CRLF line endings parse
+  ✓ a file with no trailing newline parses its last line
+  ✓ an empty file means no workspaces, not the built-in default
+  ✓ a comments-only file means no workspaces
+  ✓ a missing file falls back to the built-in default, and only to the dirs that exist
+  ✓ the built-in default offers every conventional checkout directory
+  ✓ a missing file with no default directory reports nothing, silently
+  ✓ duplicate names: the first occurrence wins
+  ✓ a leading ~ expands, and a bare ~ is $HOME itself
+  ✓ $HOME and ${HOME} both expand
+  ✓ an unset variable expands to empty, the way a shell would treat it
+  ✓ a mid-path ~ stays literal, because it is a legal filename character
+  ✓ a missing dir, a file, a dangling symlink and an unreadable dir are all skipped
+  ✓ an unusable path is skipped with nothing on stderr
+  ✓ a config of nothing but unusable paths reports failure
+  ✓ $HOP_WORKSPACES beats the file
+  ✓ $HOP_WORKSPACES splits on colons
+  ✓ the file beats the built-in default
+  ✓ the default config path is derived from $XDG_CONFIG_HOME, not from the code directory
+  ✓ and it falls back to ~/.config when XDG_CONFIG_HOME is unset
+  ✓ a dir inside nested workspaces resolves to the DEEPER one
+  ✓ the deeper workspace still wins when it is listed first
+  ✓ a dir under only the shallow workspace resolves to it
+  ✓ a workspace directory resolves to itself
+  ✓ a dir in no workspace fails and leaves REPLY empty
+  ✓ a sibling whose name merely starts with the workspace name is not inside it
+  ✓ a .git directory and a git WORKTREE both count as a repo
+  ✓ the worktree fixture really does have a FILE at .git
+  ✓ depth 1 only: a repo one level deeper is not found
+  ✓ a directory with no .git is not a repo
+  ✓ a workspace holding no repos fails
+  ✓ a workspace that does not exist fails, silently
+  ✓ one row per workspace, with the absolute dir in field 2
+  ✓ every row carries the ws kind and its own name
+  ✓ the repo count is pluralised per row
+  ✓ $HOME is collapsed to ~ in the displayed path
+  ✓ no workspaces means no rows, and still exits 0
+  ✓ no test in this suite executed anything from a config file
+
+ok  567 passed, 0 failed, 7 skipped  in 53.86s
+
+### capture metadata
+run: 6
+exit: 0
+elapsed_s: 54
+loadavg_before:  8.54 6.63 5.47 
+loadavg_after:  6.63 6.45 5.48 
+date_utc: 2026-08-26T17:38:16Z

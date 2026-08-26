@@ -1,0 +1,267 @@
+suite_cache
+  ✓ a kind with zero targets warms to a real 0 and is then hidden
+  ✓ git add with HEAD unchanged surfaces a newly staged kind instead of hiding it forever
+suite_clipboard
+  ✓ pbcopy is chosen when every candidate is present
+  ✓ wl-copy is chosen when pbcopy is absent
+  ✓ xclip is chosen when pbcopy and wl-copy are absent
+  ✓ xsel is chosen when pbcopy, wl-copy and xclip are absent
+  ✓ clip.exe is the last resort, chosen only when nothing else is present
+  ✓ HOP_CLIPBOARD overrides the probe even when pbcopy is available
+  ✓ HOP_CLIPBOARD word-splits so extra arguments reach the command
+  ✓ the exact text handed to hop is what reaches the clipboard tool, unmodified
+  ✓ the copy is a stdin pipe, never an argv, even for tools that take extra flags
+  ✓ no clipboard tool available: one clear stderr line, non-zero exit, nothing invoked
+  ✓ no clipboard tool available: the message names install options, not a stack trace
+  ✓ a failing clipboard command is reported, not swallowed as success
+suite_completions
+  ✓ _hop_versions offers every tag, newest first, by default
+  ✓ _hop_versions still offers every tag as SEPARATE candidates under column.ui=always
+  ✓ _hop_versions has nothing to offer when the repo has no release tags
+suite_core
+  ✓ the stub fzf really is the only fzf a probe can see
+  ✓ hop -w reports a non-zero fzf status instead of swallowing it
+  ✓ hop -R reports the same status the same way, so the two pickers cannot drift
+  ✓ hop -w on a no-match says so, rather than printing nothing at all
+  ✓ hop -w on a user cancel stays silent and succeeds
+  ✓ esc out of the repo picker is silent too, which is what makes 130 a shared rule
+  ✓ both pickers route through the one _hop_fzf_status, so the ladder cannot be duplicated
+  ✓ _hop_ws_picker leaves no _hop_key or _hop_st behind in the calling shell
+  ✓ HOP_DEBUG=1 logs a pick that found no match, which used to log nothing at all
+  ✓ HOP_DEBUG=1 logs a user cancel, so an abandoned pick is distinguishable from a crash
+  ✓ HOP_DEBUG=1 logs a hard fzf failure, the case a bug report cannot diagnose without it
+  ✓ the row count reaches the log, so "empty list" and "list did not match" are tellable apart
+  ✓ HOP_DEBUG unset still writes nothing, so the new call site stays opt-in
+  ✓ the fixture really is reached through a symlink, or the cases below prove nothing
+  ✓ hop -c finds targets in a subtree entered through a symlink
+  ✓ and the surviving rows are the ones under that subtree, not the whole repo
+  ✓ hop -c still narrows, so the symlink fix did not turn the filter off
+  ✓ hop -c under a subtree with no targets still says so, by its own message
+  ✓ a directory whose name holds a backslash is not mangled, which awk -v did
+  ✓ and that backslash subtree offers its own row, not a sibling
+  ✗ suite_core: suite did not finish (exit 142)
+      group killed by the 120s bound; a test may await a terminal
+suite_dsl
+  ✓ --dirs emits one row per child directory
+  ✓ --dirs at --depth 2 names parent/child, and never the container alone
+  ✓ --dirs at depth 1 over the same tree returns the containers instead
+  ✓ --dirs takes a comma-separated list of bases
+  ✓ --dirs on an absent base emits nothing, silently
+  ✓ --marker maps path segments onto columns through the matching layout
+  ✓ a shorter layout catches a shorter path
+  ✓ layouts are tried LONGEST first, so a deep path cannot fall into a shallow layout
+  ✓ a trailing ... joins every remaining segment into the name
+  ✓ a path matching NO layout is not a target, which is what excludes a shared include
+  ✓ with no --layout at all the name is the basename and the scope its parent
+  ✓ a marker with no --under scans the whole repo
+  ✓ --files maps segments onto columns, and - discards one
+  ✓ --strip-ext runs before the layout, so the extension never lands in a column
+  ✓ without --strip-ext the extension stays in the column it landed in
+  ✓ --files rows point at the file, with its directory as the cd target
+  ✓ --name-template composes a name out of other columns
+  ✓ --trim strips a naming prefix off a column
+  ✓ --name-template runs AFTER --trim, so it sees the trimmed value
+  ✓ --exclude drops a matching path before it becomes a row
+  ✓ without --exclude that same path IS a row, so the option is doing the work
+  ✓ --scope-literal overrides the scope column on every row
+  ✓ --preview walks its candidate list in order
+  ✓ a 0-byte candidate is SKIPPED, because an empty pane is worse than the next candidate
+  ✓ a glob candidate expands alphabetically and also skips 0-byte files
+  ✓ --preview-skip removes a generated file from a glob match
+  ✓ without --preview-skip that generated file wins, so the option is doing the work
+  ✓ a directory with no candidate at all falls back to the directory itself
+  ✓ redeclaring a kind REPLACES it rather than adding a second entry
+  ✓ and it keeps its ORIGINAL position in the menu order
+  ✓ the redeclaration is what takes effect
+  ✓ a redeclaration can also change the default flag
+  ✓ hop_kind with no shape option is rejected
+  ✓ hop_kind with an unknown option is rejected, and the option is named
+  ✓ a value-taking option with no value is rejected rather than eating the next flag
+  ✓ --fn naming an undefined function is rejected
+  ✓ --fn naming a real function is accepted
+  ✓ a non-numeric --depth is rejected
+  ✓ a zero --depth is rejected, since depth 0 would name the base itself
+  ✓ a missing kind name is rejected
+  ✓ hop_preset on an unknown name fails loudly rather than loading nothing
+  ✓ hop_preset loads the kinds a shipped preset declares
+  ✓ asking for a kind nobody declared says so on stderr
+  ✓ a bare _hop_provider_<name> function still works without any registration
+suite_editor_path
+  ✓ _hop_need accepts a bare name found on PATH
+  ✓ _hop_need rejects a bare name missing from PATH, with the original wording
+  ✓ _hop_need accepts an absolute path to an executable
+  ✓ _hop_need rejects an absolute path that does not exist, without claiming "not installed"
+  ✓ _hop_need rejects an absolute path that exists but is not executable
+  ✓ _hop_need accepts a relative path (contains a slash) resolved against the cwd
+  ✓ a real absolute-path $EDITOR is invoked to edit a file (alt-o)
+  ✓ an absolute-path $EDITOR that does not exist fails, and the editor is never invoked
+suite_fzf_version
+  ✓ the fzf stub is in place, so nothing below touches the real fzf
+  ✓ the only fzf a probe can reach is the stub
+  ✓ the stub refuses to emulate the picker, so a stray UI call fails instead of passing
+  ✓ sourcing hop.zsh forks nothing, because every shell pays for that
+  ✓ an fzf older than the minimum is refused, with the version, the need and the fix
+  ✓ the message names the flag combination that actually breaks
+  ✓ the exact minimum passes
+  ✓ one patch release below the minimum is refused
+  ✓ a newer fzf passes, including a two-digit minor
+  ✓ a major-version bump passes rather than reading as older
+  ✓ a two-field version is compared as if the patch were zero
+  ✓ an unparseable version proceeds, because locking out a working fzf is worse
+  ✓ no version output at all also proceeds
+  ✓ the version is read at most once per shell, however often hop runs
+  ✓ an unparseable version is memoized too, so it cannot fork on every call
+  ✓ the floor covers every fzf action the keymap uses, including search()
+  ✓ HOP_FZF_MIN can be lowered, for an fzf that is fine despite its version string
+  ✓ a HOP_FZF_MIN with a non-numeric field still returns a verdict, not a math error
+  ✓ a garbage HOP_FZF_MIN fails open rather than blocking every hop
+  ✓ the shipped minimum is the one the changelog justifies
+  ✓ _hop_ver_lt orders versions field by field, not as strings
+  ✓ _hop_ver_lt is false for equal and for newer versions
+  ✓ hop itself refuses on a too-old fzf, before it reaches the picker
+  - hop refuses when fzf is absent (skipped: taking the stub off PATH finds the REAL fzf and hangs)
+suite_guard
+  ✓ bin/hop-guard is executable
+  ✓ mark writes a clock reading a check can compare against
+  ✗ a verb landing inside the window is refused
+      a verb microseconds after an unparsed escape must not run
+      - expected: ignore
+      + actual: print(ctrl-o)+accept
+  ✓ the same verb outside the window runs untouched
+  ✓ the window is a real threshold, not a constant answer
+  ✗ a refused verb pushes the window forward, so a long payload cannot outlast it
+      the first payload letter was not refused
+      - expected: ignore
+      + actual: print(ctrl-o)+accept
+      a refusal left the mark untouched, so the window never re-arms
+      - expected: 1
+      + actual: 0
+  ✓ a verb that RUNS does not re-arm, so the chain ends at the first real keypress
+  ✓ no mark at all means no escape arrived, so the verb runs
+  ✓ an unreadable state file fails open rather than closed
+  ✓ a corrupt mark fails open instead of aborting
+  ✓ a mark from the future fails open, so a backwards clock cannot quarantine the verbs
+  ✓ a malformed window falls back to the default instead of aborting
+  ✓ HOP_GUARD_WINDOW=0 is the off switch a timing heuristic has to have
+  ✓ check with no action prints nothing, rather than inventing an ignore
+  ✓ an unknown subcommand is silent and successful, since fzf shows a bind error as a dead key
+
+### capture metadata
+run: 24
+exit: 142
+elapsed_s: 409
+loadavg_before:  80.75 79.38 57.09 
+loadavg_after:  85.80 101.95 79.70 
+date_utc: 2026-08-26T18:17:43Z
+### failure snapshot
+--- failing tests:
+  ✗ suite_core: suite did not finish (exit 142)
+  ✗ a verb landing inside the window is refused
+  ✗ a refused verb pushes the window forward, so a long payload cannot outlast it
+--- failure context (5 lines after each):
+  ✗ suite_core: suite did not finish (exit 142)
+      group killed by the 120s bound; a test may await a terminal
+suite_dsl
+  ✓ --dirs emits one row per child directory
+  ✓ --dirs at --depth 2 names parent/child, and never the container alone
+  ✓ --dirs at depth 1 over the same tree returns the containers instead
+--
+  ✗ a verb landing inside the window is refused
+      a verb microseconds after an unparsed escape must not run
+      - expected: ignore
+      + actual: print(ctrl-o)+accept
+  ✓ the same verb outside the window runs untouched
+  ✓ the window is a real threshold, not a constant answer
+  ✗ a refused verb pushes the window forward, so a long payload cannot outlast it
+      the first payload letter was not refused
+      - expected: ignore
+      + actual: print(ctrl-o)+accept
+      a refusal left the mark untouched, so the window never re-arms
+      - expected: 1
+--
+  ✗ suite_core: suite did not finish (exit 142)
+  ✗ a verb landing inside the window is refused
+  ✗ a refused verb pushes the window forward, so a long payload cannot outlast it
+--- failure context (5 lines after each):
+--- processes:
+38047 84926       13:14 /bin/zsh -c source /Users/eknorr/.claude/shell-snapshots/snapshot-zsh-1787599189442-z8a0jl.sh 2>/dev/null || true && setopt NO_EXTENDED_
+38051 38047       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38106 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38107 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38108 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38109 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38110 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38111 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38112 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38113 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38114 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38115 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38118 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38119 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38120 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38121 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38122 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38128 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38133 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38135 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38136 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38137 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38138 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38139 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38140 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38142 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38143 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38144 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38145 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38146 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38147 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38148 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38149 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+38150 38051       13:14 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+65475 53684       00:43 perl -e \012\011\011my $secs = shift @ARGV;\012\011\011my $pid = fork();\012\011\011die "fork: $!" unless defined $pid;\012\011\011if ($
+65479 65475       00:43 zsh /private/tmp/hop-changelog/tests/run --_suite /private/tmp/hop-changelog/tests/suite_guard.zsh
+66239 84926       00:15 /bin/zsh -c source /Users/eknorr/.claude/shell-snapshots/snapshot-zsh-1787599189442-z8a0jl.sh 2>/dev/null || true && setopt NO_EXTENDED_
+66314     1       00:13 zsh /private/tmp/hop-wt-flake/tests/run --_suite /private/tmp/hop-wt-flake/tests/suite_integration.zsh
+66463 66454       00:09 perl -e \012\011\011my $secs = shift @ARGV;\012\011\011my $pid = fork();\012\011\011die "fork: $!" unless defined $pid;\012\011\011if ($
+66501 66463       00:08 zsh -f -c export HOME=/private/tmp/hoprel/arm_BEFORE/tmp/hop-home.UQdUAE\012export XDG_CONFIG_HOME=/private/tmp/hoprel/arm_BEFORE/tmp/ho
+66590 84926       00:03 /bin/zsh -c source /Users/eknorr/.claude/shell-snapshots/snapshot-zsh-1787599189442-z8a0jl.sh 2>/dev/null || true && setopt NO_EXTENDED_
+66626 65479       00:00 rm -rf -- /private/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T/hop-home.Y7wYUf
+66627 66590       00:00 /bin/zsh -c source /Users/eknorr/.claude/shell-snapshots/snapshot-zsh-1787599189442-z8a0jl.sh 2>/dev/null || true && setopt NO_EXTENDED_
+66632 66501       00:00 /bin/sh /private/tmp/hoprel/arm_BEFORE/tmp/hop-fzfstub.GK7rOM/fzf --version
+66633 66314       00:00 chmod +x /private/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T/hop-stubbin.5WlQjV/nvim
+66419 38051       00:10 zsh tests/run --_suite /private/tmp/hop-wt-guardflake/tests/suite_zzflake.zsh
+66421 66419       00:10 zsh -f /private/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T/hop-ptyshared.6Lvd9U/driver.zsh
+66584 66421       00:05 zsh -f /private/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T/hop-ptyshared.6Lvd9U/driver.zsh
+66602 66584       00:01 fzf --ansi --delimiter=\011 --with-nth=1 --accept-nth=2,3 --no-multi --layout=reverse --info=inline --border=rounded --border-label= hop
+66625 66602       00:00 /bin/sh /private/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T/hop-ptyshared.6Lvd9U/trace.sh R
+--- surviving fixture dirs under TMPDIR:
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.4IZXca
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.6lt0aT
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.Du8wF6
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.FmX3D7
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.IRDtsb
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.JABIIs
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clip.Ye5nYK
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.BMl5Lh
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.GYTk36
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.P1ZJIQ
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.UU6E6Q
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.WYEdbT
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.asScOK
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipbase.c7gh2a
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.GbPFOI
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.IuBNaw
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.TLrA18
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.s39wEM
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-clipstderr.x91F7g
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-config.BUTd1a
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-config.RYaGo1
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-core.nLMXFA
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-core.p6T4xv
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.07ox2I
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0BFXsT
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0ENxSS
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0Edb7L
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0HrLtG
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0Sv5sp
+/var/folders/fx/nw3rkh6j3fq9jh0lv80mckbw0000gp/T//hop-dbg.0UW426
