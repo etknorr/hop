@@ -680,5 +680,5 @@ fi
 # ---------------------------------------------------------------------------
 # What this suite deliberately does not do.
 # ---------------------------------------------------------------------------
-skip 'a preview pane actually renders its file' 'needs a real terminal; see SMOKE.md section 1'
-skip 'the : kind picker adds a kind and the count goes up' 'needs a real terminal; see SMOKE.md sections 2 and 4'
+skip 'a preview pane actually renders its file' 'needs a real terminal; see SMOKE.md section 3'
+skip 'the : kind picker adds a kind and the count goes up' 'needs a real terminal; see SMOKE.md section 3'

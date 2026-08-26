@@ -50,12 +50,14 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   was structurally blind to precisely the failures people file bugs about, and a real `hop: no match`
   added no line for `hop --doctor` to show. Each pick now logs its label, row count, query and exit
   status.
+- `hop upgrade <TAB>` no longer offers a single garbage candidate (every tag joined by spaces)
+  when the user has `column.ui=always` set; release tags are now listed with `for-each-ref`.
 - The test suite no longer inherits the settings of whoever runs it. An exported `HOP_FZF_MIN`,
   `HOP_VIM`, `HOP_HOPRC` or `HOP_REPOS` made it fail or hang, an inherited `HOP_FZF_HEIGHT` started
   fzf against no terminal and orphaned it, and `FZF_DEFAULT_OPTS` silently disabled the control arm
   of the `--exact` guard. Every setting is pinned from one list now, rather than from three helpers
   that each kept their own and drifted, and a test derives that list from the source so it cannot.
-- The suite's per-child timeout is a real bound again. Five call sites used a shape where the timer
+- The suite's per-child timeout is a real bound again. Six call sites used a shape where the timer
   lived inside the process being timed, so a child that ignored the signal ran unbounded and its
   grandchildren outlived the run. The timer now sits outside it and kills the whole process group.
 

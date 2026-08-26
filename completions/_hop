@@ -18,9 +18,11 @@ _hop_kinds() {
 
 # Release tags already in the local clone, newest first, so completing costs no network.
 # A tag not fetched yet simply does not complete; `hop upgrade` fetches before it resolves one.
+# `for-each-ref`, not `git tag --list`: the latter honours `column.ui` and under
+# `column.ui=always` returns every tag on ONE space-joined line, as lib/upgrade.zsh notes.
 _hop_versions() {
   local -a tags
-  tags=(${(f)"$(git -C "${HOP_HOME:-.}" tag --list 'v*' --sort=-v:refname 2>/dev/null)"})
+  tags=(${(f)"$(git -C "${HOP_HOME:-.}" for-each-ref --format='%(refname:strip=2)' --sort=-v:refname 'refs/tags/v*' 2>/dev/null)"})
   tags=(${tags:#})
   (( $#tags )) || return 1
   _describe -t hop-versions 'release' tags
