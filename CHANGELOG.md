@@ -28,17 +28,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 ### Added
 
 - An escape guard, so bytes a terminal prints can no longer run a hop verb.
-  fzf can't decode every escape sequence that arrives on its input, and it delivers the ones it can't parse as ordinary keystrokes.
-  In NORMAL mode letters are verbs, so a terminal answering a background-colour query with `\e]11;rgb:1e1e/1e1e/1e1e\e\\` typed `11;rgb:1e1e/1e1e/1e1e` into the picker and the `b` in `rgb` ran `gh browse`.
-  An `\e]52;...` clipboard reply reached the copy verb through its `Y`, and a `\eP...` version reply reached `$EDITOR` through its `e`, both reproduced under a pty rather than inferred.
-  Every action that leaves the picker now checks how recently its key arrived, all nine of them rather than only the six letter verbs, so a stray `q` can't close it either.
-  Forged letters arrive about 20ms apart, where a real keypress follows the previous one by however long the user took.
+  fzf delivers escape sequences it can't parse as ordinary keystrokes, and in NORMAL mode letters are verbs, so a terminal answering a background-colour query typed `11;rgb:1e1e/1e1e/1e1e` into the picker and the `b` in `rgb` ran `gh browse`.
+  Every action that leaves the picker now checks how recently its key arrived, and it fails open rather than swallow a real keypress.
   `HOP_GUARD_WINDOW` sets the threshold, default 150ms, and `HOP_GUARD_WINDOW=0` disables the guard.
-  It fails open on a missing clock, a missing stamp or a malformed window, because swallowing a real keypress is worse than the nuisance it prevents.
   Navigation stays outside the guard deliberately, since `j`, `k`, `g` and `G` must not fork a process on every cursor move, so a hostile sequence can still scroll the list or switch mode.
-  It can no longer open an editor, write the clipboard or open a browser tab.
-  The check is `bin/hop-guard`, and `esc` stays unguarded on purpose, because if that binary ever went missing every guarded key would go dead at once and `esc` is the only way out of the picker.
-  That is one of three nuisance-level gaps, and the README documents all of them.
+  It can no longer open an editor, write the clipboard or open a browser tab, and the README documents the gaps that remain.
 
 ### Changed
 
