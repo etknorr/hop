@@ -6,8 +6,21 @@ typeset -g HOP_HISTFILE=${HOP_HISTFILE:-${XDG_STATE_HOME:-$HOME/.local/state}/ho
 typeset -g HOP_HIST_MAX=${HOP_HIST_MAX:-300}
 
 # _hop_need <command> <what-for> -> 0 if runnable, else one line on stderr
+# - A bare name is resolved on $PATH, same as always.
+# - A name with a slash (absolute, or relative like ./bin/ed) is a path zsh execs directly.
 _hop_need() {
 	emulate -L zsh
+	if [[ $1 == */* ]]; then
+		if [[ -x $1 && ! -d $1 ]]; then
+			return 0
+		fi
+		if [[ ! -e $1 ]]; then
+			print -ru2 -- "hop: ${1} does not exist, cannot ${2}"
+		else
+			print -ru2 -- "hop: ${1} is not executable, cannot ${2}"
+		fi
+		return 1
+	fi
 	if (( ${+commands[$1]} )); then
 		return 0
 	fi

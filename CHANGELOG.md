@@ -11,10 +11,23 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 - The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
   command itself fails; it now names the failing tool on stderr and returns non-zero.
-- The test suite no longer inherits the developer's own `hop` settings. An exported `HOP_FZF_MIN`,
-  `HOP_VIM`, `HOP_HOPRC` or `HOP_REPOS` made it fail or hang, and an inherited `HOP_FZF_HEIGHT`
-  started fzf against no terminal and left orphaned processes behind. Every setting hop reads is now
-  pinned from one list, rather than from three helpers that each kept their own and drifted.
+- The edit verb (`alt-o`) no longer rejects an absolute-path `$EDITOR`/`$VISUAL` (e.g.
+  `/opt/homebrew/bin/nvim`) as "not installed"; a path is now checked for existence and the
+  executable bit instead of a `$PATH` lookup.
+- Four test assertions that could not fail, letting a shipped behaviour regress with the suite green.
+  The `--help` check for the opt-in `file` kind matched the usage line rather than the kinds registry,
+  so starring every kind still passed. Three modal-keymap checks compared a transform's output
+  against the same `HOP_VIM_*` variable the transform reads, and `lib/ui.zsh` declares those empty,
+  so `?` never opening the keys overlay, `?` never closing it and `enter` never switching kinds in
+  the `:` menu were each shippable without one failing test.
+- Two more keymap assertions of the same shape, for `HOP_VIM_TO_NORMAL` and `HOP_VIM_MENU_BACK`.
+  Neither regression could actually ship: a sibling test caught the first, and `esc`'s own `:-abort`
+  default caught the second. These now name the cause instead of leaving it to be inferred.
+- The test suite no longer inherits the settings of whoever runs it. An exported `HOP_FZF_MIN`,
+  `HOP_VIM`, `HOP_HOPRC` or `HOP_REPOS` made it fail or hang, an inherited `HOP_FZF_HEIGHT` started
+  fzf against no terminal and orphaned it, and `FZF_DEFAULT_OPTS` silently disabled the control arm
+  of the `--exact` guard. Every setting is pinned from one list now, rather than from three helpers
+  that each kept their own and drifted, and a test derives that list from the source so it cannot.
 - The suite's per-child timeout is a real bound again. Five call sites used a shape where the timer
   lived inside the process being timed, so a child that ignored the signal ran unbounded and its
   grandchildren outlived the run. The timer now sits outside it and kills the whole process group.
