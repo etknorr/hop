@@ -357,9 +357,9 @@ if (( ${+commands[python3]} )) && python3 -c 'import yaml' 2>/dev/null; then
 	typeset -a yamlfiles=("$HOP_HOME"/.github/**/*.yml(N))
 	t 'the .github yml glob finds exactly the files that are there'
 	# The exact list, not a floor: `>= 1` passed on a glob that had rotted to one subdirectory.
-	# - The parse loop below only covers what the glob returned, so a partial match checks nothing
-	#   and reports nothing. The dropped files are the ones you would never think to look for.
+	# - The parse loop below only covers what the glob returned, so a partial match checks nothing, reports nothing, and drops exactly the files nobody would think to look for.
 	# - Adding a workflow is meant to fail this line once. That is the tripwire, not friction.
+	# - The array assignment is what makes `(o)` sort here: inside a quoted scalar it silently does not.
 	typeset -a yamlsorted=(${(o)${yamlfiles[@]#${HOP_HOME}/}})
 	typeset -a yamlwant=(
 		.github/ISSUE_TEMPLATE/bug_report.yml
