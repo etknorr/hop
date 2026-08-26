@@ -24,6 +24,10 @@ typeset -ga HOP_PTY_PIDS=()
 
 # The fixture's four scopes, in the order `hop -k tg` lists them. Neutral names on purpose.
 typeset -ga HOP_PTY_ROWS=(alpha bravo charlie delta)
+# This suite's own process group, so a reap can never target the process doing the reaping.
+typeset -g  HOP_PTY_SELFPG=''
+# Trace line count, kept in a variable because a barrier must not fork on every poll.
+typeset -gi HOP_PTY_N=0
 # What the canary's fzf actually returned, so the gate's own test can assert on it.
 typeset -g  HOP_PTY_CANARY=''
 
@@ -33,8 +37,11 @@ typeset -gF HOP_PTY_SETTLE=${HOP_PTY_SETTLE:-0.25}
 typeset -gF HOP_PTY_WAIT=${HOP_PTY_WAIT:-10}
 
 # pty_supported -> 0 when zsh/zpty loads. The suite skips everything when this fails.
+# - Also the one place the suite's own process group is recorded, before any child exists.
 pty_supported() {
 	emulate -L zsh
+	local REPLY
+	_hop_pty_pgid $$ && HOP_PTY_SELFPG=$REPLY
 	zmodload zsh/zpty 2>/dev/null
 }
 
@@ -92,12 +99,47 @@ pty_trace() {
 	print -rl -- "${REPLY_A[@]}"
 }
 
-# pty_count -> how many trace lines exist now, which is what a pty_key barrier is measured against.
-pty_count() {
+# _hop_pty_n -> HOP_PTY_N is the current trace line count, set without forking a subshell.
+_hop_pty_n() {
 	emulate -L zsh
 	local -a REPLY_A
 	_hop_pty_lines
-	print -r -- $#REPLY_A
+	HOP_PTY_N=$#REPLY_A
+	return 0
+}
+
+# pty_count -> the same number, printed, for a probe that wants it in a substitution.
+pty_count() {
+	emulate -L zsh
+	_hop_pty_n
+	print -r -- $HOP_PTY_N
+}
+
+# pty_quiesce [quiet] -> return once the trace has stopped growing for `quiet` seconds.
+# - "+1 trace line" is the WRONG barrier: one keystroke fires several events, not one.
+# - `:` proved it. The focus event arrives with the OLD prompt, and change-prompt lands later.
+# - Reading state after +1 line therefore sampled a half-applied action chain, and was flaky.
+# - Waiting for quiet instead means every assertion reads a settled state.
+pty_quiesce() {
+	emulate -L zsh
+	local -F quiet=${1:-0.2} spent=0 still=0
+	local -i last
+	_hop_pty_n
+	last=$HOP_PTY_N
+	while (( spent < HOP_PTY_WAIT )); do
+		_hop_pty_drain
+		sleep 0.02
+		(( spent += 0.02 ))
+		_hop_pty_n
+		if (( HOP_PTY_N == last )); then
+			(( still += 0.02 ))
+			(( still >= quiet )) && return 0
+		else
+			last=$HOP_PTY_N
+			still=0
+		fi
+	done
+	return 1
 }
 
 # pty_last [kind] -> the newest trace line, optionally only of kind F, C or R.
@@ -264,8 +306,19 @@ pty_open() {
 	FZF_DEFAULT_OPTS+=" --bind 'result:execute-silent(${shared}/trace.sh R)'"
 
 	zpty -b "$HOP_PTY_NAME" "zsh -f ${shared}/driver.zsh" || return 1
-	pty_wait_lines 1 || return 1
+
+	# Register the pid BEFORE the readiness barrier, not after.
+	# - A picker that never becomes ready is exactly the one that needs reaping.
+	# - Only this list survives into the EXIT trap, so an early return must not skip it.
+	local -F spent=0
+	while (( spent < HOP_PTY_WAIT )); do
+		[[ -s $HOP_PTY_PIDF ]] && break
+		sleep 0.02
+		(( spent += 0.02 ))
+	done
 	[[ -s $HOP_PTY_PIDF ]] && HOP_PTY_PIDS+=("$(<"$HOP_PTY_PIDF")")
+
+	pty_wait_lines 1 || return 1
 	return 0
 }
 
@@ -292,13 +345,77 @@ pty_key() {
 	pty_settle
 }
 
-# pty_key_ev <key> -> send a key that MUST move fzf's state, and wait for the event it produces.
-# - Reading the count first is what makes this a barrier rather than an optimistic sleep.
+# pty_key_ev <key> -> send a key that MUST move fzf's state, then wait for the state to settle.
+# - Waits for the first event as a liveness check, then for quiet, so the read is of a final state.
 pty_key_ev() {
 	emulate -L zsh
-	local -i n
-	n=$(pty_count)
-	pty_key "$1" $(( n + 1 ))
+	_hop_pty_n
+	pty_key "$1" $(( HOP_PTY_N + 1 )) || return 1
+	pty_quiesce
+}
+
+# _hop_pty_pgid <pid> -> REPLY is that pid's process group, or empty when ps cannot say.
+# - The driver is NOT the group leader: zpty forks an intermediate that leads the group.
+# - So `kill -- -$driverpid` names a group that does not exist and is a silent no-op.
+_hop_pty_pgid() {
+	emulate -L zsh
+	REPLY=''
+	local v
+	v=$(ps -o pgid= -p "$1" 2>/dev/null) || return 1
+	v=${v//[[:space:]]/}
+	[[ $v == <-> ]] || return 1
+	REPLY=$v
+	return 0
+}
+
+# _hop_pty_tree <root-pid> -> REPLY_A is root plus every descendant, found through ppid.
+# - A process-group kill is not enough: fzf puts its preview children in their OWN group.
+# - Measured here: the group held 4 processes while the ppid tree held 6.
+# - Snapshot BEFORE killing anything, or an orphan reparents to init and becomes unfindable.
+_hop_pty_tree() {
+	emulate -L zsh
+	local root=$1
+	REPLY_A=($root)
+	local -a pairs frontier next
+	pairs=("${(@f)$(ps -A -o pid=,ppid= 2>/dev/null)}")
+	frontier=($root)
+	local line pid ppid
+	while (( $#frontier )); do
+		next=()
+		for line in "${pairs[@]}"; do
+			pid=${${=line}[1]}
+			ppid=${${=line}[2]}
+			[[ $pid == <-> && $ppid == <-> ]] || continue
+			(( ${frontier[(I)$ppid]} )) || continue
+			next+=($pid)
+			REPLY_A+=($pid)
+		done
+		frontier=($next)
+	done
+	return 0
+}
+
+# _hop_pty_kill <pid> -> KILL the driver's real group, then anything that escaped it.
+# - KILL and never TERM, for two independent reasons, both measured here.
+# - A hung fzf traps TERM while in raw mode and simply survives it.
+# - Worse, zpty's forked intermediate still carries THIS SUITE'S EXIT trap.
+# - TERM therefore ran fixture_cleanup inside that fork and deleted the fixture repo mid-suite.
+# - SIGKILL cannot be trapped, so it cannot run an inherited trap in somebody else's fork.
+# - The self-group guard is what stops a bad ps reading from killing the suite itself.
+_hop_pty_kill() {
+	emulate -L zsh
+	local p=$1
+	[[ $p == <-> ]] || return 0
+	local REPLY
+	local -a REPLY_A
+	local pg=''
+	_hop_pty_pgid "$p" && pg=$REPLY
+	[[ -n $HOP_PTY_SELFPG && $pg == $HOP_PTY_SELFPG ]] && pg=''
+	_hop_pty_tree "${pg:-$p}"
+	local -a doomed=(${REPLY_A:#(1|$$)})
+	[[ -n $pg ]] && kill -KILL -$pg 2>/dev/null
+	(( $#doomed )) && kill -KILL "${doomed[@]}" 2>/dev/null
+	return 0
 }
 
 # pty_close -> reap the child's whole process group, then drop the pty.
@@ -309,7 +426,7 @@ pty_close() {
 	local p=''
 	[[ -s ${HOP_PTY_PIDF:-} ]] && read -r p < "$HOP_PTY_PIDF"
 	if [[ -n $p ]]; then
-		kill -- -$p 2>/dev/null
+		_hop_pty_kill "$p"
 		HOP_PTY_PIDS=(${HOP_PTY_PIDS:#$p})
 	fi
 	zpty -d "$HOP_PTY_NAME" 2>/dev/null
@@ -318,11 +435,12 @@ pty_close() {
 }
 
 # pty_reap_all -> last-resort cleanup for every session this suite ever opened.
+# - The runner's own alarm is a backstop, not a substitute: this must leave it nothing to find.
 pty_reap_all() {
 	emulate -L zsh
 	local p
 	for p in "${HOP_PTY_PIDS[@]}"; do
-		[[ -n $p ]] && kill -- -$p 2>/dev/null
+		_hop_pty_kill "$p"
 	done
 	HOP_PTY_PIDS=()
 	zpty -d 2>/dev/null
