@@ -4,8 +4,10 @@
 # Two shapes look identical and only one is a bound, which is why this file exists at all.
 # - `alarm N; exec` was NOT a bound: perl BECOMES the child, so a child trapping ALRM ignored it.
 # - Proven: `trap "" ALRM; sleep 12` ran all 12 seconds under a 3s bound and exited 0.
+# - Measured again at 45s under a 3s bound, and it still exited 0, which is the dangerous half.
+# - So it is not a weak bound, it REPORTS SUCCESS: a caller reads green off a runaway child.
 # - It also reaped nothing: five fzf processes outlived a run, orphaned to init, hung 11+ minutes.
-# - It read as a bound at five call sites, so there is now one implementation and no second spelling.
+# - It read as a bound at six call sites, so there is now one implementation and no second spelling.
 # - So perl forks instead, keeps the alarm in a process the child cannot reach, and kills the GROUP.
 # - That makes a child trapping ALRM structurally irrelevant rather than a case to handle.
 # - The group is what gets killed, because a preview or reload runs in a fresh $SHELL grandchild.
