@@ -7,6 +7,30 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Fixed
+
+- Eight more assertions that a floor kept from failing. `assert_ge N` reads like a bound but asserts a
+  size, so it passes on every larger value too: the modal keymap check sat at 90 against 97 real keys
+  and stayed green with seven of them deleted, the `--help` registry check sat at 2 against 8 kinds and
+  stayed green with `helm` gone from the kind list entirely, and the `.github` YAML check sat at 1, so a
+  glob rotted to one subdirectory left the workflow file parsed by nothing and reported by nothing.
+  Each is now an exact set or an exact count. A floor of 1 used honestly, to prove evidence exists
+  before asserting over it, is kept and spelled that way.
+- One integration test was reading the wrong evidence rather than too little of it. The fzf stub
+  records the picker's rows to a file it only truncates on the runs it actually makes, so a probe that
+  errored before reaching the picker left the previous invocation's rows in place. With `hop -c` broken
+  so it produced nothing at all, the check that every offered row is inside `$PWD` passed on rows from
+  a different directory. The record is emptied before each run now, and that check fails rather than
+  passing over an empty list.
+- The integration suite no longer hangs when the runner's stdin never reaches EOF. `_hop_fzf_ver` is
+  the one fzf call in the product that is never handed rows on a pipe: `lib/ui.zsh` runs it with
+  stdout captured and stderr dropped, but stdin inherited. The recording stub read stdin
+  unconditionally, so it blocked on anything that never closes, and under a fifo held open the suite
+  took 81 seconds and failed seven of its tests. The worst case was a 120 second discard of the whole
+  run, reported as a timeout that blames a terminal rather than naming the wait. The stub now answers
+  a `--version` query without reading stdin, which is what real fzf does, and without touching the
+  argv and row records, so a version query can no longer satisfy another test's non-vacuity check.
+
 ## [0.1.1] - 2026-08-26
 
 ### Added

@@ -299,7 +299,12 @@ assert_eq '' "${(j:,:)missing_from_rebind}" 'key(s) unbound entering SEARCH but 
 assert_eq '' "${(j:,:)extra_in_rebind}" 'key(s) rebound to NORMAL that were never unbound entering SEARCH'
 assert_eq '' "${(j:,:)missing_from_owned}" 'key(s) in _HOP_VIM_KEYS never unbound entering SEARCH'
 assert_eq '' "${(j:,:)extra_vs_owned}" 'key(s) unbound entering SEARCH that are not in _HOP_VIM_KEYS'
-assert_ge $#unbind_keys 90 'sanity floor: the modal layer should own at least 90 keys'
+# An exact count, because the four set comparisons above cannot notice the set shrinking.
+# - All three lists derive from one `_HOP_VIM_KEYS`, so dropping a key there shrinks them together.
+# - Every difference above then stays empty, which leaves the count as the only guard there is.
+# - Measured: deleting the dquote, dollar, percent, ampersand, squote, star and semicolon keys from ui.zsh left this file reporting 41 passed, 0 failed, which is exactly what a floor of 90 against 97 buys.
+# - 95 keys, plus the two literal parens the tokeniser cannot emit and the lists append by hand.
+assert_eq 97 $#unbind_keys 'the modal layer owns 97 tokens, so a change here is a deliberate edit'
 
 # ---------------------------------------------------------------------------
 # Tier 1b: the real, full bind set validated against the real, installed fzf.
