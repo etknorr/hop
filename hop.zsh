@@ -164,29 +164,45 @@ _hop_rank() {
 	print -rl -- "${(@)${(@o)keyed}#*$'\t'}"
 }
 
+# _hop_fzf_status <status> <label> <rows> [query] -> 0 to use fzf's output, non-zero to stop.
+# - The only place fzf's exit status is interpreted, and EVERY picker has to route through it.
+# - 130 is a user cancel and must stay silent, so "stop" and "failed" are not the same answer.
+# - _hop_st is the status the CALLER returns when this says stop, since cancel stops but succeeds.
+# - The caller declares it `local`, exactly as _hop_run does for _hop_parse_result's three fields.
+# - _hop_ws_picker used to skip this ladder, so a too-old fzf there looked like pressing esc.
+_hop_fzf_status() {
+	emulate -L zsh
+	local -i st=$1
+	local label=$2 rows=$3 query=${4:-}
+	_hop_st=0
+	(( st == 0 )) && return 0
+	if (( st == 130 )); then
+		return 1
+	fi
+	if (( st == 1 )); then
+		print -ru2 -- "hop: no match${query:+ for: $query}"
+		_hop_st=1
+		return 1
+	fi
+	print -ru2 -- "hop: fzf exited with status ${st}"
+	_hop_st=$st
+	return 1
+}
+
 # _hop_run <label> <query> <reload> <targets> [root] [restore]
-# - The only place fzf's exit status is interpreted: 130 is a user cancel and must stay silent.
+# - fzf's status is read by _hop_fzf_status, which this shares with _hop_ws_picker.
 # - _hop_key/_hop_dir/_hop_preview are local here so nothing leaks into the interactive shell.
 # - root is passed through only so the modal `:` kind picker can re-enumerate; '' disables it.
 _hop_run() {
 	emulate -L zsh
 	local label=$1 query=$2 reload=$3 targets=$4 root=${5:-} restore=${6:-} up=${7:-}
-	local _hop_key _hop_dir _hop_preview
+	local _hop_key _hop_dir _hop_preview _hop_st
 	local header out st
+	local -a trows=("${(f)targets}")
 	header=$(_hop_header "$reload")
 	out=$(print -r -- "$targets" | _hop_pick "$label" "$header" "$query" "$reload" "$root" '' "$restore" "$up")
 	st=$?
-	if (( st == 130 )); then
-		return 0
-	fi
-	if (( st == 1 )); then
-		print -ru2 -- "hop: no match${query:+ for: $query}"
-		return 1
-	fi
-	if (( st != 0 )); then
-		print -ru2 -- "hop: fzf exited with status ${st}"
-		return $st
-	fi
+	_hop_fzf_status "$st" "$label" "${#trows}" "$query" || return $_hop_st
 	_hop_parse_result "$out" || return 0
 
 	# ctrl-h/h goes UP a level, so the caller names the picker one step out.
@@ -202,7 +218,8 @@ _hop_run() {
 # - Drilling scopes $HOP_REPOS to the chosen workspace, so the repo picker needs no new argument.
 _hop_ws_picker() {
 	emulate -L zsh
-	local query=${1:-} targets out
+	local query=${1:-} targets out st
+	local _hop_key _hop_dir _hop_preview _hop_st
 	targets=$(_hop_provider_ws)
 	if [[ -z $targets ]]; then
 		print -ru2 -- "hop: no workspaces configured (edit ${HOP_WORKSPACES_FILE})"
@@ -210,7 +227,10 @@ _hop_ws_picker() {
 	fi
 
 	local -a rows=("${(f)targets}")
-	out=$(print -r -- "$targets" | _hop_pick "workspaces  ${#rows}" "$(_hop_header)" "$query" '' '' drill)
+	local label="workspaces  ${#rows}"
+	out=$(print -r -- "$targets" | _hop_pick "$label" "$(_hop_header)" "$query" '' '' drill)
+	st=$?
+	_hop_fzf_status "$st" "$label" "${#rows}" "$query" || return $_hop_st
 	_hop_parse_result "$out" || return 0
 
 	if [[ $_hop_key == ctrl-l ]]; then
