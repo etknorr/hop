@@ -11,6 +11,10 @@
 
 # _up_origin [label] -> REPLY is a bare repo whose main holds v0.1.0 then v0.2.0.
 # - REPLY is deliberately NOT localised, because that is how the fixture helpers hand paths back.
+# - Tags are ANNOTATED, which is what a release tag really is, and what makes --ff-only load-bearing.
+# - A plain `git merge` of an annotated tag ALWAYS writes a merge commit, so this is the real case.
+# - v0.2.0 ADDS a file, which is what makes an untracked-collision test possible at all.
+# - v0.3.0-rc1 and v0.2.0-notes both sort ahead of v0.2.0, so they are a live trap, not a theory.
 _up_origin() {
 	emulate -L zsh
 	fixture_repo "${1:-up-src}" || return 1
@@ -18,10 +22,13 @@ _up_origin() {
 	fixture_write hop.zsh '# a stand-in for the real entry point' || return 1
 	fixture_write VERSION '0.1.0' || return 1
 	fixture_commit 'first release' || return 1
-	_hop_fix_git -C "$src" tag v0.1.0 || return 1
+	_hop_fix_git -C "$src" tag -a -m 'release 0.1.0' v0.1.0 || return 1
 	fixture_write VERSION '0.2.0' || return 1
+	fixture_write added.zsh '# new in 0.2.0' || return 1
 	fixture_commit 'second release' || return 1
-	_hop_fix_git -C "$src" tag v0.2.0 || return 1
+	_hop_fix_git -C "$src" tag -a -m 'release 0.2.0' v0.2.0 || return 1
+	_hop_fix_git -C "$src" tag -a -m 'not a release' v0.3.0-rc1 || return 1
+	_hop_fix_git -C "$src" tag -a -m 'not a release either' v0.2.0-notes || return 1
 	fixture_tmpdir "${1:-up-src}-bare" || return 1
 	local bare="$REPLY/origin.git"
 	_hop_fix_git init --bare -q -b main "$bare" || return 1
@@ -192,6 +199,76 @@ assert_contains "$out" 'no such release: v9.9.9'
 assert_contains "$out" 'v0.2.0'
 assert_eq "$before" "$(_up_sha "$dir")"
 
+t 'a prerelease or topic tag can never become the newest release'
+# v0.3.0-rc1 and v0.2.0-notes both sort AHEAD of v0.2.0, so an unfiltered list picks the wrong one.
+_up_clone "$ORIGIN" up-rc
+dir=$REPLY
+out=$(_up_probe "$dir" '_hop_upgrade --check' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_contains "$out" 'v0.2.0'
+assert_not_contains "$out" 'rc1'
+assert_not_contains "$out" 'notes'
+
+t 'a tag origin does not publish cannot become the newest release'
+# A fetch never prunes, so a yanked release and a hand-made local tag both linger in the clone.
+_up_clone "$ORIGIN" up-localtag
+dir=$REPLY
+_hop_fix_git -C "$dir" tag -a -m 'local only' v9.9.9
+out=$(_up_probe "$dir" '_hop_upgrade --check' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_contains "$out" 'v0.2.0'
+assert_not_contains "$out" '9.9.9'
+
+t 'a column.ui setting cannot hide every release tag'
+# `git tag --list` honours column.ui even with no tty, returning ONE space-joined line.
+_up_clone "$ORIGIN" up-column
+dir=$REPLY
+_hop_fix_git -C "$dir" config column.ui always
+_hop_fix_git -C "$dir" checkout -q v0.1.0
+out=$(_up_probe "$dir" '_hop_upgrade --check' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_contains "$out" 'v0.2.0'
+assert_not_contains "$out" 'none yet'
+
+t 'a tag.sort setting cannot reorder the releases'
+_hop_fix_git -C "$dir" config tag.sort 'v:refname'
+out=$(_up_probe "$dir" '_hop_upgrade --check' 2>&1)
+assert_contains "$out" 'v0.2.0'
+
+t 'detached at a tag that is not a release reads as loose, and is refused'
+_up_clone "$ORIGIN" up-topictag
+dir=$REPLY
+_hop_fix_git -C "$dir" checkout -q --detach
+_hop_fix_git -C "$dir" commit -q --allow-empty --no-gpg-sign -m 'an experiment'
+_hop_fix_git -C "$dir" tag -a -m 'an experiment' my-experiment
+before=$(_up_sha "$dir")
+out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
+st=$?
+assert_eq 1 "$st"
+assert_contains "$out" 'not a release tag'
+assert_eq "$before" "$(_up_sha "$dir")"
+
+t '--check with a version is a usage error, not a report about the wrong thing'
+out=$(_up_probe "$dir" '_hop_upgrade --check 9.9.9' 2>&1)
+st=$?
+assert_eq 2 "$st" 'a version was silently ignored, so the report answered a different question'
+assert_contains "$out" 'takes no version'
+
+t 'a dirty install hears about the dirt, not about the network'
+# The dirty check has to run BEFORE the fetch, or an unreachable origin masks the real cause.
+_up_clone "$ORIGIN" up-dirty-noremote
+dir=$REPLY
+_hop_fix_git -C "$dir" remote set-url origin "${dir}/no-such-remote.git"
+print -r -- '# a local edit' >> "$dir/hop.zsh"
+out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
+st=$?
+assert_eq 1 "$st"
+assert_contains "$out" 'uncommitted changes'
+assert_not_contains "$out" 'could not fetch'
+
 t 'a malformed version is rejected before anything is fetched'
 out=$(_up_probe "$dir" '_hop_upgrade not-a-version' 2>&1)
 st=$?
@@ -237,8 +314,22 @@ assert_contains "$out" 'v0.2.0'
 assert_contains "$out" 'an update is available'
 assert_eq "$before" "$(_up_sha "$dir")" '--check moved HEAD'
 
-t '--check reads the installed version from the VERSION file'
-assert_contains "$out" '0.1.0' 'the VERSION file at v0.1.0 says 0.1.0, so --check must too'
+t 'the installed version is read from VERSION, not inferred from the tag'
+# A VERSION that DISAGREES with the tag is the only way to prove which of the two is being read.
+_up_clone "$ORIGIN" up-verfile
+dir=$REPLY
+_hop_fix_git -C "$dir" checkout -q v0.1.0
+print -r -- '9.9.9' > "$dir/VERSION"
+out=$(_up_probe "$dir" '_hop_up_current; print -r -- $REPLY')
+assert_eq '9.9.9' "$out" 'the tag was reported instead of the VERSION file the contract names'
+
+t 'with no VERSION file the version falls back to git describe'
+_up_clone "$ORIGIN" up-noverfile
+dir=$REPLY
+_hop_fix_git -C "$dir" checkout -q v0.1.0
+command rm -f -- "$dir/VERSION"
+out=$(_up_probe "$dir" '_hop_up_current; print -r -- $REPLY')
+assert_contains "$out" 'v0.1.0' 'with no VERSION file the tag is the only answer left'
 
 t '--check on the newest release says up to date, and still exits 0'
 _up_clone "$ORIGIN" up-check-new
@@ -373,6 +464,38 @@ assert_contains "$out" 'diverged'
 assert_eq "$before" "$(_up_sha "$dir")"
 assert_eq main "$(_up_branch "$dir")" 'a refusal must not move HEAD off the branch either'
 
+t 'a bare upgrade from a pin fast-forwards the main REF, not just the worktree'
+# up-frompin above has main already at v0.2.0, so it never reaches the fast-forward at all.
+_up_clone "$ORIGIN" up-pin-behind
+dir=$REPLY
+_hop_fix_git -C "$dir" checkout -q -B main v0.1.0
+_hop_fix_git -C "$dir" checkout -q v0.1.0
+out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_eq main "$(_up_branch "$dir")"
+assert_eq "$V2" "$(_up_sha "$dir")"
+assert_eq "$V2" "$(_hop_fix_git -C "$dir" rev-parse refs/heads/main)" 'the main ref stayed behind'
+assert_eq 0 "$(_hop_fix_git -C "$dir" rev-list --count --merges main)" \
+	'an annotated tag merged without --ff-only, so a merge commit landed on main'
+
+t 'an untracked file the release also ships is refused BEFORE the pin is left'
+# git would refuse this checkout itself, but only after HEAD had already been moved off the pin.
+_up_clone "$ORIGIN" up-collide
+dir=$REPLY
+_hop_fix_git -C "$dir" checkout -q -B main v0.1.0
+_hop_fix_git -C "$dir" checkout -q v0.1.0
+print -r -- 'mine' > "$dir/added.zsh"
+before=$(_up_sha "$dir")
+out=$(_up_probe "$dir" '_hop_upgrade' 2>&1)
+st=$?
+assert_eq 1 "$st"
+assert_contains "$out" 'added.zsh'
+assert_eq "$before" "$(_up_sha "$dir")"
+assert_eq DETACHED "$(_up_branch "$dir")" 'the pin was abandoned on a path that then refused'
+assert_contains "$(_up_slurp "$dir/added.zsh")" 'mine' 'the untracked file was overwritten'
+assert_not_contains "$out" 'returns you to main' 'it announced a move it then refused to make'
+
 t 'a pin with no local main branch is refused, and is told how to make one'
 _up_clone "$ORIGIN" up-nomain
 dir=$REPLY
@@ -386,13 +509,24 @@ assert_contains "$out" 'no local main branch'
 assert_contains "$out" 'checkout -b main origin/main'
 assert_eq "$before" "$(_up_sha "$dir")"
 
-t 'upgrading to the release already checked out changes nothing'
+t 'upgrading to the release already pinned changes nothing'
 before=$(_up_sha "$dir")
 out=$(_up_probe "$dir" '_hop_upgrade v0.1.0' 2>&1)
 st=$?
 assert_eq 0 "$st"
 assert_contains "$out" 'already at v0.1.0'
 assert_eq "$before" "$(_up_sha "$dir")"
+
+t 'pinning to the release main is already standing on still detaches'
+# Standing on the right COMMIT is not being pinned to it: attached, the next `git pull` moves you.
+_up_clone "$ORIGIN" up-pin-on-main
+dir=$REPLY
+out=$(_up_probe "$dir" '_hop_upgrade 0.2.0' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_eq "$V2" "$(_up_sha "$dir")" 'the commit must not change; only the attachment does'
+assert_eq DETACHED "$(_up_branch "$dir")" 'a pin that leaves you on main is not a pin'
+assert_contains "$out" 'pinned at v0.2.0'
 
 t 'an untracked file does not block an upgrade, and is not removed by one'
 _up_clone "$ORIGIN" up-untracked
@@ -466,7 +600,12 @@ print -r -- \$HOP_HOME
 assert_eq "${HOP_HOME}"$'\nhop' "$shim" 'the shim must define hop and derive the same HOP_HOME'
 
 t 'upgrade is only the verb as the first word, so a query can still contain it'
-# `hop -k file upgrade` has to stay a search, or naming a target `upgrade` would be unreachable.
-typeset entry
-entry=$(_up_slurp "$HOP_HOME/hop.zsh")
-assert_contains "$entry" 'if (( $#words || opts )); then'
+# - With a flag already seen it must be a QUERY word; as a verb it would have moved the real install.
+# - No repo and no workspace means hop errors out before the picker, so fzf never opens here.
+typeset q
+q=$(cd / && HOP_WORKSPACES=/nonexistent/ws hop_probe 'hop -a upgrade' 2>&1)
+st=$?
+assert_eq 1 "$st"
+assert_contains "$q" 'not in a git repository'
+assert_not_contains "$q" 'exec zsh'
+assert_not_contains "$q" 'hop upgrade:'

@@ -7,9 +7,11 @@
 # - People who installed through a plugin manager should update there instead; see the README.
 
 # _hop_up_git <args...> -> git against the install, never against the caller's $PWD.
+# - `command` because an alias expands at PARSE time, so emulate -L zsh is far too late for it.
+# - `alias git=hub` and `alias git='git --no-pager'` are both real dotfile entries in the wild.
 _hop_up_git() {
 	emulate -L zsh
-	git -C "$HOP_HOME" "$@"
+	command git -C "$HOP_HOME" "$@"
 }
 
 # _hop_up_err <line...> -> one refusal on stderr, reason first, prefixed so it is attributable.
@@ -103,12 +105,24 @@ _hop_up_state() {
 		fi
 		return 0
 	fi
-	if _hop_up_git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+	# Only a RELEASE tag counts as a pin: parked on `my-experiment` is loose, not pinned.
+	if [[ -n $(_hop_up_release_at HEAD) ]]; then
 		REPLY=pinned
 		return 0
 	fi
 	REPLY=loose
 	return 0
+}
+
+# _hop_up_release_at <rev> -> the vX.Y.Z tag pointing exactly at that rev, or nothing.
+# - `for-each-ref` rather than `git tag`, which honours column.ui and would return a single line.
+_hop_up_release_at() {
+	emulate -L zsh
+	local out
+	out=$(_hop_up_git for-each-ref --points-at "$1" --format='%(refname:strip=2)' 'refs/tags/v*' 2>/dev/null)
+	local -a hits=(${(f)out})
+	hits=(${(M)hits:#v<->.<->.<->})
+	print -rn -- "${hits[1]:-}"
 }
 
 # _hop_up_reload -> the one instruction that has to follow every successful move.
@@ -142,14 +156,8 @@ _hop_up_track() {
 	local REPLY
 	_hop_up_state
 	local state=$REPLY
-
-	# Someone pinned deliberately at some point, so leaving that pin has to be said out loud.
-	if [[ $state == pinned ]]; then
-		local at
-		at=$(_hop_up_git describe --tags --exact-match HEAD 2>/dev/null)
-		print -r -- "hop is pinned at ${at}, so this returns you to main to follow releases."
-		print -r -- "To stay pinned, name a version instead: hop upgrade ${at#v}"
-	fi
+	local pin=''
+	[[ $state == pinned ]] && pin=$(_hop_up_release_at HEAD)
 
 	# Diverged is the one case where the branch cannot be advanced without rewriting something.
 	if [[ $mainc != $tagc ]] \
@@ -160,6 +168,22 @@ _hop_up_track() {
 		return 1
 	fi
 
+	# An untracked file the release also ships stops the checkout, and it stops it BEFORE the move.
+	# - git refuses such a checkout itself, but only after this function has already left the pin.
+	# - Finding it here is what keeps every refusal below a true no-op.
+	if ! _hop_up_collides_ok "$tagc"; then
+		return 1
+	fi
+
+	# Someone pinned deliberately at some point, so leaving that pin has to be said out loud.
+	# - Said only now, because every refusal above must not be preceded by a claim about moving.
+	if [[ -n $pin ]]; then
+		print -r -- "hop is pinned at ${pin}, so this returns you to main to follow releases."
+		print -r -- "To stay pinned, name a version instead: hop upgrade ${pin#v}"
+	fi
+
+	local head0
+	head0=$(_hop_up_git rev-parse HEAD 2>/dev/null)
 	if [[ $state != main ]]; then
 		if ! _hop_up_git checkout --quiet main; then
 			_hop_up_err 'git refused to check out main, so nothing was changed.'
@@ -185,7 +209,12 @@ _hop_up_track() {
 	fi
 
 	# --ff-only is the whole safety story: it advances the ref or it fails, and never merges.
+	# - An annotated tag is what a release actually is, and a plain merge of one ALWAYS commits.
 	if ! _hop_up_git merge --ff-only --quiet "refs/tags/${tag}"; then
+		# The pin was left a moment ago on the promise this would work, so put HEAD back on it.
+		if [[ $state != main && -n $head0 ]]; then
+			_hop_up_git -c advice.detachedHead=false checkout --quiet --detach "$head0" >/dev/null 2>&1
+		fi
 		_hop_up_err "git refused to fast-forward main to ${tag}, so nothing was changed."
 		return 1
 	fi
@@ -194,17 +223,56 @@ _hop_up_track() {
 	return 0
 }
 
+# _hop_up_collides_ok <to-commit> -> 1 when an untracked file sits where that commit ships one.
+# - `--diff-filter=A` against HEAD names exactly the paths the end state creates from where we are.
+# - A path in that list that exists on disk can only be untracked, since the dirty guard ran first.
+# - That is also why this needs no `git ls-files`, which only _hop_ls may call.
+_hop_up_collides_ok() {
+	emulate -L zsh
+	local to=$1 out p
+	out=$(_hop_up_git diff --name-only --diff-filter=A HEAD "$to" 2>/dev/null)
+	for p in ${(f)out}; do
+		[[ -n $p ]] || continue
+		[[ -e $HOP_HOME/$p ]] || continue
+		_hop_up_err "${p} is untracked here, and ${to:0:7} ships a file at that path." \
+			'Move it aside first; this will not overwrite it.'
+		return 1
+	done
+	return 0
+}
+
 # _hop_up_tags -> every release tag, newest first, and only the strictly vX.Y.Z shaped ones.
 # - A `v0.2.0-rc1` or a topic tag must never be able to become "latest".
+# - `for-each-ref` rather than `git tag --list`, which honours `column.ui=always`.
+# - Under that setting `git tag` returns ONE space-joined line, and every tag then fails the filter.
+# - --sort=-v:refname is passed explicitly so a user's `tag.sort` cannot reorder releases.
 _hop_up_tags() {
 	emulate -L zsh
 	local out
-	out=$(_hop_up_git tag --list 'v*' --sort=-v:refname 2>/dev/null)
+	out=$(_hop_up_git for-each-ref --format='%(refname:strip=2)' --sort=-v:refname 'refs/tags/v*' 2>/dev/null)
 	local -a tags=(${(f)out})
 	tags=(${tags:#})
 	tags=(${(M)tags:#v<->.<->.<->})
 	(( $#tags )) || return 1
 	print -rl -- "${tags[@]}"
+}
+
+# _hop_up_latest -> REPLY is the newest release ORIGIN still publishes, or empty.
+# - A fetch never prunes, so a yanked release lingers locally and would otherwise stay "latest".
+# - A hand-made local tag like v9.9.9 must not be able to win either.
+# - Walking down the list costs one ls-remote per candidate, and normally stops on the first.
+_hop_up_latest() {
+	emulate -L zsh
+	local out=$1 t
+	for t in ${(f)out}; do
+		[[ -n $t ]] || continue
+		if [[ -n $(_hop_up_git ls-remote --tags --refs origin "refs/tags/${t}" 2>/dev/null) ]]; then
+			REPLY=$t
+			return 0
+		fi
+	done
+	REPLY=''
+	return 0
 }
 
 # _hop_up_norm <version> -> REPLY is the tag name, accepting `0.1.0` and `v0.1.0` alike.
@@ -273,6 +341,13 @@ _hop_upgrade() {
 		return 1
 	fi
 
+	# --check answers a question about this install, so pairing it with a version is a mistake.
+	if (( check )) && [[ -n $want ]]; then
+		_hop_up_err "--check reports on this install and takes no version, got ${want}" \
+			'To move to a version: hop upgrade '"${want}"
+		return 2
+	fi
+
 	_hop_up_guard_repo || return 1
 
 	local REPLY
@@ -281,6 +356,9 @@ _hop_upgrade() {
 		_hop_up_norm "$want" || return 2
 		tag=$REPLY
 	fi
+
+	# Checked before the fetch, so a dirty install hears about the dirt and not about the network.
+	(( check )) || _hop_up_guard_move || return 1
 
 	# Only tags are ever consulted, so fetching just tags is the entire network step.
 	# - git's own message is left visible, because "why did the fetch fail" is the useful part.
@@ -293,13 +371,14 @@ _hop_upgrade() {
 	out=$(_hop_up_tags)
 	local -a tags=(${(f)out})
 	tags=(${tags:#})
-	local latest=${tags[1]:-}
+	_hop_up_latest "$out"
+	local latest=$REPLY
 
 	_hop_up_current
 	local current=$REPLY
 	local head at
 	head=$(_hop_up_git rev-parse --short HEAD 2>/dev/null)
-	at=$(_hop_up_git describe --tags --exact-match HEAD 2>/dev/null)
+	at=$(_hop_up_release_at HEAD)
 
 	if (( check )); then
 		printf '  %-10s %s\n' installed "${current}${head:+  (${head})}"
@@ -325,8 +404,6 @@ _hop_upgrade() {
 		return 0
 	fi
 
-	_hop_up_guard_move || return 1
-
 	# No version named means "follow the release channel", which has to leave you ON main.
 	if [[ -z $tag ]]; then
 		if [[ -z $latest ]]; then
@@ -347,7 +424,10 @@ _hop_upgrade() {
 	local from to
 	from=$(_hop_up_git rev-parse HEAD 2>/dev/null)
 	to=$(_hop_up_git rev-parse "refs/tags/${tag}^{commit}" 2>/dev/null)
-	if [[ -n $from && $from == $to ]]; then
+	# Standing on the right COMMIT is not the same as being pinned to it, so main still detaches.
+	# - Otherwise `hop upgrade 0.2.0` on a main that is already there leaves `git pull` free to move.
+	_hop_up_state
+	if [[ -n $from && $from == $to && $REPLY != main ]]; then
 		print -r -- "hop is already at ${tag}, so nothing changed."
 		return 0
 	fi
