@@ -71,6 +71,7 @@ if [[ $PATTERN == (-h|--help) ]]; then
 	print -r -- '  tests/run "zsh -n*"    no suite matches, so this selects tests by name'
 	print -r -- ''
 	print -r -- '  HOP_T_TIMEOUT=N        seconds a single suite may take (default 120)'
+	print -r -- '  HOP_T_REAP_HOURS=N     reap hop-* fixtures older than N hours first (default 4, 0 off)'
 	print -r -- ''
 	print -r -- '  The tree under test is the one this script lives in, so run the APPLIED copy'
 	print -r -- '  and `chezmoi apply` an edited file before trusting a green run.'
@@ -113,8 +114,28 @@ if [[ -n $PATTERN ]]; then
 	fi
 fi
 
+typeset -g HOP_T_TMPROOT=${${TMPDIR:-/tmp}:A}
+
+# A KILLed suite cannot clean up after itself, so its whole fixture set survives the run.
+# - `hop_bound` below sends KILL, which is untrappable, so fixture.zsh's EXIT trap never runs.
+# - The residue therefore accumulates across runs, and 2053 entries had built up before anyone counted.
+# - Age-gated rather than swept, because a CONCURRENT run's fixtures are minutes old and must survive.
+# - Files as well as directories: this run's own TMPOUT is `hop-run.XXXXXX`, which a dirs-only glob misses.
+# - Anchored to the temp root and the hop- prefix both, so a stray TMPDIR cannot delete anything else.
+# - HOP_T_REAP_HOURS=0 disables it, which is what the leak guard in suite_smoke sets to measure honestly.
+typeset -gi HOP_T_REAP_HOURS=${HOP_T_REAP_HOURS:-4}
+if (( HOP_T_REAP_HOURS > 0 )); then
+	typeset -a STALE=("$HOP_T_TMPROOT"/hop-*(Nmh+${HOP_T_REAP_HOURS}))
+	typeset entry
+	for entry in "${STALE[@]}"; do
+		[[ -n $entry && $entry == ${HOP_T_TMPROOT}/hop-* ]] || continue
+		rm -rf -- "$entry"
+	done
+	(( $#STALE )) && print -r -- "run: reaped ${#STALE} fixture entries older than ${HOP_T_REAP_HOURS}h"
+fi
+
 typeset TMPOUT
-TMPOUT=$(mktemp "${${TMPDIR:-/tmp}:A}/hop-run.XXXXXX") || exit 1
+TMPOUT=$(mktemp "${HOP_T_TMPROOT}/hop-run.XXXXXX") || exit 1
 trap 'rm -f -- "$TMPOUT"' EXIT INT TERM
 
 zmodload -F zsh/datetime b:strftime p:EPOCHREALTIME 2>/dev/null
