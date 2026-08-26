@@ -108,11 +108,16 @@ dochome=$(HOP_DEBUG_LOG="${HOP_FIX_HOME}/hop-doctor-sentinel.log" hop_probe 'hop
 assert_not_contains "$dochome" "$HOP_FIX_HOME"
 assert_contains "$dochome" '~/hop-doctor-sentinel.log'
 
+# There was a literal `/Users/` scan here, and it was green for two accidents rather than one reason.
+# - --doctor=short shows the INSTALL path in full on purpose, so an absolute path is expected output.
+# - It only passed because HOME was inherited, which collapsed a checkout under HOME to ~.
+# - On macOS CI, where the checkout IS under /Users, pinning HOME made the accident visible.
+# - It could never fail on Linux either way, so the Ubuntu leg was never checking it.
+# - The probe's own HOME is the whole claim, and the assert below covers every path under it.
 t 'hop --doctor=short never prints $HOME, even forced to try'
 typeset docshortplain
 docshortplain=$(HOP_DEBUG_LOG="${HOP_FIX_HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor=short')
 assert_not_contains "$docshortplain" "$HOP_FIX_HOME"
-assert_not_contains "$docshortplain" '/Users/'
 assert_contains "$docshortplain" '(customised, withheld)' 'a forced custom path must be withheld, not shown'
 
 t 'hop --doctor=short exits 0, inside and outside a git repo'
