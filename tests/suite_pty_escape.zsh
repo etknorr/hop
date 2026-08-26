@@ -12,6 +12,13 @@ source "$HOP_TESTS/lib/pty.zsh"
 # Every test name in one list, so the skip block can never drift from the tests themselves.
 typeset -ga ESC_NAMES=(
 	'pty-esc: a bare BEL byte reaches no verb'
+	'pty-esc: an OSC 11 background-colour reply reaches no verb'
+	'pty-esc: the same OSC 11 reply BEL-terminated reaches no verb'
+	'pty-esc: a truncated OSC 11 reply reaches no verb'
+	'pty-esc: an OSC 10 foreground-colour reply reaches no verb'
+	'pty-esc: an OSC 52 clipboard reply reaches no verb'
+	'pty-esc: a DCS version reply reaches no verb'
+	'pty-esc: a long APC payload cannot outlast the guard'
 	'pty-esc: a real b still browses, so the negatives are not vacuous'
 	'pty-esc: a real y still copies, so the negatives are not vacuous'
 )
@@ -51,7 +58,7 @@ fi
 # The verb binaries; bat is deliberately absent, since bat running IS the preview pane doing its job.
 typeset -ga ESC_VERB_BINS=(gh pbcopy pbpaste code editor vim nvim open xclip xsel wl-copy)
 
-typeset -g ESC_DISPATCH='' ESC_FIRED='' ESC_ALIVE='' ESC_POS=''
+typeset -g ESC_DISPATCH='' ESC_FIRED='' ESC_ALIVE=''
 
 # esc_open -> a fresh picker on the tg view, with the debug log cleared first.
 esc_open() {
@@ -80,7 +87,7 @@ esc_verbs() {
 	local l n
 	for l in "${all[@]}"; do
 		n=${l%%$'\t'*}
-		(( ${ESC_VERB_BINS[(I)$n]} )) && out+=("$n")
+		(( ${ESC_VERB_BINS[(Ie)$n]} )) && out+=("$n")
 	done
 	print -rn -- "${(j:,:)out}"
 }
@@ -88,11 +95,13 @@ esc_verbs() {
 # esc_case <bytes> -> drive one sequence in as a single write, then describe what it did.
 # - ONE write, because a real terminal reply arrives as one burst and that is the reported case.
 # - ESC_ALIVE is empty while the picker is still up, so a non-empty value means the burst accepted.
-# - The `j` afterwards is the anti-vacuum half: a picker that died or wedged would also report no verb.
-# - It proves the keystroke channel still works AND that no half-read escape state is left pending.
+# - It asserts NOTHING about the cursor row or the mode, and that is a deliberate line, not laziness.
+# - j/k/g/G stay unguarded so they stay fork-free, and / and : stay unguarded because esc undoes them.
+# - So a payload legitimately moves the cursor and switches mode: `\e]11;rgb:...` carries g, : and three /.
+# - Three separate attempts to pin those effects each asserted the payload instead of the fix.
 esc_case() {
 	emulate -L zsh
-	ESC_DISPATCH='' ESC_FIRED='' ESC_ALIVE='' ESC_POS=''
+	ESC_DISPATCH='' ESC_FIRED='' ESC_ALIVE=''
 	esc_open || return 1
 	if ! zpty -w -n "$HOP_PTY_NAME" "$1"; then
 		pty_close
@@ -102,20 +111,20 @@ esc_case() {
 	ESC_DISPATCH=$(esc_key)
 	ESC_FIRED=$(esc_verbs)
 	ESC_ALIVE=$(pty_pwd)
-	pty_key_ev j
-	ESC_POS=$(pty_get pos)
 	pty_close
 	return 0
 }
 
-# esc_assert_inert <what> -> the four things every suppressed sequence must be true of at once.
+# esc_assert_inert <what> -> the three things every suppressed sequence must be true of at once.
+# - Two independent things stop these from being vacuous, and neither is inside this function.
+# - esc_case returns non-zero unless pty_open saw a focus event, so the picker demonstrably started.
+# - The bare-b and bare-y controls below prove this same harness still sees a verb when one runs.
 esc_assert_inert() {
 	emulate -L zsh
 	local what=$1
 	assert_empty "$ESC_DISPATCH" "${what} dispatched a verb"
 	assert_empty "$ESC_FIRED" "${what} reached a verb binary"
 	assert_empty "$ESC_ALIVE" "${what} made the picker accept and exit"
-	assert_eq '2' "$ESC_POS" "the picker stopped taking keys after ${what}"
 }
 
 # ---------------------------------------------------------------------------
@@ -126,6 +135,71 @@ esc_assert_inert() {
 t 'pty-esc: a bare BEL byte reaches no verb'
 if esc_case $'\a'; then
 	esc_assert_inert 'a bare BEL byte'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+
+# ---------------------------------------------------------------------------
+# The string-payload escape classes, one test each, every one reproduced before it was fixed.
+# ---------------------------------------------------------------------------
+# fzf consumes CSI correctly, so DA1 and CPR were never a problem and are not tested here.
+# - What leaks is the introducers that carry a STRING payload: OSC, DCS, APC, PM and SOS.
+# - fzf surfaces the unparsed introducer as alt-<char>, and that is the only hook the guard needs.
+
+# The reported sequence. `1e1e` alone holds the `e` verb, and `rgb` holds `b`.
+t 'pty-esc: an OSC 11 background-colour reply reaches no verb'
+if esc_case $'\e]11;rgb:1e1e/1e1e/1e1e\e\\'; then
+	esc_assert_inert 'an OSC 11 reply'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+
+# BEL is the other legal OSC terminator, and it is ALSO ctrl-g, so this covers both fixes at once.
+t 'pty-esc: the same OSC 11 reply BEL-terminated reaches no verb'
+if esc_case $'\e]11;rgb:1e1e/1e1e/1e1e\a'; then
+	esc_assert_inert 'a BEL-terminated OSC 11 reply'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+
+# What a partial read of a reply looks like, which is the shape with no terminator to lean on.
+t 'pty-esc: a truncated OSC 11 reply reaches no verb'
+if esc_case $'\e]11;rgb:1e1e'; then
+	esc_assert_inert 'a truncated OSC 11 reply'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+
+t 'pty-esc: an OSC 10 foreground-colour reply reaches no verb'
+if esc_case $'\e]10;rgb:c5c5/c8c8/c6c6\e\\'; then
+	esc_assert_inert 'an OSC 10 reply'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+
+# This one used to clobber the real clipboard, because `Y` in the payload is the copy-file verb.
+t 'pty-esc: an OSC 52 clipboard reply reaches no verb'
+if esc_case $'\e]52;c;YmFzZTY0\e\\'; then
+	esc_assert_inert 'an OSC 52 clipboard reply'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+
+# XTVERSION, which every modern terminal answers, and whose payload holds the `e` verb.
+t 'pty-esc: a DCS version reply reaches no verb'
+if esc_case $'\eP>|WezTerm 20240203\e\\'; then
+	esc_assert_inert 'a DCS version reply'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+
+# The case that made the guard re-arm on every refusal rather than trust one mark.
+# - A kitty graphics APC carries kilobytes of base64, so a long payload is not hypothetical.
+# - Measured: letters arrive ~20ms apart, so timing from the introducer alone breaks through at letter 8.
+# - This body is four verbs repeated, so it is 64 separate attempts to run one.
+t 'pty-esc: a long APC payload cannot outlast the guard'
+if esc_case $'\e_G'"${(l:64::obey:)}"$'\e\\'; then
+	esc_assert_inert 'a long APC payload'
 else
 	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
 fi

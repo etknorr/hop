@@ -277,6 +277,37 @@ Every printable key types. `esc` returns to NORMAL and clears the query.
 | `ctrl-r` | refresh the preview |
 | `alt-p` or `ctrl-/` | toggle the preview pane |
 
+### The escape guard
+
+NORMAL mode makes letters into verbs, and that creates a problem no keymap can fix on its own: fzf
+cannot decode every escape sequence that arrives on its input, and the ones it cannot parse are
+delivered as ordinary keystrokes. A terminal answering a background-colour query with
+`\e]11;rgb:1e1e/1e1e/1e1e\e\\` therefore types `11;rgb:1e1e/1e1e/1e1e` into the picker, and the `b`
+in `rgb` used to run `gh browse`. Nobody touched a key. An `\e]52;...` clipboard reply reached the
+copy verb through its `Y`, and a `\eP...` version reply reached `$EDITOR` through its `e`.
+
+fzf does surface the part it could not parse: an unrecognised `ESC <char>` becomes a bindable
+`alt-<char>`, so `\e]` arrives as `alt-]`. hop binds every such key to a stamp of the clock, and
+every verb that would leave the picker checks that stamp before it runs. A forged letter follows its
+introducer by about 20 milliseconds, which is the cost of the check itself. A real keypress follows
+whatever the user did last by however long they took. `HOP_GUARD_WINDOW` is where that line sits.
+
+The guard fails open by design. With no clock, no stamp or a malformed window it runs the verb,
+because swallowing a real keypress is worse than the nuisance it prevents. `HOP_GUARD_WINDOW=0`
+turns it off entirely.
+
+Navigation keys are deliberately outside it. `j`, `k`, `g` and `G` must not fork a process on every
+cursor move, and `/` and `:` are both undone by `esc`. So a hostile sequence can still scroll the
+list or switch mode. It cannot open an editor, write your clipboard or open a browser tab.
+
+Two gaps remain, both nuisance-level and both deliberate for now. A **bracketed paste** wraps its
+payload in `\e[200~` and `\e[201~`, which are well-formed CSI sequences that fzf parses and
+discards, so there is no introducer left to hook; it also takes a deliberate paste to trigger, and
+NORMAL mode has search off so pasting there is meaningless anyway. And `\b` and `\f`, if a program
+prints them raw, still read as `ctrl-h` and `ctrl-l`, which are `--expect` keys rather than binds.
+`--expect` outranks every bind and so cannot be guarded; both are in-picker level navigation, and
+moving them onto guarded binds is queued for 0.2.0.
+
 ### The `:` kind menu
 
 `:` switches which kinds are listed, **in place** — no nested fzf process. It reuses the single fzf
@@ -534,6 +565,7 @@ workspaces.example      a workspace list to copy
 | `HOP_FZF_HEIGHT` | `80%` | picker height; **empty means fullscreen** |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
 | `HOP_FZF_MIN` | `0.60.3` | the fzf floor; lower it if the check is wrong about your build |
+| `HOP_GUARD_WINDOW` | `0.15` | seconds the escape guard refuses a verb for; `0` disables it |
 | `HOP_DEBUG` | unset | `1` logs every key dispatch, readable via `--doctor` |
 | `HOP_DEBUG_LOG` | `~/.local/state/hop/debug.log` | where that log goes |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |

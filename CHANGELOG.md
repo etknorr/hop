@@ -20,6 +20,38 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   This also retires a documented confusion. `^G` launches hop from the shell, so `ctrl-g` *inside*
   hop read as "do that again" when it was really the browse verb. It now means nothing there.
 
+### Added
+
+- An escape guard, so bytes a *terminal* prints can no longer run a hop verb. fzf cannot decode every
+  escape sequence that arrives on its input, and the ones it cannot parse are delivered as ordinary
+  keystrokes. In NORMAL mode letters are verbs, so a terminal answering a background-colour query with
+  `\e]11;rgb:1e1e/1e1e/1e1e\e\\` typed `11;rgb:1e1e/1e1e/1e1e` into the picker and the `b` in `rgb`
+  ran `gh browse`. An `\e]52;...` clipboard reply reached the copy verb through its `Y` and clobbered
+  the real clipboard; a `\eP...` version reply, which every modern terminal answers, reached `$EDITOR`
+  through its `e`. Each of these was reproduced under a pty, not inferred.
+
+  fzf does surface the part it could not parse: an unrecognised `ESC <char>` becomes a bindable
+  `alt-<char>`, so `\e]` arrives as `alt-]`. Every such key hop does not already own now stamps a
+  clock, and every action that would leave the picker checks that stamp first. Measured on the
+  development machine, forged letters arrive about 20ms apart, which is the cost of the check's own
+  fork, while a real keypress follows the previous one by however long the user took. The threshold is
+  `HOP_GUARD_WINDOW`, default 150ms, and `HOP_GUARD_WINDOW=0` disables the guard. It fails open on a
+  missing clock, a missing stamp or a malformed window, because swallowing a real keypress is worse
+  than the nuisance it prevents. Nine actions are covered, which is every one that leaves the picker
+  rather than only the six letter verbs, so a stray `q` cannot close it either.
+
+  Navigation stays deliberately outside the guard: `j`, `k`, `g` and `G` must not fork a process on
+  every cursor move, and `/` and `:` are both undone by `esc`. A hostile sequence can therefore still
+  scroll the list or switch mode. It can no longer open an editor, write the clipboard or open a
+  browser tab.
+
+  Two gaps remain, both nuisance-level and both documented in the README. A bracketed paste wraps its
+  payload in `\e[200~` and `\e[201~`, which fzf parses and silently discards, leaving no introducer to
+  hook; it also needs a deliberate paste, and NORMAL mode has search off so pasting there is
+  meaningless. And raw `\b` and `\f` still read as `ctrl-h` and `ctrl-l`, which are `--expect` keys;
+  `--expect` outranks every bind and so cannot be guarded. Both are in-picker level navigation, and
+  moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0.
+
 ### Fixed
 
 - The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
