@@ -24,6 +24,8 @@ co_stub_fzf() {
 		'# hop test stub: records the call, draws nothing, exits the status the test picked.' \
 		': > "$HOP_FZF_ARGV"' \
 		'for a in "$@"; do printf "%s\n" "$a" >> "$HOP_FZF_ARGV"; done' \
+		'# The real fzf reads no stdin for --version, and _hop_fzf_ver pipes it none.' \
+		'case "$1" in --version) exit ${HOP_FZF_EXIT:-1} ;; esac' \
 		'cat > "$HOP_FZF_STDIN"' \
 		'exit ${HOP_FZF_EXIT:-1}' > "$CO_STUBDIR/fzf"
 	chmod +x "$CO_STUBDIR/fzf" || return 1
@@ -42,6 +44,8 @@ co_stub_fzf() {
 # - The stub fzf is already a fiction that draws nothing and exits on demand, so the tty is the same fiction.
 # - Without this every case below would take the headless path and stop testing the status ladder at all.
 # - Overridden in the CHILD rather than the product, so no environment variable can disable the real guard.
+# - stdin is deliberately NOT redirected here: measured, the stub's own --version guard is sufficient,
+#   and a `< /dev/null` on top of it made the pipeline case pass even with that guard reverted.
 co_run() {
 	emulate -L zsh
 	co_stub_fzf || return 1
@@ -350,3 +354,28 @@ co_run 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_HEIGHT=' 'HOP_FZF_EXIT=130' >
 co_argv
 assert_nonempty "${reply[*]}" 'the picker never ran, so the assertion below means nothing'
 assert_eq '' "${reply[(r)--height=*]}" 'an empty HOP_FZF_HEIGHT must drop --height, or a pty hangs on ESC[6n'
+
+# ---------------------------------------------------------------------------
+# The suite has to survive being run from a shell pipeline.
+# ---------------------------------------------------------------------------
+# `sleep 60 | tests/run core` used to discard all 31 cases and take the full 120s bound.
+# - The stub's `cat` waited for an EOF an open pipe never sends, so every probe burned its own bound.
+# - CI never saw it because GitHub Actions hands the job /dev/null on stdin.
+# - The fifo is opened READ-WRITE, so a writer exists for as long as the reader holds it and EOF can
+#   never arrive, which models an open pipe without a holder process for the suite to wait on.
+# - Neither case can hang the suite on a regression: the bound kills the child and reports 142.
+typeset CO_NOFEED
+fixture_tmpdir nofeed || return 1
+CO_NOFEED="$REPLY/pipe"
+mkfifo -- "$CO_NOFEED"
+
+t 'the stub answers --version without reading stdin, exactly as the real fzf does'
+hop_bound 5 env "HOP_FZF_ARGV=${CO_ARGV}" "HOP_FZF_STDIN=${CO_STDIN}" \
+	"$CO_STUBDIR/fzf" --version >/dev/null 2>&1 <> "$CO_NOFEED"
+st=$?
+assert_ne 142 "$st" 'the stub read stdin for a version query, which is the hang seen from a pipeline'
+
+t 'and a whole probe finishes when the runner is handed stdin that never reaches EOF'
+out=$(co_run 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130' <> "$CO_NOFEED"); st=$?
+assert_eq 0 "$st" 'the probe waited for an EOF its stdin was never going to send'
+assert_empty "$out" 'esc is silent, so output here means the probe took some other path'

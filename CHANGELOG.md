@@ -30,6 +30,12 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   run, reported as a timeout that blames a terminal rather than naming the wait. The stub now answers
   a `--version` query without reading stdin, which is what real fzf does, and without touching the
   argv and row records, so a version query can no longer satisfy another test's non-vacuity check.
+- The core suite no longer hangs either, for the same reason and with the same fix. Handed a live
+  stdin, `tests/run core` discarded all 31 of its cases and took the full 120s bound, reporting
+  `a test may await a terminal` when every probe was in fact waiting on an EOF that an open pipe
+  never sends. Its own recording stub captured stdin even when answering `--version`, so each probe
+  burned its bound until the suite bound killed the run. CI never saw it, because GitHub Actions
+  hands the job `/dev/null`.
 
 ## [0.1.1] - 2026-08-26
 
