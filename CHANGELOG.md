@@ -41,6 +41,24 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   Each arm opens on `--ansi` now, a flag only the picker passes.
 - The core suite's stub matches a `--version` query anywhere in argv rather than only as the first word.
   `_hop_fzf_ver` happens to put it first, so the narrower check was correct today and would have gone back to blocking on stdin the moment that call grew a leading flag.
+- The escape-sequence pty cases no longer depend on how loaded the machine is.
+  `bin/hop-guard` times a verb against the previous check's clock reading, so its discriminator is the cost of its own fork: 12.7ms mean idle, but 425ms mean at loadavg 35, well past the 0.15s threshold.
+  A check that slow reads as a real keypress and fails open, and the forged payload duly reached the editor verb in three runs out of four under 24-way load.
+  Those cases pin the window past any plausible fork latency now, which leaves every link they exist to prove intact.
+  The comment claiming the threshold has the headroom a loaded runner needs is corrected to say the opposite.
+  The shipped default is unchanged, because the failure direction is fail-open: heavy load reverts to the nuisance the guard was written for rather than swallowing a keypress you did make.
+- A real keypress could also read as a verb that never ran, for a reason with nothing to do with the guard.
+  The pty stubs append their name, then their arguments, then their newline, as three separate appends to one shared log, and the preview pane runs the `bat` stub on every render.
+  A concurrent call lands between those appends and records `batgh browse ...` in place of `gh browse ...`, which corrupts the only field the check reads.
+  It presented as the browse verb never running, with an empty stderr and the dispatch already logged, which pointed the investigation at the guard rather than at the log.
+  That suite drops the `bat` stub now, leaving the log exactly one writer, and `bin/hop-preview` falls through to the `cat`/`head` path it already uses on a machine without `bat`.
+  The controls also report hop's stderr and any line no single stub could have written, since a verb can bail after `dispatch key=` is logged.
+  The three-append write is still there for every other pty suite to hit.
+- The guard's own unit suite had four assertions with the same defect, at a higher rate than the pty flake that led here.
+  Asserting that a verb was refused means asserting a 150ms threshold was crossed, measured across the very fork whose latency is being timed: 1 in 40 of those checks failed open at loadavg 44, and three of the four sat on the default window.
+  They pin an explicit window now.
+  The malformed-window case could not simply be pinned, because the value under test is precisely the fallback to the default, so it asserts only what holds at every load and checks the fallback constant against the default constant in the source.
+  Asserting that a verb *ran* needs no pin either way, because load only pushes the age further outside the window.
 
 ## [0.1.1] - 2026-08-26
 
