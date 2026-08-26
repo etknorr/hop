@@ -152,19 +152,33 @@ fi
 pty_close
 
 # ---------------------------------------------------------------------------
-# 7. The unbind/rebind round trip, which SMOKE.md calls the whole restore.
+# 7. The unbind/rebind round trip, and the regression that once made it worthless.
 # ---------------------------------------------------------------------------
-# Query `a` matches all four scopes, so the list is still intact on the way back out.
-# - A narrower query exposes a SEPARATE bug: disable-search never re-filters the frozen match set.
+# `zzz` matches nothing ON PURPOSE, because that is the case that used to leave a DEAD list.
+# - disable-search stops future matching but never re-filters, so clear-query had no effect.
+# - The match set stayed frozen empty, every navigation key did nothing, and o accepted nothing.
+# - `search()` after `clear-query` forces the re-filter, and that ordering is load-bearing.
+# - The non-empty accepted path is the assertion the original bug report turned on.
 t 'pty: j moves again after the SEARCH round trip'
 if pty_open 'hop -k tg'; then
 	pty_key_ev '/'
-	pty_key_ev a
+	pty_key_ev z
+	pty_key_ev z
+	pty_key_ev z
 	pty_key_ev esc
+	assert_eq '> ' "$(pty_get prompt)" 'esc did not restore the NORMAL prompt'
+	assert_eq '' "$(pty_get query)" 'esc left the query in place'
+	assert_eq '4' "$(pty_get count R)" 'the match set stayed frozen: NORMAL got a dead list'
 	assert_eq '1' "$(pty_get pos)" 'the round trip did not leave the cursor on row 1'
 	pty_key_ev j
 	assert_eq '2' "$(pty_get pos)" 'j typed instead of moving: the rebind did not restore it'
-	assert_eq '' "$(pty_get query)" 'j reached the query, so it was never rebound'
+	pty_key o
+	if pty_wait_exit; then
+		assert_eq "code	-r	$(pty_row 2)/terragrunt.hcl" "$(pty_calls code)" \
+			'o accepted an empty selection after the round trip'
+	else
+		_hop_t_bad 'o never made the picker exit' "$(pty_trace)"
+	fi
 else
 	_hop_t_bad 'pty_open: the picker never reported ready' "$(pty_err)"
 fi
