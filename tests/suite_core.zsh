@@ -239,3 +239,74 @@ assert_not_contains "$out" 'acct/prod' 'the filter still has to exclude everythi
 t 'the -c filter no longer forks awk, per the same rule providers.zsh already follows'
 out=$(co_run 'print -r -- ${#${(M)${(f)"$(functions hop)"}:#*awk*}}')
 assert_eq 0 "$out" 'awk -v cannot carry a path safely, so hop() must not use it'
+
+# ---------------------------------------------------------------------------
+# Item 2: a user's own HOP_CONFIG has to reach the children that re-source hop.zsh.
+# ---------------------------------------------------------------------------
+# The kinds below are declared in a config a probe points HOP_CONFIG at, exactly as a user would.
+typeset CO_CFG
+fixture_tmpdir usercfg
+CO_CFG="$REPLY/mine.zsh"
+print -rl -- \
+	'hop_kind mine --default --marker OWNER --under mine --layout "name..." --desc "my own kind"' \
+	> "$CO_CFG"
+fixture_write 'mine/alpha/OWNER' 'me'
+fixture_commit 'own kind'
+
+# HOP_CONFIG has to be UNSET first in every case below, or the export proves nothing.
+# - fixture_pins exports HOP_CONFIG, and `typeset -g` KEEPS an export attribute that already exists.
+# - So a probe that inherits the pin passes whether hop.zsh says -g or -gx, which is no test at all.
+# - Unsetting and then assigning plainly is what a .zshrc line actually does.
+t 'a plainly assigned HOP_CONFIG is exported, which is what a .zshrc line needs'
+out=$(co_run "unset HOP_CONFIG
+HOP_CONFIG=${(q)CO_CFG}
+source \${HOP_HOME}/hop.zsh
+print -r -- \"attr=\${(t)HOP_CONFIG}\"
+zsh -f -c 'print -r -- \"child=\${HOP_CONFIG:-nothing}\"'")
+assert_contains "$out" 'export' 'an unexported HOP_CONFIG is invisible to bin/hop-kinds'
+assert_contains "$out" "child=$CO_CFG" 'a child process is the only thing this attribute is for'
+
+t 'HOP_HOPRC is not invented when it was never set'
+out=$(co_run 'print -r -- ${+HOP_HOPRC}-${HOP_HOPRC:-empty}')
+assert_contains "$out" 'empty' 'exporting an unset HOP_HOPRC would opt the user into running .hoprc'
+
+t 'HOP_HOPRC is exported once the user does set it, so the opt-in survives into a child'
+out=$(co_run 'export HOP_HOPRC=1
+source ${HOP_HOME}/hop.zsh
+print -r -- ${(t)HOP_HOPRC}')
+assert_contains "$out" 'export'
+
+# hop-kinds is launched bare from fzf's reload(), so ONLY the export can carry the config to it.
+# - That makes this the case that pins `typeset -gx`, with no explicit forwarding to fall back on.
+t 'bin/hop-kinds sees the user kinds, which is what the : menu renders'
+out=$(co_run "unset HOP_CONFIG
+HOP_CONFIG=${(q)CO_CFG}
+source \${HOP_HOME}/hop.zsh
+\${HOP_HOME}/bin/hop-kinds menu ${(q)CO_REPO}")
+assert_contains "$out" 'my own kind' 'the : menu showed the eight shipped presets instead'
+assert_not_contains "$out" 'terragrunt units' 'a user config replaces the presets, it does not add to them'
+
+t 'the reload command forwards HOP_CONFIG, so alt-a regenerates with the user kinds'
+out=$(co_run "export HOP_CONFIG=${(q)CO_CFG}
+source \${HOP_HOME}/hop.zsh
+_hop_reload_cmd ${(q)CO_REPO} mine")
+assert_contains "$out" "HOP_CONFIG=" 'the child gets no registry unless the config path is named'
+assert_contains "$out" "$CO_CFG"
+
+t 'and running that reload command really does emit the user rows, not unknown kind'
+out=$(co_run "unset HOP_CONFIG
+HOP_CONFIG=${(q)CO_CFG}
+source \${HOP_HOME}/hop.zsh
+eval \"\$(_hop_reload_cmd ${(q)CO_REPO} mine)\"")
+assert_not_contains "$out" 'unknown kind' 'alt-a and r printed this and then blanked the picker'
+assert_contains "$out" "$CO_REPO/mine/alpha" 'the reload child has to produce the same rows hop did'
+
+t 'the reload child keeps zsh -f, so a reload can never source the user rc files'
+out=$(co_run "source \${HOP_HOME}/hop.zsh
+_hop_reload_cmd ${(q)CO_REPO} mine")
+assert_contains "$out" 'zsh -f -c' 'dropping -f would run .zshrc inside every reload'
+
+t 'a HOP_CONFIG assigned AFTER hop.zsh was sourced still reaches the reload child'
+out=$(co_run "HOP_CONFIG=${(q)CO_CFG}
+_hop_reload_cmd ${(q)CO_REPO} mine")
+assert_contains "$out" "$CO_CFG" 'the live value is what the child needs, not the one seen at source time'

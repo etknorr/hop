@@ -10,7 +10,14 @@
 typeset -g HOP_HOME="${${(%):-%x}:A:h}"
 
 # Your own hop_kind declarations live here; nothing repo-specific ships in the code.
-typeset -g HOP_CONFIG=${HOP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
+# - EXPORTED, because bin/hop-kinds and the alt-a reload child both re-source this file to get kinds.
+# - fzf runs those from its own environment, so an unexported value left them on the shipped presets.
+# - Symptom: the `:` menu showed the eight presets and alt-a/r said `hop: unknown kind: <yours>`.
+typeset -gx HOP_CONFIG=${HOP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
+
+# HOP_HOPRC is exported only when you actually set it, so opting in survives into those children.
+# - Exporting it unconditionally would invent a variable nobody set, and .hoprc runs repo code.
+[[ -z ${HOP_HOPRC:-} ]] || typeset -gx HOP_HOPRC
 
 source "$HOP_HOME/lib/providers.zsh"
 source "$HOP_HOME/lib/dsl.zsh"

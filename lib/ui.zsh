@@ -342,12 +342,18 @@ _hop_pick() {
 # - alt-a's reload runs in a fresh shell, so it re-sources hop.zsh instead of calling a function.
 # - Sourcing hop.zsh and not just providers.zsh is what gives the child the same kind registry.
 # - `zsh -f` skips rc files; the args after the script become $1.. for _hop_generate.
+# - `-f` is NOT optional: without it this child would source the user's rc files on every reload.
+# - So every variable the child needs is named here, one at a time, rather than let rc loading back in.
+# - HOP_CONFIG is what decides the child's kind registry, and forwarding it is the whole point.
+# - Passing the LIVE value also covers a HOP_CONFIG assigned after hop.zsh was sourced.
+# - Without it the child fell back to the shipped presets and rejected the user's own kinds.
 _hop_reload_cmd() {
 	emulate -L zsh
 	local root=$1
 	shift
 	local script='source "$HOP_HOME/hop.zsh"; _hop_generate "$@"'
-	local cmd="HOP_HOME=${(qq)HOP_HOME} zsh -f -c ${(qq)script} hop ${(qq)root}"
+	local cmd="HOP_HOME=${(qq)HOP_HOME} HOP_CONFIG=${(qq)HOP_CONFIG}"
+	cmd+=" HOP_HOPRC=${(qq)${HOP_HOPRC:-}} zsh -f -c ${(qq)script} hop ${(qq)root}"
 	local k
 	for k in "$@"; do
 		cmd+=" ${(qq)k}"
