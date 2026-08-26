@@ -37,6 +37,11 @@ co_stub_fzf() {
 # - Setting a global instead would lose it, because $(co_run ...) runs the whole body in a subshell.
 # - The caller's pairs go THROUGH fixture_pins, not through env, because the pins run inside the
 #   child and would otherwise overwrite them: a HOP_* handed to env here loses to its own pin.
+# - _hop_tty_ok is forced true, because hop now refuses the picker outright with no controlling terminal.
+# - This suite has none: a CI runner and an agent's shell both lack one, and neither can be given one cheaply.
+# - The stub fzf is already a fiction that draws nothing and exits on demand, so the tty is the same fiction.
+# - Without this every case below would take the headless path and stop testing the status ladder at all.
+# - Overridden in the CHILD rather than the product, so no environment variable can disable the real guard.
 co_run() {
 	emulate -L zsh
 	co_stub_fzf || return 1
@@ -50,6 +55,7 @@ co_run() {
 		zsh -f -c "$(fixture_pins "$@")
 export PATH=${(q)CO_STUBDIR}:\$PATH
 source ${(q)HOP_HOME}/hop.zsh || exit 97
+_hop_tty_ok() { return 0 }
 ${code}" 2>&1)
 	st=$?
 	print -r -- "$out"
