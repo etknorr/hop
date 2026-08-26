@@ -21,6 +21,7 @@ typeset -ga ESC_NAMES=(
 	'pty-esc: a long APC payload cannot outlast the guard'
 	'pty-esc: a real b still browses, so the negatives are not vacuous'
 	'pty-esc: a real y still copies, so the negatives are not vacuous'
+	'pty-esc: with the guard off, the same reply DOES reach the browse verb'
 )
 
 # esc_skip_all <why> -> skip every test this suite owns, with one reason.
@@ -236,3 +237,22 @@ else
 	_hop_t_bad 'esc_open: the picker never reported ready' "$(pty_err)"
 fi
 pty_close
+
+# ---------------------------------------------------------------------------
+# The characterization test: the reported bug, reproduced on demand.
+# ---------------------------------------------------------------------------
+# HOP_GUARD_WINDOW=0 is the product's own off switch, so this drives the ORIGINAL behaviour.
+# - It is what permanently pins non-vacuity for every negative above, in one picker session.
+# - Without it, a change that stopped the payload reaching fzf at all would turn them ALL green.
+# - Exact values on all three, because that is the whole point of reproducing rather than asserting.
+t 'pty-esc: with the guard off, the same reply DOES reach the browse verb'
+export HOP_GUARD_WINDOW=0
+if esc_case $'\e]11;rgb:1e1e/1e1e/1e1e\e\\'; then
+	assert_eq 'ctrl-g' "$ESC_DISPATCH" 'the harness no longer sees the leak the guard exists to stop'
+	assert_eq 'gh' "$ESC_FIRED" 'the harness no longer sees the verb binary run'
+	assert_nonempty "$ESC_ALIVE" 'the payload no longer makes the picker accept and exit'
+else
+	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
+fi
+# Back to the pinned default, so nothing after this point runs with the guard disabled.
+export HOP_GUARD_WINDOW=''

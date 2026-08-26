@@ -45,12 +45,15 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   scroll the list or switch mode. It can no longer open an editor, write the clipboard or open a
   browser tab.
 
-  Two gaps remain, both nuisance-level and both documented in the README. A bracketed paste wraps its
+  Three gaps remain, all nuisance-level and all documented in the README. A bracketed paste wraps its
   payload in `\e[200~` and `\e[201~`, which fzf parses and silently discards, leaving no introducer to
   hook; it also needs a deliberate paste, and NORMAL mode has search off so pasting there is
-  meaningless. And raw `\b` and `\f` still read as `ctrl-h` and `ctrl-l`, which are `--expect` keys;
+  meaningless. Raw `\b` and `\f` still read as `ctrl-h` and `ctrl-l`, which are `--expect` keys;
   `--expect` outranks every bind and so cannot be guarded. Both are in-picker level navigation, and
-  moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0.
+  moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0. And a bare `ESC` byte
+  still closes the picker, since `esc` in NORMAL means quit; `esc` is deliberately left unguarded
+  because if `bin/hop-guard` ever went missing a `transform:` would yield no action and take all nine
+  guarded keys down with it, leaving `esc` as the only way out.
 
 ### Fixed
 

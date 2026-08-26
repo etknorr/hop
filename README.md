@@ -306,13 +306,22 @@ Navigation keys are deliberately outside it. `j`, `k`, `g` and `G` must not fork
 cursor move, and `/` and `:` are both undone by `esc`. So a hostile sequence can still scroll the
 list or switch mode. It cannot open an editor, write your clipboard or open a browser tab.
 
-Two gaps remain, both nuisance-level and both deliberate for now. A **bracketed paste** wraps its
-payload in `\e[200~` and `\e[201~`, which are well-formed CSI sequences that fzf parses and
-discards, so there is no introducer left to hook; it also takes a deliberate paste to trigger, and
-NORMAL mode has search off so pasting there is meaningless anyway. And `\b` and `\f`, if a program
-prints them raw, still read as `ctrl-h` and `ctrl-l`, which are `--expect` keys rather than binds.
-`--expect` outranks every bind and so cannot be guarded; both are in-picker level navigation, and
-moving them onto guarded binds is queued for 0.2.0.
+Three gaps remain, all nuisance-level and all deliberate for now.
+
+A **bracketed paste** wraps its payload in `\e[200~` and `\e[201~`, which are well-formed CSI
+sequences that fzf parses and discards, so there is no introducer left to hook. It also takes a
+deliberate paste to trigger, and NORMAL mode has search off, so pasting there is meaningless anyway.
+
+`\b` and `\f`, if a program prints them raw, still read as `ctrl-h` and `ctrl-l`, which are `--expect`
+keys rather than binds. `--expect` outranks every bind and so cannot be guarded. Both are in-picker
+level navigation; moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0.
+
+A **bare `ESC` byte** still closes the picker, because `esc` in NORMAL means quit and that is the
+documented binding. Measured: a lone `\e` or `\e\e` aborts, while a `\e` arriving at the tail of a
+truncated sequence does whatever `esc` means in the mode it lands in. `esc` is deliberately *not*
+guarded, and that is a safety property rather than an oversight: if `bin/hop-guard` were ever missing
+or lost its executable bit, a `transform:` yields no output, fzf treats that as no action, and all
+nine guarded keys go dead at once. `esc` is then the only way out of the picker.
 
 ### The `:` kind menu
 
