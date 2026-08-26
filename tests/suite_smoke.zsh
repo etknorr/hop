@@ -189,10 +189,29 @@ changelog=$(<"$HOP_HOME/CHANGELOG.md")
 assert_contains "$changelog" '## [Unreleased]'
 
 t 'hop --help does not star an opt-in kind'
-typeset -a helplines=(${(f)help})
-typeset fileline=${${(M)helplines:#*[[:space:]]file[[:space:]]*}[1]}
-assert_nonempty "$fileline" 'no registry line for the file kind'
-assert_not_contains "$fileline" '*' 'file is opt-in, so it must not carry the default marker'
+# A star only means anything inside the kinds registry block, so the block is isolated first.
+# - This used to select by first substring match on ' file ', which hit six lines of the help text.
+# - The first of those is the usage line `hop -k file x.yml`, a static string with no star column.
+# - So it could never fail: forcing mark='*' for every kind in _hop_usage left this suite 67/0.
+# - Quoted (@f), not bare (f): bare drops the empty lines that delimit the block.
+typeset -a helplines=("${(@f)help}")
+typeset -a reglines=()
+typeset hline inreg=0
+for hline in "${helplines[@]}"; do
+	if (( inreg )); then
+		[[ -n ${hline//[[:space:]]/} ]] || break
+		reglines+=("$hline")
+	elif [[ $hline == *'kinds, * being in the default set:' ]]; then
+		inreg=1
+	fi
+done
+assert_ge $#reglines 2 'the kinds registry block was not found in the help text'
+
+# A registry line is `printf '    %s %-12s %s'`: four spaces, the mark, a space, the padded name.
+# - Anchoring on those columns is what keeps a prose mention of a kind out of the match.
+typeset -a filelines=(${(M)reglines:#'    '?' file '*})
+assert_eq 1 $#filelines "no registry line for the file kind in: ${(j:|:)reglines}"
+assert_not_contains "$filelines[1]" '*' 'file is opt-in, so it must not carry the default marker'
 
 # ---------------------------------------------------------------------------
 # The harness itself: fixtures, stubs and the probe.

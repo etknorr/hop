@@ -10,7 +10,14 @@
 typeset -g HOP_HOME="${${(%):-%x}:A:h}"
 
 # Your own hop_kind declarations live here; nothing repo-specific ships in the code.
-typeset -g HOP_CONFIG=${HOP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
+# - EXPORTED, because bin/hop-kinds and the alt-a reload child both re-source this file to get kinds.
+# - fzf runs those from its own environment, so an unexported value left them on the shipped presets.
+# - Symptom: the `:` menu showed the eight presets and alt-a/r said `hop: unknown kind: <yours>`.
+typeset -gx HOP_CONFIG=${HOP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
+
+# HOP_HOPRC is exported only when you actually set it, so opting in survives into those children.
+# - Exporting it unconditionally would invent a variable nobody set, and .hoprc runs repo code.
+[[ -z ${HOP_HOPRC:-} ]] || typeset -gx HOP_HOPRC
 
 source "$HOP_HOME/lib/providers.zsh"
 source "$HOP_HOME/lib/dsl.zsh"
@@ -56,7 +63,7 @@ _hop_usage() {
 	print -r -- '  hop --vim           force the modal layer on when HOP_VIM=0 is set'
 	print -r -- '  hop --doctor        dump config, tools and kind counts for a bug report'
 	print -r -- '  hop --doctor=short  the same, minus paths and names; safe to paste publicly'
-	print -r -- '  HOP_DEBUG=1 hop     log every key dispatch, then read it with --doctor'
+	print -r -- '  HOP_DEBUG=1 hop     log every pick and key dispatch, read it with --doctor'
 	print -r -- '  hop upgrade         fast-forward main to the newest release, then exec zsh'
 	print -r -- '  hop upgrade 0.1.0   pin the install to exactly that release, detached'
 	print -r -- '  hop upgrade --check what is installed vs what is released; changes nothing'
@@ -164,29 +171,49 @@ _hop_rank() {
 	print -rl -- "${(@)${(@o)keyed}#*$'\t'}"
 }
 
+# _hop_fzf_status <status> <label> <rows> [query] -> 0 to use fzf's output, non-zero to stop.
+# - The only place fzf's exit status is interpreted, and EVERY picker has to route through it.
+# - 130 is a user cancel and must stay silent, so "stop" and "failed" are not the same answer.
+# - _hop_st is the status the CALLER returns when this says stop, since cancel stops but succeeds.
+# - The caller declares it `local`, exactly as _hop_run does for _hop_parse_result's three fields.
+# - _hop_ws_picker used to skip this ladder, so a too-old fzf there looked like pressing esc.
+# - Also the one HOP_DEBUG line EVERY pick passes through, whether or not a dispatch follows.
+# - _hop_dispatch's line was the only one, so a no-match logged nothing and --doctor showed nothing.
+# - Those are precisely the failures people file bugs about, so the log has to reach them first.
+_hop_fzf_status() {
+	emulate -L zsh
+	local -i st=$1
+	local label=$2 rows=$3 query=${4:-}
+	_hop_dbg "pick label=${label} rows=${rows} query=${query} st=${st}"
+	_hop_st=0
+	(( st == 0 )) && return 0
+	if (( st == 130 )); then
+		return 1
+	fi
+	if (( st == 1 )); then
+		print -ru2 -- "hop: no match${query:+ for: $query}"
+		_hop_st=1
+		return 1
+	fi
+	print -ru2 -- "hop: fzf exited with status ${st}"
+	_hop_st=$st
+	return 1
+}
+
 # _hop_run <label> <query> <reload> <targets> [root] [restore]
-# - The only place fzf's exit status is interpreted: 130 is a user cancel and must stay silent.
+# - fzf's status is read by _hop_fzf_status, which this shares with _hop_ws_picker.
 # - _hop_key/_hop_dir/_hop_preview are local here so nothing leaks into the interactive shell.
 # - root is passed through only so the modal `:` kind picker can re-enumerate; '' disables it.
 _hop_run() {
 	emulate -L zsh
 	local label=$1 query=$2 reload=$3 targets=$4 root=${5:-} restore=${6:-} up=${7:-}
-	local _hop_key _hop_dir _hop_preview
+	local _hop_key _hop_dir _hop_preview _hop_st
 	local header out st
+	local -a trows=("${(f)targets}")
 	header=$(_hop_header "$reload")
 	out=$(print -r -- "$targets" | _hop_pick "$label" "$header" "$query" "$reload" "$root" '' "$restore" "$up")
 	st=$?
-	if (( st == 130 )); then
-		return 0
-	fi
-	if (( st == 1 )); then
-		print -ru2 -- "hop: no match${query:+ for: $query}"
-		return 1
-	fi
-	if (( st != 0 )); then
-		print -ru2 -- "hop: fzf exited with status ${st}"
-		return $st
-	fi
+	_hop_fzf_status "$st" "$label" "${#trows}" "$query" || return $_hop_st
 	_hop_parse_result "$out" || return 0
 
 	# ctrl-h/h goes UP a level, so the caller names the picker one step out.
@@ -202,7 +229,8 @@ _hop_run() {
 # - Drilling scopes $HOP_REPOS to the chosen workspace, so the repo picker needs no new argument.
 _hop_ws_picker() {
 	emulate -L zsh
-	local query=${1:-} targets out
+	local query=${1:-} targets out st
+	local _hop_key _hop_dir _hop_preview _hop_st
 	targets=$(_hop_provider_ws)
 	if [[ -z $targets ]]; then
 		print -ru2 -- "hop: no workspaces configured (edit ${HOP_WORKSPACES_FILE})"
@@ -210,7 +238,10 @@ _hop_ws_picker() {
 	fi
 
 	local -a rows=("${(f)targets}")
-	out=$(print -r -- "$targets" | _hop_pick "workspaces  ${#rows}" "$(_hop_header)" "$query" '' '' drill)
+	local label="workspaces  ${#rows}"
+	out=$(print -r -- "$targets" | _hop_pick "$label" "$(_hop_header)" "$query" '' '' drill)
+	st=$?
+	_hop_fzf_status "$st" "$label" "${#rows}" "$query" || return $_hop_st
 	_hop_parse_result "$out" || return 0
 
 	if [[ $_hop_key == ctrl-l ]]; then
@@ -435,11 +466,27 @@ hop() {
 	# -c narrows every kind to the subtree you are standing in, not just the file kind.
 	# - Enumeration still starts at the repo root, because a kind's bases are repo-root relative.
 	# - Filtering the rows afterwards is what makes one flag work identically for all kinds.
-	if (( here )) && [[ $PWD != $root ]]; then
-		targets=$(print -r -- "$targets" | awk -F'\t' -v p="$PWD" '$2 == p || index($2, p "/") == 1')
-		if [[ -z $targets ]]; then
-			print -ru2 -- "hop: no targets under ${PWD} for kinds: ${(j:,:)kinds}"
-			return 1
+	# - $PWD is LOGICAL while the rows are built from git's PHYSICAL root, so both sides resolve first.
+	# - Unresolved, every row was dropped in any repo under macOS /tmp or a symlinked parent.
+	# - _hop_act_browse fixed this same class with ${1:A}, and its comment names the /tmp case.
+	# - Filtering in zsh rather than awk, because `awk -v` escape-processes the value it is handed.
+	# - So a directory whose name contains a backslash silently matched nothing at all.
+	if (( here )); then
+		local hdir=${PWD:A} hroot=${root:A}
+		if [[ $hdir != "$hroot" ]]; then
+			local -a kept=()
+			local row rdir
+			for row in "${(@f)targets}"; do
+				[[ -n $row ]] || continue
+				# Field 2 is the absolute dir, read exactly as _hop_rank reads it.
+				rdir=${${row#*$'\t'}%$'\t'*}
+				[[ $rdir == "$hdir" || $rdir == "$hdir"/* ]] && kept+=("$row")
+			done
+			targets=${(F)kept}
+			if [[ -z $targets ]]; then
+				print -ru2 -- "hop: no targets under ${PWD} for kinds: ${(j:,:)kinds}"
+				return 1
+			fi
 		fi
 	fi
 
