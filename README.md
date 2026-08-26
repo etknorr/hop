@@ -316,6 +316,13 @@ deliberate paste to trigger, and NORMAL mode has search off, so pasting there is
 keys rather than binds. `--expect` outranks every bind and so cannot be guarded. Both are in-picker
 level navigation; moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0.
 
+**The guard does not cover the bare control bytes, and it structurally cannot.** It works by hooking
+the `alt-<char>` that an unparsed escape *introducer* produces. `\a`, `\b` and `\f` carry no
+introducer, so there is nothing to hook and no mark is ever written. Binding the key to `ignore` and
+relocating the verb, which is what `ctrl-g` got, is the only remedy that class has. The remaining two
+are deliberately not getting it in a patch release: relocating two documented keybindings is a worse
+trade than a recoverable change of list position.
+
 A **bare `ESC` byte** still closes the picker, because `esc` in NORMAL means quit and that is the
 documented binding. Measured: a lone `\e` or `\e\e` aborts, while a `\e` arriving at the tail of a
 truncated sequence does whatever `esc` means in the mode it lands in. `esc` is deliberately *not*
@@ -329,9 +336,11 @@ nine guarded keys go dead at once. `esc` is then the only way out of the picker.
 instance by reloading it with a menu and using `$FZF_PROMPT` as the mode flag. `enter` switches to
 that kind; `esc` returns to exactly the list you came from, row count unchanged.
 
-Menu counts are cached per repo *and* per `HEAD`, so a branch switch invalidates them for free. A
-cache miss renders instantly without counts and warms in a detached subshell, so `:` never blocks on
-a full sweep of every kind.
+Menu counts are cached per repo, per `HEAD`, *and* per the index's own state, so a commit, a branch
+switch and a bare `git add` all invalidate them for free. The index has to be in the key because
+enumeration reads it rather than `HEAD`'s tree, so staging a file changes the counts while `HEAD`
+stands still. A cache miss renders instantly without counts and warms in a detached subshell, so `:`
+never blocks on a full sweep of every kind.
 
 A kind with zero matches in the current repo is hidden from the menu entirely, which is what keeps
 one shared config from cluttering unrelated repos.

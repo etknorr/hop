@@ -384,6 +384,12 @@ _hop_pick() {
 		# - print(ctrl-g)+accept rather than --expect, so _hop_dispatch needs no new arm and, unlike
 		#   an --expect key, this one is a bind and could be guarded later.
 		# - Not alt-g: that is the shell widget that LAUNCHES hop. Not alt-b: that is fzf's backward-word.
+		# - This bind is ALSO the worked example for moving the rest of --expect onto binds, in 0.2.0.
+		# - That was thought to change fzf's output line count and ripple into _hop_parse_result.
+		# - It does not: print(<key>)+accept emits the shape a NORMAL letter verb already emits, an
+		#   --expect blank line then the printed key, and _hop_parse_result takes the first NON-empty.
+		# - So ctrl-o/ctrl-t/ctrl-y/alt-o/alt-y can each move exactly the way this one did.
+		# - The payoff is that a bind can be guarded, where an --expect key structurally cannot be.
 		--bind='ctrl-g:ignore'
 		--bind='alt-B:print(ctrl-g)+accept'
 	)
