@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Fixed
+
+- The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
+  command itself fails; it now names the failing tool on stderr and returns non-zero.
+
 ## [0.1.0] - 2026-08-25
 
 First release.

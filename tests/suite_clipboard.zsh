@@ -210,3 +210,35 @@ assert_eq 1 $#msglines 'the no-tool message must be exactly one line'
 t 'no clipboard tool available: the message names install options, not a stack trace'
 assert_contains "$msg" 'pbcopy'
 assert_contains "$msg" 'xclip'
+
+# ---------------------------------------------------------------------------
+# A clipboard command that runs but fails must not be reported as a success.
+# ---------------------------------------------------------------------------
+typeset -g CB_BROKEN=''
+
+# cb_broken_bin -> path to a stub that consumes stdin and always exits 5, once per suite run.
+cb_broken_bin() {
+	emulate -L zsh
+	[[ -z $CB_BROKEN ]] || return 0
+	local REPLY
+	fixture_tmpdir clipbroken || return 1
+	print -rl -- \
+		'#!/usr/bin/env zsh' \
+		'emulate -L zsh' \
+		'IFS= read -r -d "" _ <&0' \
+		'exit 5' > "$REPLY/broken-clip"
+	chmod +x "$REPLY/broken-clip" || return 1
+	CB_BROKEN="$REPLY/broken-clip"
+	return 0
+}
+
+t 'a failing clipboard command is reported, not swallowed as success'
+cb_reset
+cb_broken_bin
+out=$(cb_probe_override '_hop_act_copy "hello world"; print -r -- "exit:$?"' "$CB_BROKEN" 2>"$CB_ERR")
+assert_contains "$out" 'exit:5'
+assert_not_contains "$out" 'hop: copied'
+msg=$(<"$CB_ERR")
+assert_contains "$msg" 'hop:'
+assert_contains "$msg" "$CB_BROKEN"
+assert_contains "$msg" 'hello world'
