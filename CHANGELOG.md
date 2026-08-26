@@ -23,6 +23,33 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Two more keymap assertions of the same shape, for `HOP_VIM_TO_NORMAL` and `HOP_VIM_MENU_BACK`.
   Neither regression could actually ship: a sibling test caught the first, and `esc`'s own `:-abort`
   default caught the second. These now name the cause instead of leaving it to be inferred.
+- `HOP_CONFIG` and `HOP_HOPRC` are now exported, and `HOP_CONFIG` is forwarded explicitly into the
+  reload child alongside `HOP_HOME`. Both were plain shell parameters, so a `HOP_CONFIG=~/mine.zsh`
+  line in `.zshrc` never reached the two children that re-source `hop.zsh` to rebuild the kind
+  registry: the `zsh -f` reload shell and `bin/hop-kinds`. Your own kinds vanished in exactly the
+  places that depend on those, so the `:` view menu listed the eight shipped presets instead of your
+  kinds, and `alt-a` or `r` printed `hop: unknown kind: <yours>` and blanked the picker. The reload
+  child keeps `zsh -f`, which is why each variable is named one at a time rather than pulled in by
+  letting the child read rc files.
+- `hop -c`/`--cwd`/`--here` now resolves `$PWD` before matching it against the row paths, so it finds
+  targets in a repo reached through a symlink. `$PWD` is logical while the rows are built from git's
+  physical `--show-toplevel`, so the two never matched and every row was dropped: `hop -c` reported
+  `hop: no targets under <dir>` and exited 1 in a subtree that plainly had them. This hit every repo
+  under macOS `/tmp` and any checkout below a symlinked parent. `_hop_act_browse` already fixed this
+  same class with `${1:A}`. The filter is also pure zsh now rather than `awk -F'\t' -v p="$PWD"`,
+  because `awk -v` escape-processes the value it is handed, so a directory whose name contained a
+  backslash silently matched nothing.
+- The workspace picker (`-w`/`--workspaces`) now reads fzf's exit status, which it previously skipped
+  entirely. `hop -w somequery` matching nothing printed nothing and exited 0, and a too-old fzf, a
+  rejected key bind or an unreachable `/dev/tty` were all indistinguishable from pressing `esc`. The
+  ladder that `_hop_run` already had is now a shared `_hop_fzf_status`, so the two pickers cannot
+  drift apart again, and `esc` stays silent in both.
+- `HOP_DEBUG=1` now logs every pick, not only a successful key dispatch. The single `_hop_dbg` call
+  sat inside `_hop_dispatch`, so every failure that happened *before* a dispatch wrote nothing at
+  all: fzf exiting 1 or 130, an empty target set, a version rejection, a tty problem. The diagnostic
+  was structurally blind to precisely the failures people file bugs about, and a real `hop: no match`
+  added no line for `hop --doctor` to show. Each pick now logs its label, row count, query and exit
+  status.
 
 ## [0.1.0] - 2026-08-25
 
