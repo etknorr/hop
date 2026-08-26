@@ -238,8 +238,8 @@ prodvars=(${prodvars:#HOP_VIM_*})
 # - A setting appearing or disappearing in the source now forces a deliberate edit of both lists.
 typeset -a expected=(
 	HOP_CLIPBOARD HOP_CONFIG HOP_DEBUG HOP_DEBUG_LOG HOP_DEFAULT_KINDS
-	HOP_FZF_HEIGHT HOP_FZF_MIN HOP_HISTFILE HOP_HIST_MAX HOP_HOPRC
-	HOP_REPOS HOP_VIM HOP_WORKSPACES HOP_WORKSPACES_FILE
+	HOP_FZF_HEIGHT HOP_FZF_MIN HOP_GUARD_WINDOW HOP_HISTFILE HOP_HIST_MAX
+	HOP_HOPRC HOP_REPOS HOP_VIM HOP_WORKSPACES HOP_WORKSPACES_FILE
 	XDG_CACHE_HOME XDG_CONFIG_HOME XDG_STATE_HOME
 )
 # Sorted through an array, because `(o)` does not sort inside a quoted scalar expansion.
