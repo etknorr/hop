@@ -121,9 +121,10 @@ _hop_vim_binds() {
 	# The alt- keys hop or fzf already owns, which must therefore not become mark binds.
 	# - alt-a reload, alt-p toggle-preview, alt-B browse, and alt-o/alt-y are hop's own --expect verbs.
 	# - alt-b/alt-d/alt-f are fzf's backward-word, kill-word and forward-word, which SEARCH needs.
-	# - alt-g and alt-c are the SHELL widgets that launch hop and fzf's cd, so a user really does press them.
-	# - Marking one would arm the guard and cost that user their next keystroke, for no coverage at all.
-	# - No ESC <lowercase> sequence carries a payload, so nothing leaks by leaving these unmarked.
+	# - alt-g and alt-c are left out because they are muscle memory: the shell's hop and fzf-cd widgets.
+	# - Those are ZLE widgets, and ZLE is not reading the keyboard while fzf owns the tty, so no conflict.
+	# - Marking them would still cost a user who presses one out of habit their very next keystroke.
+	# - Nothing leaks either way: no ESC <lowercase> sequence carries a string payload to leak.
 	# - ctrl-d/ctrl-u are in _HOP_VIM_KEYS but are not chars, so `alt-ctrl-d` is not a thing to bind.
 	local -a guard_own=(a o p y B b c d f g ctrl-d ctrl-u)
 
@@ -406,12 +407,16 @@ _hop_pick() {
 	# - A shared /tmp path would let anyone on the box hold the mark fresh and quarantine every verb.
 	# - Empty on failure, and _hop_vim_binds then emits the UNGUARDED keymap rather than a broken one.
 	# - emulate -L zsh sets localtraps, so this EXIT trap fires when _hop_pick returns and no sooner.
+	# - HUP covers closing the terminal window, which would otherwise leave the directory behind.
+	# - INT is deliberately absent: fzf catches ctrl-C itself and exits 130, so EXIT already covers cancel.
+	# - Measured, both halves: a 130 return runs the trap, and a raw SIGINT with no INT trap does not.
+	# - Adding INT would buy only that raw path, at the price of changing SIGINT in the enclosing $( ).
 	local guard_dir='' guard_f=''
 	if _hop_vim_on; then
 		guard_dir=$(mktemp -d "${${TMPDIR:-/tmp}:A}/hop-guard.XXXXXX" 2>/dev/null) || guard_dir=''
 		if [[ -n $guard_dir ]]; then
 			guard_f="${guard_dir}/mark"
-			trap "rm -rf -- ${(q)guard_dir} 2>/dev/null" EXIT INT TERM
+			trap "rm -rf -- ${(q)guard_dir} 2>/dev/null" EXIT HUP TERM
 		fi
 		_hop_vim_binds "$prev_cmd" "$reload" "$root" "$restore" "$query" "$drill" "$up" "$guard_f"
 	fi
