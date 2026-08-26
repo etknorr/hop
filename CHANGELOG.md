@@ -9,14 +9,17 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
+  command itself fails; it now names the failing tool on stderr and returns non-zero.
 - Four test assertions that could not fail, letting a shipped behaviour regress with the suite green.
   The `--help` check for the opt-in `file` kind matched the usage line rather than the kinds registry,
   so starring every kind still passed. Three modal-keymap checks compared a transform's output
   against the same `HOP_VIM_*` variable the transform reads, and `lib/ui.zsh` declares those empty,
   so `?` never opening the keys overlay, `?` never closing it and `enter` never switching kinds in
   the `:` menu were each shippable without one failing test.
-- Two further keymap assertions of the same shape, for `HOP_VIM_TO_NORMAL` and `HOP_VIM_MENU_BACK`.
-  Both regressions were already caught elsewhere, so these now name the cause rather than add cover.
+- Two more keymap assertions of the same shape, for `HOP_VIM_TO_NORMAL` and `HOP_VIM_MENU_BACK`.
+  Neither regression could actually ship: a sibling test caught the first, and `esc`'s own `:-abort`
+  default caught the second. These now name the cause instead of leaving it to be inferred.
 
 ## [0.1.0] - 2026-08-25
 
