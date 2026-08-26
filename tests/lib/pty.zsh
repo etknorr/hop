@@ -470,11 +470,21 @@ pty_env() {
 	export HOP_HISTFILE=/dev/null
 	export HOP_HOPRC=''
 	export HOP_VIM=1
-	# Pinned for the same reason fixture_pins pins it: an inherited HOP_DEBUG=1 makes hop log.
-	export HOP_DEBUG=''
 	# Empty, not unset: this is the one flag that keeps ESC[6n out of the pty.
 	export HOP_FZF_HEIGHT=''
 	export EDITOR="${HOP_PTY_SHARED}/editor" VISUAL="${HOP_PTY_SHARED}/editor"
+
+	# Every OTHER variable hop reads, pinned because the zpty child inherits this environment.
+	# - This is the class a grep for `/Users` cannot find: a needle built from the parent's env.
+	# - All of these use `:-` in hop, so empty means "use hop's own default", not "use nothing".
+	# - HOP_FZF_MIN empty therefore keeps the product's real floor rather than restating it here.
+	# - WORKSPACES_FILE and DEBUG_LOG are pinned explicitly, not left to the XDG roots above,
+	#   because an exported value overrides those and would read the user's real, private config.
+	export HOP_DEBUG='' HOP_DEBUG_LOG="$HOME/.local/state/hop/debug.log"
+	export HOP_WORKSPACES='' HOP_WORKSPACES_FILE="$HOME/.config/hop/workspaces"
+	export HOP_REPOS='' HOP_DEFAULT_KINDS='' HOP_CLIPBOARD='' HOP_HIST_MAX='' HOP_FZF_MIN=''
+	# fzf's own inherited settings: OPTS is rebuilt per session in pty_open, COMMAND is never wanted.
+	export FZF_DEFAULT_COMMAND=''
 	# PATH is exported here rather than through stub_bin, because PATH is what the zpty child gets.
 	# - An audit found a `local PATH` does not survive the fork to `zsh -f`, so it must be global.
 	export PATH="${HOP_PTY_SHARED}:$PATH"
