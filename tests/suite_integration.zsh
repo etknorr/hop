@@ -169,17 +169,16 @@ it_stub_fzf() {
 it_run_stub() {
 	emulate -L zsh
 	it_stub_fzf || return 1
-	local code=$1
-	shift
-	it_run "_hop_tty_ok() { return 0 }
-${code}" "PATH=${IT_STUBDIR}:${PATH}" \
-
 	# Truncated HERE, not in the stub, because the stub only truncates on the runs it actually makes.
 	# - A probe that errors out before the picker leaves the PREVIOUS invocation's record in place.
 	# - A later test then counts rows from an earlier one, which is asserting on the wrong evidence.
 	# - Emptied first, so "the picker never ran" reads as no rows rather than as somebody else's rows.
 	: > "$IT_FZF_ARGV"
 	: > "$IT_FZF_STDIN"
+	local code=$1
+	shift
+	it_run "_hop_tty_ok() { return 0 }
+${code}" "PATH=${IT_STUBDIR}:${PATH}" \
 		"HOP_FZF_ARGV=${IT_FZF_ARGV}" "HOP_FZF_STDIN=${IT_FZF_STDIN}" "$@"
 }
 
@@ -346,7 +345,10 @@ if (( HAVE_FZF )); then
 
 	t "--exact narrows 'abg' to a single row where fuzzy matches several"
 	assert_eq 1 $xn "exact matching is what makes this query a single row, got ${xn}"
-	assert_ge $fn 2 "if fuzzy also returned one row this guard has stopped guarding, got ${fn}"
+	# The relationship, asserted exactly, rather than a floor on fn or a pinned count.
+	# - fn is fzf's own fuzzy result, so a literal 2 would assert fzf's algorithm across two CI legs.
+	# - What the control actually claims is that dropping --exact widens the match, and that is this.
+	assert_eq 1 $(( fn > xn )) "fuzzy must match strictly more than exact, got ${fn} vs ${xn}"
 else
 	# The skip must carry the SAME name as the t above, or the name varies by environment instead.
 	skip "--exact narrows 'abg' to a single row where fuzzy matches several" 'fzf is not installed'
@@ -364,7 +366,8 @@ rows=''
 cnt_sub=$(it_count "$rows")
 
 t 'hop -c in a subtree shows fewer rows than the repo root'
-assert_ge $cnt_sub 1 'the subtree does hold targets, so an empty list is a bug'
+# The fixture is built by this suite, so the count is exact rather than a floor to sit above.
+assert_eq 2 $cnt_sub "the subtree holds exactly two targets in this fixture, got ${cnt_sub}"
 assert_eq 1 $(( cnt_sub < cnt_root )) "scoping must strictly narrow: ${cnt_sub} vs ${cnt_root}"
 
 t 'every row hop -c offers is inside $PWD'
@@ -458,7 +461,7 @@ assert_eq 1 $(it_count "$(it_err)") 'one clear line, never a traceback'
 
 t 'the dir kind still gets a scratch repo out of trouble'
 out=$(it_gen "$SCRATCH" dir)
-assert_ge $(it_count "$out") 1 'the repo root row is the floor hop never drops below'
+assert_eq 1 $(it_count "$out") 'a scratch repo with no subdirectories is exactly the root row'
 assert_contains "$out" '<root>'
 
 # ---------------------------------------------------------------------------
@@ -482,7 +485,8 @@ assert_eq "$WTREE" "$(_hop_fix_git -C "$WTREE" rev-parse --show-toplevel)"
 
 t 'enumerating a worktree yields paths inside the worktree, never the main checkout'
 out=$(it_gen "$WTREE" tg helm dir)
-assert_ge $(it_count "$out") 3 'the worktree has a tg unit, a values dir and its dir rows'
+# The floor here was 3 against an actual 5, so two rows could vanish and it still reported healthy.
+assert_eq 5 $(it_count "$out") 'the worktree fixture yields one tg unit, one helm values dir and three dir rows'
 bad=''
 for d in "${(@f)$(it_dirs "$out")}"; do
 	[[ $d == $WTREE || $d == $WTREE/* ]] || bad=$d
