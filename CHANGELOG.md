@@ -64,6 +64,16 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - The suite's per-child timeout is a real bound again. Six call sites used a shape where the timer
   lived inside the process being timed, so a child that ignored the signal ran unbounded and its
   grandchildren outlived the run. The timer now sits outside it and kills the whole process group.
+- The picker's default height is under test at last. `lib/ui.zsh` reads `${HOP_FZF_HEIGHT-80%}` with
+  a bare dash, the only such read in the shipped source, and the suite pins that variable empty, so
+  `--height=80%` and `--min-height=18` reached fzf in no test at all and a typo in either flag name
+  would have shipped with the suite green. A `suite_core` case now unsets the variable inside the
+  probe and asserts both flags in the recorded fzf argv, with the opposite arm covering the knob.
+- The pin-list drift detector can no longer pass while checking nothing. It guarded its scan with
+  `assert_ge $#prodvars 15` against 17 real settings, so a setting appearing in the source slid past
+  it silently, and a scan degrading to 15 still passed with the unpinned list empty for the wrong
+  reason. The scanned set is written out in full now and compared exactly, so a name entering or
+  leaving the source forces a deliberate edit.
 
 ## [0.1.0] - 2026-08-25
 
