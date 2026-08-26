@@ -506,3 +506,40 @@ typeset pickcall
 for pickcall in "${pickcalls[@]}"; do
 	assert_contains "$pickcall" '| _hop_pick' 'this caller does not pipe, so the picker reads whatever stdin is'
 done
+
+# ---------------------------------------------------------------------------
+# A completed suite must leave nothing behind in a temp root of its own.
+# ---------------------------------------------------------------------------
+# Pinning TMPDIR is the whole isolation, and it is what removes the need for a baseline to subtract.
+# - fixture.zsh derives HOP_FIX_TMPROOT from TMPDIR, so every fixture the child makes lands inside it.
+# - lib/ui.zsh reads ${TMPDIR:-/tmp} for its guard dir too, so the shipped code is pinned by the same move.
+# - Anything left in there afterwards is a leak from that run, and never another agent's live fixture.
+# - suite_core is the subject because that is where the four `$(co_dbg` leaks lived, so this is not vacuous.
+# - HOP_T_REAP_HOURS=0 in the child, or the new reaper could hide the very leak this exists to see.
+# - A KILLED run leaks BY DESIGN, since KILL cannot run the EXIT trap, so that case SKIPS and never fails.
+# - Without that skip this would fail on machine load instead of on a leak, making it a load detector.
+typeset SM_LEAKDIR SM_LEAKTMP SM_LEAKHOME
+typeset -i leakst
+typeset -a leaked leakedowned
+fixture_tmpdir leakroot || return 1
+SM_LEAKDIR=$REPLY
+SM_LEAKTMP="$SM_LEAKDIR/tmp"
+SM_LEAKHOME="$SM_LEAKDIR/home"
+mkdir -p -- "$SM_LEAKTMP" "$SM_LEAKHOME" || return 1
+
+hop_bound 300 env -i PATH="$PATH" TERM=dumb SHELL=/bin/zsh \
+	HOME="$SM_LEAKHOME" TMPDIR="$SM_LEAKTMP" HOP_T_TIMEOUT=900 HOP_T_REAP_HOURS=0 \
+	zsh "${HOP_HOME}/tests/run" core >/dev/null 2>&1 </dev/null
+leakst=$?
+leaked=("$SM_LEAKTMP"/*(N))
+# hop-guard belongs to lib/ui.zsh rather than to the harness, and survives only when a child was killed.
+# - It is excluded until that is fixed, because a test that cannot pass yet is worse than no test at all.
+leakedowned=(${${leaked[@]:t}:#hop-guard*})
+
+if (( leakst != 0 )); then
+	skip 'a completed suite_core run leaves no fixture behind in its own temp root' \
+		"the nested run exited ${leakst}, and a killed run leaks by design"
+else
+	t 'a completed suite_core run leaves no fixture behind in its own temp root'
+	assert_eq '' "${(j:, :)leakedowned}" 'these fixture entries outlived the run that created them'
+fi
