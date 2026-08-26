@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - The edit verb (`alt-o`) no longer rejects an absolute-path `$EDITOR`/`$VISUAL` (e.g.
   `/opt/homebrew/bin/nvim`) as "not installed"; a path is now checked for existence and the
   executable bit instead of a `$PATH` lookup.
+- `hop upgrade <TAB>` no longer offers a single garbage candidate (every tag joined by spaces)
+  when the user has `column.ui=always` set; release tags are now listed with `for-each-ref`.
 
 ## [0.1.0] - 2026-08-25
 
