@@ -337,12 +337,15 @@ fixture_scrub_env() {
 	return 0
 }
 
-# fixture_pins -> `export` lines a child shell must run before it sources hop.zsh.
+# fixture_pins [VAR=value...] -> `export` lines a child shell must run before it sources hop.zsh.
 # - Emitted as code for INSIDE the child, because a `local VAR=` is dynamically scoped, not exported.
 # - Measured: `local HOME=/nope; hop_probe 'print $HOME'` printed the REAL $HOME.
 # - Not delivered via `env`, because suite_clipboard hands a probe a PATH with no env on it.
 # - Derived pins are recomputed; settings are forwarded, so `HOP_DEBUG_LOG=x hop_probe` still works.
 # - PATH is passed explicitly for the same dynamic-scope reason as HOME.
+# - Any pairs given as arguments are emitted LAST, which is the only way a caller can win.
+# - A caller that hands the same variable to `env` instead LOSES: the pins run inside the child,
+#   after env has already applied, and nothing in the child can tell that value from inherited junk.
 fixture_pins() {
 	emulate -L zsh
 	local pair name
@@ -354,6 +357,10 @@ fixture_pins() {
 		print -r -- "export ${name}=${(q)${(P)name}}"
 	done
 	print -r -- "export PATH=${(q)PATH}"
+	for pair in "$@"; do
+		[[ $pair == *=* ]] || continue
+		print -r -- "export ${pair%%=*}=${(q)${pair#*=}}"
+	done
 }
 
 # hop_probe <zsh-code> -> run the code in a fresh shell with hop.zsh sourced, and print its output.
