@@ -256,34 +256,111 @@ stub_reset() {
 	: > "$HOP_FIX_LOG"
 }
 
-# fixture_pins -> `export` lines a child shell must run before it sources hop.zsh.
+# The pin set is split by who is allowed to override it, which is the distinction that matters.
+# - DERIVED is recomputed for every child and never read back out of the environment.
+# - SETTINGS is neutralised once in this process, then forwarded, so a test can still override one.
+# - Collapsing the two lost suite_dsl's fixture config: HOP_CONFIG froze at the value scrub time saw.
+
+# fixture_pin_derived <home> -> the pins a child gets computed fresh, whatever the environment holds.
+# - HOME and the XDG roots are load-bearing, not tidiness: every default path resolves through them.
+# - Unpinned, a probe READ the real ~/.config/hop/workspaces and SOURCED the real config.zsh.
+# - HOP_CONFIG comes from _hop_fix_config, which a suite REPOINTS mid-run by setting HOP_FIX_CONFIG.
+# - So it must be resolved per call: forwarding a stale copy left 33 dsl tests on the wrong config.
+# - Without it the suite would assert against whatever kinds this laptop happens to declare.
+# - HOP_HISTFILE defaults to /dev/null so a probe cannot touch the real frecency history.
+fixture_pin_derived() {
+	emulate -L zsh
+	local home=$1
+	print -rl -- \
+		"HOME=${home}" \
+		"XDG_CONFIG_HOME=${home}/.config" \
+		"XDG_STATE_HOME=${home}/.local/state" \
+		"XDG_CACHE_HOME=${home}/.cache" \
+		"HOP_CONFIG=$(_hop_fix_config)" \
+		"HOP_HISTFILE=${HOP_HISTFILE:-/dev/null}"
+}
+
+# fixture_pin_settings <home> -> every remaining HOP_* the product reads, at its hermetic default.
+# - A new hop setting is a new line here and nowhere else, which is what keeps two lists from drifting.
+# - HOP_HOPRC is forced empty, so a .hoprc in a fixture repo can never run inside a probe.
+# - HOP_DEBUG is forced OFF, so an exported HOP_DEBUG=1 cannot make a test write the real debug log.
+# - Most are pinned EMPTY, which each reads as `:-` and so means "hop's own default", not "nothing".
+# - HOP_FZF_HEIGHT is the exception that matters: it reads `${HOP_FZF_HEIGHT-80%}`, a BARE dash.
+# - So empty is not its default, it DROPS --height, which is the only value that emits no ESC[6n.
+# - An inherited 80% is what left 8 fzf and 8 orphaned parents alive 38 minutes after a run said FAIL.
+# - DEBUG_LOG and WORKSPACES_FILE are named outright rather than left to the XDG roots above,
+#   because an exported value overrides those and would read the user's real, private config.
+# - The two FZF_* pins are the ones no scan of hop's own source can find, because FZF reads them.
+# - Measured: FZF_DEFAULT_OPTS='--exact' silently disabled the CONTROL arm of the --exact guard,
+#   so the fuzzy comparison returned one row and the test stopped proving anything.
+fixture_pin_settings() {
+	emulate -L zsh
+	local home=$1
+	print -rl -- \
+		"HOP_DEBUG_LOG=${home}/.local/state/hop/debug.log" \
+		"HOP_WORKSPACES_FILE=${home}/.config/hop/workspaces" \
+		'HOP_HOPRC=' \
+		'HOP_DEBUG=' \
+		'HOP_VIM=' \
+		'HOP_DEFAULT_KINDS=' \
+		'HOP_REPOS=' \
+		'HOP_WORKSPACES=' \
+		'HOP_FZF_MIN=' \
+		'HOP_FZF_HEIGHT=' \
+		'HOP_CLIPBOARD=' \
+		'HOP_HIST_MAX=' \
+		'FZF_DEFAULT_OPTS=' \
+		'FZF_DEFAULT_COMMAND='
+}
+
+# fixture_pin_pairs <home> -> both lists as `VAR=value`, for the callers that hand pins to `env`.
+fixture_pin_pairs() {
+	emulate -L zsh
+	fixture_pin_derived "$1"
+	fixture_pin_settings "$1"
+}
+
+# fixture_scrub_env -> neutralise every hop SETTING in this process, once, at source time.
+# - The scrub belongs here and not in each probe, because the suite process reads these too.
+# - It is also the only way a probe can tell a developer's exported value from a test's deliberate one.
+# - After it runs, anything still set differently was set by a test, so a probe must HONOUR it.
+# - Clobbering per-probe instead broke four tests that legitimately pass HOP_DEBUG_LOG, HOP_WORKSPACES
+#   and HOP_CLIPBOARD in as the thing under test.
+# - HOME and the XDG roots are deliberately NOT scrubbed here: the real $HOME is the needle several
+#   leak tests search for, and pointing it at the throwaway home would make them pass vacuously.
+fixture_scrub_env() {
+	emulate -L zsh
+	local pair
+	for pair in "${(@f)$(fixture_pin_settings "$HOP_FIX_HOME")}"; do
+		typeset -gx "${pair%%=*}"="${pair#*=}"
+	done
+	return 0
+}
+
+# fixture_pins [VAR=value...] -> `export` lines a child shell must run before it sources hop.zsh.
 # - Emitted as code for INSIDE the child, because a `local VAR=` is dynamically scoped, not exported.
 # - Measured: `local HOME=/nope; hop_probe 'print $HOME'` printed the REAL $HOME.
 # - Not delivered via `env`, because suite_clipboard hands a probe a PATH with no env on it.
-# - HOME and the XDG pins are load-bearing, not tidiness: every default path resolves through them.
-# - Unpinned, a probe READ the real ~/.config/hop/workspaces and SOURCED the real config.zsh.
-# - HOP_HOPRC is forced empty, so a .hoprc in a fixture repo can never run inside a probe.
-# - HOP_CONFIG is forced too, because the default points at the USER'S OWN config.zsh.
-# - Without that the suite would assert against whatever kinds this laptop happens to declare.
-# - HOP_DEBUG is forced OFF, so an exported HOP_DEBUG=1 cannot make a test write the real debug log.
-# - A test that WANTS logging sets HOP_DEBUG inside the probe code, where it is visible.
-# - HOP_HISTFILE defaults to /dev/null so a probe cannot touch the real frecency history.
+# - Derived pins are recomputed; settings are forwarded, so `HOP_DEBUG_LOG=x hop_probe` still works.
 # - PATH is passed explicitly for the same dynamic-scope reason as HOME.
+# - Any pairs given as arguments are emitted LAST, which is the only way a caller can win.
+# - A caller that hands the same variable to `env` instead LOSES: the pins run inside the child,
+#   after env has already applied, and nothing in the child can tell that value from inherited junk.
 fixture_pins() {
 	emulate -L zsh
-	local home=$HOP_FIX_HOME
-	local config="${home}/.config" state="${home}/.local/state" cache="${home}/.cache"
-	local hopconfig="$(_hop_fix_config)" hist=${HOP_HISTFILE:-/dev/null}
-	print -rl -- \
-		"export HOME=${(q)home}" \
-		"export XDG_CONFIG_HOME=${(q)config}" \
-		"export XDG_STATE_HOME=${(q)state}" \
-		"export XDG_CACHE_HOME=${(q)cache}" \
-		"export HOP_CONFIG=${(q)hopconfig}" \
-		"export HOP_HOPRC=''" \
-		"export HOP_DEBUG=''" \
-		"export HOP_HISTFILE=${(q)hist}" \
-		"export PATH=${(q)PATH}"
+	local pair name
+	for pair in "${(@f)$(fixture_pin_derived "$HOP_FIX_HOME")}"; do
+		print -r -- "export ${pair%%=*}=${(q)${pair#*=}}"
+	done
+	for pair in "${(@f)$(fixture_pin_settings "$HOP_FIX_HOME")}"; do
+		name=${pair%%=*}
+		print -r -- "export ${name}=${(q)${(P)name}}"
+	done
+	print -r -- "export PATH=${(q)PATH}"
+	for pair in "$@"; do
+		[[ $pair == *=* ]] || continue
+		print -r -- "export ${pair%%=*}=${(q)${pair#*=}}"
+	done
 }
 
 # hop_probe <zsh-code> -> run the code in a fresh shell with hop.zsh sourced, and print its output.
@@ -308,3 +385,7 @@ fzf_filter() {
 	(( ${+commands[fzf]} )) || return 127
 	fzf --filter="$1" --delimiter=$'\t' --with-nth=1 --tiebreak=begin,index
 }
+
+# Last, because the scrub needs every definition above it, HOP_FIX_HOME and _hop_fix_config included.
+# - Sourcing this file is what makes a suite process hermetic, so nothing may run before it.
+fixture_scrub_env

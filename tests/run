@@ -20,6 +20,9 @@ export HOP_TESTS HOP_HOME
 typeset -gi HOP_T_TIMEOUT=${HOP_T_TIMEOUT:-120}
 typeset -g HOP_T_SENTINEL='##hop-test-count'
 
+# Sourced before the mode split, because the suites bound children too and must not re-derive it.
+source "$HOP_TESTS/lib/bound.zsh"
+
 # ---------------------------------------------------------------------------
 # Child mode: run exactly one suite in this process and report its tally.
 # ---------------------------------------------------------------------------
@@ -114,37 +117,6 @@ typeset TMPOUT
 TMPOUT=$(mktemp "${${TMPDIR:-/tmp}:A}/hop-run.XXXXXX") || exit 1
 trap 'rm -f -- "$TMPOUT"' EXIT INT TERM
 
-# perl is the timeout on this box, and a missing perl must not silently drop the bound.
-# - `alarm N; exec` was NOT a bound: it became the child, so a child trapping ALRM ignored it.
-# - Proven: `trap "" ALRM; sleep 12` ran all 12 seconds under a 3s bound and exited 0.
-# - It also reaped nothing: five fzf processes outlived a run, orphaned to init, hung 11+ minutes.
-# - So perl forks instead, keeps the alarm in a process the suite cannot reach, and kills the GROUP.
-# - That makes a child trapping ALRM structurally irrelevant rather than a case to handle.
-# - The group is what gets killed, because a preview or reload runs in a fresh $SHELL grandchild.
-# - Both sides call setpgid, because either one may lose the race to the other's first exec.
-# - KILL, never TERM: a hung fzf traps TERM in raw mode, and a real TERM left it alive.
-# - A killed group exits 142, which is what perl's own alarm death used to report.
-typeset -a BOUND=()
-if (( ${+commands[perl]} )); then
-	BOUND=(perl -e '
-		my $secs = shift @ARGV;
-		my $pid = fork();
-		die "fork: $!" unless defined $pid;
-		if ($pid == 0) { setpgrp(0, 0); exec @ARGV; exit 127 }
-		setpgrp($pid, $pid);
-		$SIG{ALRM} = sub {
-			kill("KILL", -$pid);
-			waitpid($pid, 0);
-			exit 142;
-		};
-		alarm $secs;
-		waitpid($pid, 0);
-		my $st = $?;
-		alarm 0;
-		exit($st & 127 ? 128 + ($st & 127) : $st >> 8);
-	' "$HOP_T_TIMEOUT")
-fi
-
 zmodload -F zsh/datetime b:strftime p:EPOCHREALTIME 2>/dev/null
 typeset -F START=${EPOCHREALTIME:-0}
 
@@ -155,7 +127,7 @@ typeset -a body
 
 for suite in "${SUITES[@]}"; do
 	name=${${suite:t}%.zsh}
-	"${BOUND[@]}" zsh "${0:A}" --_suite "$suite" > "$TMPOUT" 2>&1
+	hop_bound "$HOP_T_TIMEOUT" zsh "${0:A}" --_suite "$suite" > "$TMPOUT" 2>&1
 	st=$?
 	tallied=0
 	body=()

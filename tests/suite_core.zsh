@@ -35,6 +35,8 @@ co_stub_fzf() {
 # - Both streams are captured, since every assertion here is about a message on stderr.
 # - The probe's status is this function's OWN status: a caller reads it as $? after the $(...).
 # - Setting a global instead would lose it, because $(co_run ...) runs the whole body in a subshell.
+# - The caller's pairs go THROUGH fixture_pins, not through env, because the pins run inside the
+#   child and would otherwise overwrite them: a HOP_* handed to env here loses to its own pin.
 co_run() {
 	emulate -L zsh
 	co_stub_fzf || return 1
@@ -43,9 +45,9 @@ co_run() {
 	: > "$CO_ARGV"
 	: > "$CO_STDIN"
 	local out st
-	out=$(perl -e 'alarm 20; exec @ARGV' env \
-		"HOP_FZF_ARGV=${CO_ARGV}" "HOP_FZF_STDIN=${CO_STDIN}" "$@" \
-		zsh -f -c "$(fixture_pins)
+	out=$(hop_bound 20 env \
+		"HOP_FZF_ARGV=${CO_ARGV}" "HOP_FZF_STDIN=${CO_STDIN}" \
+		zsh -f -c "$(fixture_pins "$@")
 export PATH=${(q)CO_STUBDIR}:\$PATH
 source ${(q)HOP_HOME}/hop.zsh || exit 97
 ${code}" 2>&1)

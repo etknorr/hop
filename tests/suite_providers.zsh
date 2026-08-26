@@ -558,11 +558,14 @@ fixture_commit 'hoprc'
 
 # hoprc_gen [VAR=VALUE...] -> REPLY is the rows, HOP_ERRTEXT the stderr, sentinel reset first.
 # - This bypasses hop_probe on purpose: hop_probe forces HOP_HOPRC empty for every other test.
+# - It still takes the full pin set, or an exported HOP_HOPRC=1 opts the security test IN and it fails.
+# - The caller's own pairs come last, because `env A=1 A=2` keeps the last one and that is the override.
 # - No $(...) capture, because a subshell would throw away the HOP_ERRTEXT this sets.
 hoprc_gen() {
 	emulate -L zsh
 	command rm -f -- "$HOPRC_SENT"
-	perl -e 'alarm 20; exec @ARGV' env "HOP_CONFIG=$(_hop_fix_config)" "$@" \
+	local -a pins=("${(@f)$(fixture_pin_pairs "$HOP_FIX_HOME")}")
+	hop_bound 20 env "${pins[@]}" "$@" \
 		zsh -f -c "source ${(q)HOP_HOME}/hop.zsh || exit 97
 _hop_generate ${(q)HOPRC_REPO} extra" >"$HOPRC_OUT" 2>"$HOP_ERRFILE"
 	REPLY=$(<"$HOPRC_OUT")
