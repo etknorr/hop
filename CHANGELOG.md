@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   git toplevel, workspace names and paths, and kind names, replacing them with counts, and shows
   a config path only when it still matches hop's shipped default.
 
+### Fixed
+
+- The copy verb (`y`/`Y`, `ctrl-y`/`alt-y`) no longer hard-requires `pbcopy`: it now falls back to
+  `wl-copy`, `xclip`, `xsel`, or `clip.exe`, so it works on Linux (Wayland or X11) and WSL, not just
+  macOS. `HOP_CLIPBOARD` overrides the probe entirely for a custom clipboard command.
+
 ## [0.1.0] - 2026-08-25
 
 First release.

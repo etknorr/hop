@@ -394,6 +394,7 @@ workspaces.example      a workspace list to copy
 | `HOP_WORKSPACES` | unset | colon-separated workspaces, overrides the file |
 | `HOP_REPOS` | every repo in every workspace | colon-separated repo list for `-R` |
 | `HOP_HISTFILE` | `~/.local/state/hop/history` | frecency history |
+| `HOP_CLIPBOARD` | unset | overrides the copy verb's clipboard command, skipping the probe |
 | `HOP_VIM` | `1` | `0` disables the modal layer |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |
@@ -408,9 +409,11 @@ execution path, so it now requires `HOP_HOPRC=1`. Only enable it for repos you w
 ### Degradations
 
 Every dependency beyond `zsh`, `fzf` and `git` is optional and degrades to something that works: no
-`bat` means plain `cat`; no `gh` means the browse verb explains why; no `code` means `$EDITOR`. A
-kind whose families are absent from the current repo emits zero rows and **zero** stderr, which is
-what lets one config work across every repo without noise.
+`bat` means plain `cat`; no `gh` means the browse verb explains why; no `code` means `$EDITOR`; no
+clipboard tool means the copy verb names what to install instead of copying nothing silently. The
+copy verb itself tries `pbcopy`, `wl-copy`, `xclip`, `xsel`, then `clip.exe`, so it works unmodified
+on macOS, Wayland, X11 and WSL. A kind whose families are absent from the current repo emits zero
+rows and **zero** stderr, which is what lets one config work across every repo without noise.
 
 ---
 
