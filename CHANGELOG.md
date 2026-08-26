@@ -32,8 +32,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   `wl-copy`, `xclip`, `xsel`, or `clip.exe`, so it works on Linux (Wayland or X11) and WSL, not just
   macOS. `HOP_CLIPBOARD` overrides the probe entirely for a custom clipboard command.
 - `esc` out of a non-matching SEARCH query no longer lands you in NORMAL with a permanently empty
-  list. `disable-search` only stops future matching, so nothing re-filtered; the mode transition now
-  ends in `search()` to re-match, after `clear-query`.
+  list, where every navigation key did nothing and a verb acted on an empty selection.
+  `disable-search` only stops future matching, so nothing re-filtered. The transition now runs
+  `clear-query+search()` as static actions on the `esc` bind itself rather than from inside the
+  mode-transition string: fzf does not honour a `search()` emitted by a `transform:`, and `esc` has
+  to be a transform in order to tell its three meanings apart.
 - An fzf older than 0.60.3 is now refused with an explanation naming the version found, the version
   needed, and the upstream download, instead of failing as a bare `unknown option: --accept-nth`.
   `--accept-nth` arrived in fzf 0.60.0 and only worked alongside `--select-1` from 0.60.3, and the

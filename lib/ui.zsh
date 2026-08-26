@@ -111,11 +111,11 @@ _hop_vim_binds() {
 
 	# Esc clears the query on the way back to NORMAL, exactly as it drops the filter in k9s.
 	# - A query still displayed but no longer filtering anything is worse than no query at all.
-	# - The trailing `search()` re-matches, because `disable-search` only stops FUTURE matching.
-	# - Without it, esc out of a non-matching query left NORMAL holding a permanently empty list.
-	# - It has to come AFTER clear-query, or it re-runs the search that matched nothing.
-	# - `search()` needs fzf 0.59.0, which HOP_FZF_MIN already covers; an unknown action aborts fzf.
-	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+clear-query+search()+change-prompt(> )+change-header(${nh})+${prev_restore}"
+	# - `clear-query+search()` is deliberately NOT here; it sits on the esc bind, statically.
+	# - fzf does NOT honour `search()` emitted BY a `transform:`, and esc has to be a transform.
+	# - Measured: from a transform the list stayed pos=0 count=0, from a static bind pos=1 count=4.
+	# - Untreated, esc out of a query matching nothing left NORMAL holding a permanently dead list.
+	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+change-prompt(> )+change-header(${nh})+${prev_restore}"
 
 	# Esc has three meanings, resolved from fzf's own exported state rather than a file.
 	# - In the kind menu it goes back to the view you came from, which is the k9s behaviour.
@@ -186,7 +186,12 @@ _hop_vim_binds() {
 		args+=(--bind="${k}:${act:-ignore}")
 	done
 	args+=(--bind='(:ignore' --bind='):ignore')
-	args+=(--bind="esc:${esc_act}")
+	# clear-query+search() runs unconditionally, BEFORE the transform picks one of esc's three jobs.
+	# - It has to be static: fzf ignores a `search()` that a transform emits, which is the live bug.
+	# - It has to come after clear-query, or search() re-runs the query that matched nothing.
+	# - It is harmless in the two branches that abort or leave the menu, since both discard the list.
+	# - `search()` needs fzf 0.59.0, which HOP_FZF_MIN covers; an unknown action makes fzf refuse.
+	args+=(--bind="esc:clear-query+search()+${esc_act}")
 	# Binding enter at all is new; the non-menu branch is a literal accept so cd is unchanged.
 	[[ -n $enter_act ]] && args+=(--bind="enter:${enter_act}")
 
