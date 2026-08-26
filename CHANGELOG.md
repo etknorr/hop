@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Fixed
 
+- The copy verb (`ctrl-y`/`alt-y`) no longer reports `hop: copied <path>` when the clipboard
+  command itself fails; it now names the failing tool on stderr and returns non-zero.
 - The test suite no longer inherits the developer's own `hop` settings. An exported `HOP_FZF_MIN`,
   `HOP_VIM`, `HOP_HOPRC` or `HOP_REPOS` made it fail or hang, and an inherited `HOP_FZF_HEIGHT`
   started fzf against no terminal and left orphaned processes behind. Every setting hop reads is now

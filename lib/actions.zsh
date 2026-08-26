@@ -122,6 +122,12 @@ _hop_act_copy() {
 		return 1
 	fi
 	print -rn -- "$what" | "${cmd[@]}"
+	# ${pipestatus[-1]} names the clipboard tool's own exit status, deliberately, not just $?.
+	local rc=${pipestatus[-1]}
+	if (( rc != 0 )); then
+		print -ru2 -- "hop: ${cmd[1]} failed to copy ${what}"
+		return $rc
+	fi
 	print -r -- "hop: copied ${what}"
 }
 
