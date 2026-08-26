@@ -181,8 +181,15 @@ assert_eq 'transform:if [ -n "$FZF_PREVIEW_LABEL" ]; then printf %s "$HOP_VIM_HE
 	"$(_km_bind_action "$KM_FULL" '?')"
 
 t 'esc resolves from FZF_PROMPT and FZF_INPUT_STATE, never a file'
-assert_eq 'transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; *) if [ "$FZF_INPUT_STATE" = disabled ]; then printf abort; else printf %s "$HOP_VIM_TO_NORMAL"; fi ;; esac' \
-	"$(_km_bind_action "$KM_FULL" esc)"
+typeset esc_bind
+esc_bind=$(_km_bind_action "$KM_FULL" esc)
+assert_eq 'clear-query+search()+transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; *) if [ "$FZF_INPUT_STATE" = disabled ]; then printf abort; else printf %s "$HOP_VIM_TO_NORMAL"; fi ;; esac' \
+	"$esc_bind"
+
+# Named separately from the equality above, so a regression says WHICH property broke.
+t 'esc re-matches from a STATIC prefix, because fzf ignores search() from a transform'
+assert_eq 'clear-query+search()+' "${esc_bind%%transform:*}" 'clear-query then search() must run BEFORE the transform, statically'
+assert_not_contains "${esc_bind#*transform:}" 'search()' 'a search() inside the transform body is silently ignored by fzf'
 
 t '/ switches to SEARCH: unbinds the vim keys, enables search, re-prompts'
 typeset slash
@@ -377,10 +384,13 @@ _km_transform_probe() {
 		_hop_pick "label" "header" "" "reloadcmd" "/some/root" "1" "restorecmd" "1"
 		local esc_body enter_body help_body a
 		for a in "${KM_CAPTURED[@]}"; do
+			# Strip UP TO transform:, never from position 0: esc carries static actions in front of it.
+			# - esc is clear-query+search()+transform:..., because fzf ignores search() from a transform.
+			# - Assuming position 0 left every esc body EMPTY, and an empty body still passed 3 tests.
 			case $a in
-				--bind=esc:transform:*) esc_body=${a#--bind=esc:transform:} ;;
-				--bind=enter:transform:*) enter_body=${a#--bind=enter:transform:} ;;
-				"--bind=?:transform:"*) help_body=${a#"--bind=?:transform:"} ;;
+				--bind=esc:*transform:*) esc_body=${a#*transform:} ;;
+				--bind=enter:*transform:*) enter_body=${a#*transform:} ;;
+				"--bind=?:"*transform:*) help_body=${a#*transform:} ;;
 			esac
 		done
 		export HOP_VIM_TO_NORMAL=$KM_TO_NORMAL HOP_VIM_MENU_BACK=$KM_MENU_BACK
@@ -398,12 +408,24 @@ _km_transform_probe() {
 		out+=("EXPECT_PICK_KIND=${KM_PICK_KIND}")
 		out+=("EXPECT_HELP_ON=${KM_HELP_ON}")
 		out+=("EXPECT_HELP_OFF=${KM_HELP_OFF}")
+		# Byte counts, so a body the case arms failed to find is named directly, not inferred.
+		out+=("LEN_ESC=${#esc_body}")
+		out+=("LEN_ENTER=${#enter_body}")
+		out+=("LEN_HELP=${#help_body}")
 		print -rn -- "${(pj:\x1e:)out}"
 	'
 }
 
 typeset KM_TF
 KM_TF=$(_km_transform_probe)
+
+# This runs FIRST, because sh -c "" exits 0 and prints nothing, so an unextracted body is silent.
+# - Every assertion below compares against a body's OUTPUT, which is empty either way.
+# - Without this the three esc tests fail with a bare empty diff and never name the real cause.
+t 'all three transform bodies were actually extracted from the bind set'
+assert_ge "$(_km_dump_get "$KM_TF" 'LEN_ESC=')" 1 'the esc transform body was not found in the bind set'
+assert_ge "$(_km_dump_get "$KM_TF" 'LEN_ENTER=')" 1 'the enter transform body was not found in the bind set'
+assert_ge "$(_km_dump_get "$KM_TF" 'LEN_HELP=')" 1 'the ? transform body was not found in the bind set'
 
 t 'esc in the kind menu goes back to the view you came from'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_MENU_BACK=')" "$(_km_dump_get "$KM_TF" 'ESC_MENU=')"
