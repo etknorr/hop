@@ -109,9 +109,12 @@ _hop_vim_binds() {
 
 	local to_search="${unbind_all}+enable-search+change-prompt(/ )+change-header(${sh})+${prev_restore}"
 
-	# Esc drops the filter on the way back to NORMAL, exactly as it does in k9s.
+	# Esc clears the query on the way back to NORMAL, exactly as it drops the filter in k9s.
 	# - A query still displayed but no longer filtering anything is worse than no query at all.
-	# - clear-query and search() are deliberately NOT here; they ride the esc bind. See esc_act.
+	# - `clear-query+search()` is deliberately NOT here; it sits on the esc bind, statically.
+	# - fzf does NOT honour `search()` emitted BY a `transform:`, and esc has to be a transform.
+	# - Measured: from a transform the list stayed pos=0 count=0, from a static bind pos=1 count=4.
+	# - Untreated, esc out of a query matching nothing left NORMAL holding a permanently dead list.
 	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+change-prompt(> )+change-header(${nh})+${prev_restore}"
 
 	# Esc has three meanings, resolved from fzf's own exported state rather than a file.
@@ -183,14 +186,11 @@ _hop_vim_binds() {
 		args+=(--bind="${k}:${act:-ignore}")
 	done
 	args+=(--bind='(:ignore' --bind='):ignore')
-
-	# clear-query+search() is STATIC on the bind, and must never be folded into esc_act.
-	# - fzf does NOT honour `search()` emitted by a transform:, so inside esc_act it silently does nothing.
-	# - That shipped once: esc out of a non-matching query left NORMAL holding a permanently dead list.
-	# - It parsed fine, which is why a parse check passed it; only a real keystroke exposed it.
-	# - Verified behaviourally under a pty in tests/suite_pty.zsh, not by checking that fzf accepts it.
-	# - search() must follow clear-query, or it re-runs the query that already matched nothing.
-	# - Running unconditionally is harmless: in NORMAL and in the menu the query is already empty.
+	# clear-query+search() runs unconditionally, BEFORE the transform picks one of esc's three jobs.
+	# - It has to be static: fzf ignores a `search()` that a transform emits, which is the live bug.
+	# - It has to come after clear-query, or search() re-runs the query that matched nothing.
+	# - It is harmless in the two branches that abort or leave the menu, since both discard the list.
+	# - `search()` needs fzf 0.59.0, which HOP_FZF_MIN covers; an unknown action makes fzf refuse.
 	args+=(--bind="esc:clear-query+search()+${esc_act}")
 	# Binding enter at all is new; the non-menu branch is a literal accept so cd is unchanged.
 	[[ -n $enter_act ]] && args+=(--bind="enter:${enter_act}")
