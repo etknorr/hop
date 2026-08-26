@@ -130,13 +130,17 @@ assert_eq 'key=unset st=unset' "$out" 'the picker must not leak state into the i
 # co_dbg <hop-code> [VAR=value...] -> the debug log a probe wrote, with HOP_DEBUG on for that probe.
 # - HOP_DEBUG is pinned OFF by fixture_pins, so turning it on INSIDE the probe is the only honest way.
 # - The log path is pinned per call, because the default lands under the throwaway $HOME either way.
+# - The dir sits under $HOP_FIX_HOME, not fixture_tmpdir: every call here is an `$(co_dbg ...)` subshell.
+# - A fixture_tmpdir registration made in that subshell dies with it, so the dir leaked, four per run.
+# - $HOP_FIX_HOME is registered once at top level and removed recursively, so anything below it goes too.
+# - Still mktemp, because `(( ++n ))` in a subshell never reaches the parent and a counter would collide.
 co_dbg() {
 	emulate -L zsh
 	local code=$1
 	shift
-	local REPLY
-	fixture_tmpdir dbg || return 1
-	local log="$REPLY/debug.log"
+	local dir
+	dir=$(mktemp -d "${HOP_FIX_HOME}/co-dbg.XXXXXX") || return 1
+	local log="$dir/debug.log"
 	co_run "export HOP_DEBUG=1 HOP_DEBUG_LOG=${(q)log}
 ${code}" "$@" >/dev/null 2>&1
 	[[ -r $log ]] || return 0
