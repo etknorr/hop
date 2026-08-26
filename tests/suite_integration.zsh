@@ -173,6 +173,13 @@ it_run_stub() {
 	shift
 	it_run "_hop_tty_ok() { return 0 }
 ${code}" "PATH=${IT_STUBDIR}:${PATH}" \
+
+	# Truncated HERE, not in the stub, because the stub only truncates on the runs it actually makes.
+	# - A probe that errors out before the picker leaves the PREVIOUS invocation's record in place.
+	# - A later test then counts rows from an earlier one, which is asserting on the wrong evidence.
+	# - Emptied first, so "the picker never ran" reads as no rows rather than as somebody else's rows.
+	: > "$IT_FZF_ARGV"
+	: > "$IT_FZF_STDIN"
 		"HOP_FZF_ARGV=${IT_FZF_ARGV}" "HOP_FZF_STDIN=${IT_FZF_STDIN}" "$@"
 }
 
@@ -361,6 +368,11 @@ assert_ge $cnt_sub 1 'the subtree does hold targets, so an empty list is a bug'
 assert_eq 1 $(( cnt_sub < cnt_root )) "scoping must strictly narrow: ${cnt_sub} vs ${cnt_root}"
 
 t 'every row hop -c offers is inside $PWD'
+# Guarded, because "no row escaped" is also true of no rows at all.
+# - This loop is the shape that passes hardest when the thing under test never ran.
+# - Truncating the record file fixes WHOSE rows these are; it cannot make an empty list fail.
+# - Measured with -c broken so it errored before the picker: the loop below printed a pass.
+assert_nonempty "$rows" 'hop -c produced no rows, so the escape check below would be vacuous'
 bad=''
 for d in "${(@f)$(it_dirs "$rows")}"; do
 	[[ $d == $SUB || $d == $SUB/* ]] || bad=$d
