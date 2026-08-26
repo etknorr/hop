@@ -37,6 +37,19 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Two more keymap assertions of the same shape, for `HOP_VIM_TO_NORMAL` and `HOP_VIM_MENU_BACK`.
   Neither regression could actually ship: a sibling test caught the first, and `esc`'s own `:-abort`
   default caught the second. These now name the cause instead of leaving it to be inferred.
+- Eight more assertions that a floor kept from failing. `assert_ge N` reads like a bound but asserts a
+  size, so it passes on every larger value too: the modal keymap check sat at 90 against 97 real keys
+  and stayed green with seven of them deleted, the `--help` registry check sat at 2 against 8 kinds and
+  stayed green with `helm` gone from the kind list entirely, and the `.github` YAML check sat at 1, so a
+  glob rotted to one subdirectory left the workflow file parsed by nothing and reported by nothing.
+  Each is now an exact set or an exact count. A floor of 1 used honestly, to prove evidence exists
+  before asserting over it, is kept and spelled that way.
+- One integration test was reading the wrong evidence rather than too little of it. The fzf stub
+  records the picker's rows to a file it only truncates on the runs it actually makes, so a probe that
+  errored before reaching the picker left the previous invocation's rows in place. With `hop -c` broken
+  so it produced nothing at all, the check that every offered row is inside `$PWD` passed on rows from
+  a different directory. The record is emptied before each run now, and that check fails rather than
+  passing over an empty list.
 - `HOP_CONFIG` and `HOP_HOPRC` are now exported, and `HOP_CONFIG` is forwarded explicitly into the
   reload child alongside `HOP_HOME`. Both were plain shell parameters, so a `HOP_CONFIG=~/mine.zsh`
   line in `.zshrc` never reached the two children that re-source `hop.zsh` to rebuild the kind
