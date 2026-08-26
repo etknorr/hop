@@ -309,6 +309,7 @@ fixture_pin_settings() {
 		'HOP_FZF_HEIGHT=' \
 		'HOP_CLIPBOARD=' \
 		'HOP_HIST_MAX=' \
+		'HOP_GUARD_WINDOW=' \
 		'FZF_DEFAULT_OPTS=' \
 		'FZF_DEFAULT_COMMAND='
 }

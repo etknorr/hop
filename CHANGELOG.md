@@ -7,7 +7,65 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Changed
+
+- The browse verb moved off `ctrl-g` and onto `alt-B` in SEARCH, because `ctrl-g` was reachable with
+  no keypress at all. A single BEL byte (`0x07`) in anything a program prints arrives at fzf as
+  `ctrl-g`, and hop passed `ctrl-g` on `--expect`, so a stray bell ran `gh browse` and opened a
+  browser tab. `--expect` is passed unconditionally, so neither `HOP_VIM=0` nor `--no-vim` protected
+  against it the way they protect the NORMAL-mode letters. `ctrl-g` is now bound to `ignore` rather
+  than merely dropped: unbound, fzf's own default for it is `abort`, so the same bell would have
+  closed the picker instead. `b` in NORMAL is unchanged.
+
+  This also retires a documented confusion. `^G` launches hop from the shell, so `ctrl-g` *inside*
+  hop read as "do that again" when it was really the browse verb. It now means nothing there.
+
+### Added
+
+- An escape guard, so bytes a *terminal* prints can no longer run a hop verb. fzf cannot decode every
+  escape sequence that arrives on its input, and the ones it cannot parse are delivered as ordinary
+  keystrokes. In NORMAL mode letters are verbs, so a terminal answering a background-colour query with
+  `\e]11;rgb:1e1e/1e1e/1e1e\e\\` typed `11;rgb:1e1e/1e1e/1e1e` into the picker and the `b` in `rgb`
+  ran `gh browse`. An `\e]52;...` clipboard reply reached the copy verb through its `Y` and clobbered
+  the real clipboard; a `\eP...` version reply, which every modern terminal answers, reached `$EDITOR`
+  through its `e`. Each of these was reproduced under a pty, not inferred.
+
+  fzf does surface the part it could not parse: an unrecognised `ESC <char>` becomes a bindable
+  `alt-<char>`, so `\e]` arrives as `alt-]`. Every such key hop does not already own now stamps a
+  clock, and every action that would leave the picker checks that stamp first. Measured on the
+  development machine, forged letters arrive about 20ms apart, which is the cost of the check's own
+  fork, while a real keypress follows the previous one by however long the user took. The threshold is
+  `HOP_GUARD_WINDOW`, default 150ms, and `HOP_GUARD_WINDOW=0` disables the guard. It fails open on a
+  missing clock, a missing stamp or a malformed window, because swallowing a real keypress is worse
+  than the nuisance it prevents. Nine actions are covered, which is every one that leaves the picker
+  rather than only the six letter verbs, so a stray `q` cannot close it either.
+
+  Navigation stays deliberately outside the guard: `j`, `k`, `g` and `G` must not fork a process on
+  every cursor move, and `/` and `:` are both undone by `esc`. A hostile sequence can therefore still
+  scroll the list or switch mode. It can no longer open an editor, write the clipboard or open a
+  browser tab.
+
+  Three gaps remain, all nuisance-level and all documented in the README. A bracketed paste wraps its
+  payload in `\e[200~` and `\e[201~`, which fzf parses and silently discards, leaving no introducer to
+  hook; it also needs a deliberate paste, and NORMAL mode has search off so pasting there is
+  meaningless. Raw `\b` and `\f` still read as `ctrl-h` and `ctrl-l`, which are `--expect` keys;
+  `--expect` outranks every bind and so cannot be guarded. Both are in-picker level navigation, and
+  moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0. And a bare `ESC` byte
+  still closes the picker, since `esc` in NORMAL means quit; `esc` is deliberately left unguarded
+  because if `bin/hop-guard` ever went missing a `transform:` would yield no action and take all nine
+  guarded keys down with it, leaving `esc` as the only way out.
+
 ### Fixed
+
+- The picker no longer advertises keys it left bound to `ignore`. Five NORMAL-mode keys are gated on
+  whether the calling picker had anything for them to do: `r` needs a restore command, `:` a root to
+  enumerate kinds from, `l` a drill target, `h` an up-level target, and `M-a` a reload command. The
+  repo picker (`hop -R`) supplies only the up-level target and the workspace picker (`hop -w`) only the
+  drill target, yet the NORMAL legend named `:` and the `?` overlay named all five in both. So a user
+  pressed the key the header had just told them to press and got nothing, with no error and no beep, in
+  the two pickers a newcomer meets first. The legend now omits `: view` where there is no kind menu,
+  and the overlay is passed the list of keys that picker really bound, which is the rule
+  `_hop_header`'s own comment already stated for `M-a`. `M-a` was the fifth case and had been missed.
 
 - `hop` no longer hangs forever when no controlling terminal is available. A mistyped query was the
   likeliest way to hit this: `hop -k tg zzzz` from a script, a cron job, a CI step or an agent's

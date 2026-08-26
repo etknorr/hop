@@ -487,6 +487,10 @@ pty_env() {
 	export HOP_DEBUG='' HOP_DEBUG_LOG="$HOME/.local/state/hop/debug.log"
 	export HOP_WORKSPACES='' HOP_WORKSPACES_FILE="$HOME/.config/hop/workspaces"
 	export HOP_REPOS='' HOP_DEFAULT_KINDS='' HOP_CLIPBOARD='' HOP_HIST_MAX='' HOP_FZF_MIN=''
+	# The newest variable hop reads, and the one a developer is most likely to have exported by hand.
+	# - Empty keeps bin/hop-guard's own 150ms default, exactly as HOP_FZF_MIN above keeps fzf's floor.
+	# - Left unpinned, an exported HOP_GUARD_WINDOW=0 turns seven suite_pty_escape negatives red.
+	export HOP_GUARD_WINDOW=''
 	# fzf's own inherited settings: OPTS is rebuilt per session in pty_open, COMMAND is never wanted.
 	export FZF_DEFAULT_COMMAND=''
 	# PATH is exported here rather than through stub_bin, because PATH is what the zpty child gets.
