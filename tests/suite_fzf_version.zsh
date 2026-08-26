@@ -18,22 +18,36 @@ _fz_stub() {
 	: > "$FZ_LOG"
 	print -rl -- \
 		'#!/bin/sh' \
-		'# hop test stub: reports a fixed version and records the call, so nothing real ever runs.' \
+		'# hop test stub: answers --version, and refuses anything else loudly rather than silently.' \
 		'printf "fzf %s\n" "$*" >> "$HOP_FZF_STUB_LOG"' \
+		'case "$1" in' \
+		'	--version) ;;' \
+		'	*) printf "stub fzf: refusing to emulate the UI: %s\n" "$*" >&2; exit 2 ;;' \
+		'esac' \
 		'if [ -n "$HOP_FZF_STUB_OUT" ]; then printf "%s\n" "$HOP_FZF_STUB_OUT"; fi' \
 		'exit 0' > "$FZ_STUB/fzf"
 	chmod +x "$FZ_STUB/fzf" || return 1
 	return 0
 }
 
-# _fz_probe <version-output> <code> -> run code with hop.zsh sourced and the stub fzf first on PATH.
-# - The real fzf is shadowed, not removed, so `${+commands[fzf]}` is still true inside hop().
+# _fz_path -> a PATH holding the stub plus the base system directories, and nothing else.
+# - The real fzf lives in a package-manager prefix, so omitting those makes it UNREACHABLE here.
+# - A real fzf in --height mode emits ESC[6n and waits forever when no tty can answer it.
+# - Shadowing alone was not enough: one test unshadowed it and orphaned a hung fzf to init.
+# - git, zsh, cat and chmod all resolve under this, which is everything a probe needs.
+_fz_path() {
+	emulate -L zsh
+	print -rn -- "${FZ_STUB}:/usr/bin:/bin:/usr/sbin:/sbin"
+}
+
+# _fz_probe <version-output> <code> -> run code with hop.zsh sourced and ONLY the stub fzf reachable.
+# - `${+commands[fzf]}` stays true inside hop(), which is what keeps the not-installed branch out.
 # - The call log is truncated first, so each probe's fork count stands on its own.
 _fz_probe() {
 	emulate -L zsh
 	local ver=$1 code=$2
 	: > "$FZ_LOG"
-	HOP_FZF_STUB_OUT=$ver HOP_FZF_STUB_LOG=$FZ_LOG PATH="${FZ_STUB}:${PATH}" \
+	HOP_FZF_STUB_OUT=$ver HOP_FZF_STUB_LOG=$FZ_LOG PATH="$(_fz_path)" \
 		HOP_HOPRC='' HOP_HISTFILE=/dev/null HOP_CONFIG="$(_hop_fix_config)" \
 		zsh -f -c "source ${(q)HOP_HOME}/hop.zsh || exit 97
 ${code}"
@@ -55,6 +69,17 @@ t 'the fzf stub is in place, so nothing below touches the real fzf'
 _fz_stub
 assert_nonempty "$FZ_STUB" 'no stub directory, so every test below would use the real fzf'
 assert_exec "$FZ_STUB/fzf"
+
+t 'the only fzf a probe can reach is the stub'
+# If this ever fails, a probe can start a real picker with no tty, which hangs until it is killed.
+out=$(_fz_probe '0.74.1' 'command -v fzf')
+assert_eq "$FZ_STUB/fzf" "$out" 'a probe could reach a real fzf, which would hang with no tty'
+
+t 'the stub refuses to emulate the picker, so a stray UI call fails instead of passing'
+out=$(_fz_probe '0.74.1' 'fzf --height=80% >/dev/null' 2>&1)
+st=$?
+assert_eq 2 "$st" 'the stub answered a UI invocation, so a bad test could look green'
+assert_contains "$out" 'refusing to emulate'
 
 t 'sourcing hop.zsh forks nothing, because every shell pays for that'
 out=$(_fz_probe '0.44.1 (debian)' 'true' 2>&1)
