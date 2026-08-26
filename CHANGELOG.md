@@ -50,6 +50,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   was structurally blind to precisely the failures people file bugs about, and a real `hop: no match`
   added no line for `hop --doctor` to show. Each pick now logs its label, row count, query and exit
   status.
+- `hop upgrade <TAB>` no longer offers a single garbage candidate (every tag joined by spaces)
+  when the user has `column.ui=always` set; release tags are now listed with `for-each-ref`.
 
 ## [0.1.0] - 2026-08-25
 

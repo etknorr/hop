@@ -42,7 +42,7 @@ exec zsh && cd "$REPO" && hop
 - [ ] **[auto]** `esc` returns the header to `NORMAL` and clears the query.
 - [ ] **After that round trip, every verb still works**: `j` `k` `g` `G` `^d` `^u` `p` `r` all act,
       and `o` `O` `e` `y` `Y` `b` each fire once and exit. This is the whole unbind/rebind restore.
-      `j` alone is **[auto]**; the other twelve keys are still yours to check.
+      `j` and `o` are **[auto]**; the other twelve keys are still yours to check.
 - [ ] Do `/` `abc` `esc` twice in a row, then confirm `j` still moves rather than typing.
 - [ ] `/` `zzz` `esc` leaves a list you can still navigate, rather than a dead empty one.
 
