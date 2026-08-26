@@ -109,13 +109,10 @@ _hop_vim_binds() {
 
 	local to_search="${unbind_all}+enable-search+change-prompt(/ )+change-header(${sh})+${prev_restore}"
 
-	# Esc clears the query on the way back to NORMAL, exactly as it drops the filter in k9s.
+	# Esc drops the filter on the way back to NORMAL, exactly as it does in k9s.
 	# - A query still displayed but no longer filtering anything is worse than no query at all.
-	# - The trailing `search()` re-matches, because `disable-search` only stops FUTURE matching.
-	# - Without it, esc out of a non-matching query left NORMAL holding a permanently empty list.
-	# - It has to come AFTER clear-query, or it re-runs the search that matched nothing.
-	# - `search()` needs fzf 0.59.0, which HOP_FZF_MIN already covers; an unknown action aborts fzf.
-	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+clear-query+search()+change-prompt(> )+change-header(${nh})+${prev_restore}"
+	# - clear-query and search() are deliberately NOT here; they ride the esc bind. See esc_act.
+	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+change-prompt(> )+change-header(${nh})+${prev_restore}"
 
 	# Esc has three meanings, resolved from fzf's own exported state rather than a file.
 	# - In the kind menu it goes back to the view you came from, which is the k9s behaviour.
@@ -186,7 +183,15 @@ _hop_vim_binds() {
 		args+=(--bind="${k}:${act:-ignore}")
 	done
 	args+=(--bind='(:ignore' --bind='):ignore')
-	args+=(--bind="esc:${esc_act}")
+
+	# clear-query+search() is STATIC on the bind, and must never be folded into esc_act.
+	# - fzf does NOT honour `search()` emitted by a transform:, so inside esc_act it silently does nothing.
+	# - That shipped once: esc out of a non-matching query left NORMAL holding a permanently dead list.
+	# - It parsed fine, which is why a parse check passed it; only a real keystroke exposed it.
+	# - Verified behaviourally under a pty in tests/suite_pty.zsh, not by checking that fzf accepts it.
+	# - search() must follow clear-query, or it re-runs the query that already matched nothing.
+	# - Running unconditionally is harmless: in NORMAL and in the menu the query is already empty.
+	args+=(--bind="esc:clear-query+search()+${esc_act}")
 	# Binding enter at all is new; the non-menu branch is a literal accept so cd is unchanged.
 	[[ -n $enter_act ]] && args+=(--bind="enter:${enter_act}")
 

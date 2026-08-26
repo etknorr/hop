@@ -155,12 +155,17 @@ assert_eq 1 "$(_fz_forks)"
 t 'the floor covers every fzf action the keymap uses, including search()'
 # An UNKNOWN action makes fzf refuse to START, so adding one to the keymap is a floor question.
 # - `search()` arrived in fzf 0.59.0, which the 0.60.3 floor already covers, so it did not move.
+# - It lives on the esc BIND, not in HOP_VIM_TO_NORMAL, because a transform: cannot emit it.
+# The (r) subscript picks the one esc bind; ${(M)args:#--bind=esc:*} silently matches nothing here.
 out=$(_fz_probe '0.74.1' '
 _hop_vim_init
+local -a args
 _hop_vim_binds /bin/true "" "" "" "" "" ""
-print -r -- $HOP_VIM_TO_NORMAL')
+print -r -- "${args[(r)--bind=esc:*]}"')
 assert_contains "$out" 'search()' 'esc must re-match, or NORMAL is left holding an empty list'
 assert_contains "$out" 'clear-query+search()' 'search() before clear-query re-runs the dead query'
+# The ordering guard: search() has to be STATIC, ahead of the transform, or fzf ignores it.
+assert_contains "$out" 'search()+transform:' 'search() inside the transform is silently a no-op'
 out=$(_fz_probe '0.74.1' '_hop_ver_lt 0.59.0 $HOP_FZF_MIN && print -r -- covered')
 assert_eq covered "$out" 'the floor must be at or above 0.59.0, where search() was added'
 

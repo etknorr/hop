@@ -181,7 +181,9 @@ assert_eq 'transform:if [ -n "$FZF_PREVIEW_LABEL" ]; then printf %s "$HOP_VIM_HE
 	"$(_km_bind_action "$KM_FULL" '?')"
 
 t 'esc resolves from FZF_PROMPT and FZF_INPUT_STATE, never a file'
-assert_eq 'transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; *) if [ "$FZF_INPUT_STATE" = disabled ]; then printf abort; else printf %s "$HOP_VIM_TO_NORMAL"; fi ;; esac' \
+# The clear-query+search() prefix is STATIC and has to stay ahead of the transform.
+# - fzf ignores `search()` emitted by a transform:, so folding it in brings the dead list back.
+assert_eq 'clear-query+search()+transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; *) if [ "$FZF_INPUT_STATE" = disabled ]; then printf abort; else printf %s "$HOP_VIM_TO_NORMAL"; fi ;; esac' \
 	"$(_km_bind_action "$KM_FULL" esc)"
 
 t '/ switches to SEARCH: unbinds the vim keys, enables search, re-prompts'
@@ -358,8 +360,10 @@ fi
 # Tier 2: the transform: action bodies, extracted and run directly as sh.
 # ---------------------------------------------------------------------------
 
-# - _km_transform_probe -> \x1e-joined dump of the esc, enter and ? action bodies, with their leading "transform:" stripped, plus every HOP_VIM_* string those bodies read.
+# - _km_transform_probe -> \x1e-joined dump of the esc, enter and ? action bodies, with everything up to and including "transform:" stripped, plus every HOP_VIM_* string those bodies read.
 # - Captured from inside the real fzf-shadow, before _hop_pick's locals go out of scope.
+# - esc strips up to `transform:` rather than a leading one, because it carries a static prefix.
+# - Tier 1 is what asserts that prefix is present and ordered; here it is only in the way.
 _km_transform_probe() {
 	emulate -L zsh
 	hop_probe '
@@ -378,7 +382,7 @@ _km_transform_probe() {
 		local esc_body enter_body help_body a
 		for a in "${KM_CAPTURED[@]}"; do
 			case $a in
-				--bind=esc:transform:*) esc_body=${a#--bind=esc:transform:} ;;
+				--bind=esc:*transform:*) esc_body=${a#*transform:} ;;
 				--bind=enter:transform:*) enter_body=${a#--bind=enter:transform:} ;;
 				"--bind=?:transform:"*) help_body=${a#"--bind=?:transform:"} ;;
 			esac
