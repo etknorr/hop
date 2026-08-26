@@ -111,3 +111,52 @@ t '_hop_ws_picker leaves no _hop_key or _hop_st behind in the calling shell'
 out=$(co_run 'hop -w >/dev/null 2>&1; print -r -- "key=${_hop_key-unset} st=${_hop_st-unset}"' \
 	"HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130')
 assert_eq 'key=unset st=unset' "$out" 'the picker must not leak state into the interactive shell'
+
+# ---------------------------------------------------------------------------
+# Item 7: HOP_DEBUG=1 has to log the failures people actually file bugs about.
+# ---------------------------------------------------------------------------
+# co_dbg <hop-code> [VAR=value...] -> the debug log a probe wrote, with HOP_DEBUG on for that probe.
+# - HOP_DEBUG is pinned OFF by fixture_pins, so turning it on INSIDE the probe is the only honest way.
+# - The log path is pinned per call, because the default lands under the throwaway $HOME either way.
+co_dbg() {
+	emulate -L zsh
+	local code=$1
+	shift
+	local REPLY
+	fixture_tmpdir dbg || return 1
+	local log="$REPLY/debug.log"
+	co_run "export HOP_DEBUG=1 HOP_DEBUG_LOG=${(q)log}
+${code}" "$@" >/dev/null 2>&1
+	[[ -r $log ]] || return 0
+	cat -- "$log"
+	return 0
+}
+
+t 'HOP_DEBUG=1 logs a pick that found no match, which used to log nothing at all'
+out=$(co_dbg 'hop -w nosuchthing' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=1')
+assert_contains "$out" 'st=1' 'a no-match is the single most reported failure, so it has to be logged'
+assert_contains "$out" 'pick label=workspaces'
+assert_contains "$out" 'query=nosuchthing' 'the query is what makes a no-match report reproducible'
+
+t 'HOP_DEBUG=1 logs a user cancel, so an abandoned pick is distinguishable from a crash'
+out=$(co_dbg 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130')
+assert_contains "$out" 'st=130'
+
+t 'HOP_DEBUG=1 logs a hard fzf failure, the case a bug report cannot diagnose without it'
+out=$(co_dbg 'hop -R' "HOP_REPOS=${CO_WS}" 'HOP_FZF_EXIT=2')
+assert_contains "$out" 'st=2'
+assert_contains "$out" 'pick label=repos'
+
+t 'the row count reaches the log, so "empty list" and "list did not match" are tellable apart'
+out=$(co_dbg 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=1')
+assert_contains "$out" 'rows=1' 'one configured workspace is one row'
+
+t 'HOP_DEBUG unset still writes nothing, so the new call site stays opt-in'
+typeset CO_OFFLOG
+fixture_tmpdir dbgoff
+CO_OFFLOG="$REPLY/debug.log"
+co_run "export HOP_DEBUG_LOG=${(q)CO_OFFLOG}
+hop -w" "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=1' >/dev/null 2>&1
+out=''
+[[ -r $CO_OFFLOG ]] && out=$(cat -- "$CO_OFFLOG")
+assert_empty "$out" 'a pick must not write a debug log unless HOP_DEBUG asked for one'

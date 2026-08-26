@@ -170,10 +170,14 @@ _hop_rank() {
 # - _hop_st is the status the CALLER returns when this says stop, since cancel stops but succeeds.
 # - The caller declares it `local`, exactly as _hop_run does for _hop_parse_result's three fields.
 # - _hop_ws_picker used to skip this ladder, so a too-old fzf there looked like pressing esc.
+# - Also the one HOP_DEBUG line EVERY pick passes through, whether or not a dispatch follows.
+# - _hop_dispatch's line was the only one, so a no-match logged nothing and --doctor showed nothing.
+# - Those are precisely the failures people file bugs about, so the log has to reach them first.
 _hop_fzf_status() {
 	emulate -L zsh
 	local -i st=$1
 	local label=$2 rows=$3 query=${4:-}
+	_hop_dbg "pick label=${label} rows=${rows} query=${query} st=${st}"
 	_hop_st=0
 	(( st == 0 )) && return 0
 	if (( st == 130 )); then
