@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Added
+
+- A structural guard pinning why `tests/lib/pty.zsh` is safe, which until now it was only by accident.
+  `zpty -b` at a script's top level makes the spawned shell inherit the caller's EXIT trap, and that trap removes the pty fixtures every pty test shares, so hoisting a spawn out of `pty_open` or `pty_canary` would delete them mid-run.
+  Nothing enforced or even recorded that, and `pgrep -x zpty` could never have caught it either, since `zpty` is a builtin whose child carries the spawned command's name instead.
+  The guard asks zsh's own parser which function bodies hold a spawn, rather than checking what column the line starts in, so a spawn indented inside a top-level `if` fails it too.
+
 ### Fixed
 
 - `hop --doctor` could hang forever and print nothing, which is the worst place for this bug: the issue template tells you to run exactly that command.
@@ -15,11 +22,13 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   Both read from `/dev/null` now, and each is covered by a test that hangs if its redirect is removed.
 - Eight more test assertions that a floor kept from failing.
   `assert_ge N` reads like a bound but asserts a size, so it passes on every larger value too: the modal keymap check sat at 90 against 97 real keys and stayed green with seven of them deleted, and the `--help` registry check sat at 2 against 8 kinds and stayed green with `helm` gone from the kind list entirely.
+  The `.github` YAML check sat at 1, so a glob rotted to one subdirectory left the workflow file parsed by nothing and reported by nothing.
   Each is an exact set or an exact count now.
   A floor of 1 used honestly, to prove evidence exists before asserting over it, is kept and spelled that way.
 - One integration test was reading the wrong evidence rather than too little of it.
   The fzf stub records the picker's rows to a file it only truncates on the runs it actually makes, so a probe that errored before reaching the picker left the previous invocation's rows in place, and with `hop -c` broken the check that every offered row is inside `$PWD` passed on rows from a different directory.
   The record is emptied before each run now.
+  That check asserts it has rows before ranging over them too, because truncating the record fixes whose rows they are and cannot make an empty list fail.
 - The integration suite no longer hangs when the runner's stdin never reaches EOF.
   `_hop_fzf_ver` is the one fzf call in the product that is never handed rows on a pipe, and the recording stub read stdin unconditionally, so it blocked on anything that never closes: under a fifo held open the suite took 81 seconds and failed seven of its tests.
   The stub answers a `--version` query without reading stdin now, which is what real fzf does.
