@@ -55,8 +55,8 @@ _hop_usage() {
 	print -r -- '  hop --no-vim        search-first fzf, no modal layer (same as HOP_VIM=0)'
 	print -r -- '  hop --vim           force the modal layer on when HOP_VIM=0 is set'
 	print -r -- '  hop --doctor        dump config, tools and kind counts for a bug report'
-	print -r -- '  hop upgrade         move the install to the newest release, then exec zsh'
-	print -r -- '  hop upgrade 0.1.0   pin the install to exactly that release'
+	print -r -- '  hop upgrade         fast-forward main to the newest release, then exec zsh'
+	print -r -- '  hop upgrade 0.1.0   pin the install to exactly that release, detached'
 	print -r -- '  hop upgrade --check what is installed vs what is released; changes nothing'
 	print -r -- '  HOP_DEBUG=1 hop     log every key dispatch, then read it with --doctor'
 	print -r -- '  hop -h, --help      this text'
@@ -361,6 +361,8 @@ hop() {
 		print -ru2 -- 'hop: fzf is not installed'
 		return 1
 	fi
+	# A too-old fzf otherwise fails as a bare `unknown option`, which names no cause and no fix.
+	_hop_fzf_ok || return 1
 
 	local query="${(j: :)words}"
 

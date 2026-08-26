@@ -200,6 +200,64 @@ _hop_vim_binds() {
 	fi
 }
 
+# The oldest fzf that can run the picker below, and why it is this exact patch release.
+# - 0.60.0 added `--accept-nth`, which is how a row's dir and preview reach the parent shell.
+# - 0.60.3 made `--accept-nth` work alongside `--select-1`, and _hop_pick passes BOTH every call.
+# - So 0.60.0 would break `hop vpc prod` jumping to a unique match, which is hop's best trick.
+# - Debian and Ubuntu package 0.44.x, where the picker dies with `unknown option: --accept-nth`.
+# - Sources: fzf CHANGELOG, "Added `--accept-nth`" under 0.60.0, and #4287 under 0.60.3.
+# - Overridable, because a guard that locks out a working fzf is worse than the bug it prevents.
+typeset -g HOP_FZF_MIN=${HOP_FZF_MIN:-0.60.3}
+
+# _hop_ver_lt <a> <b> -> 0 when dotted version a is older than b, comparing three fields.
+_hop_ver_lt() {
+	emulate -L zsh
+	local -a x=(${(s:.:)1}) y=(${(s:.:)2})
+	local -i i a b
+	for i in 1 2 3; do
+		a=${x[i]:-0}
+		b=${y[i]:-0}
+		(( a < b )) && return 0
+		(( a > b )) && return 1
+	done
+	return 1
+}
+
+# _hop_fzf_ver -> REPLY is fzf's dotted version, memoized so a shell forks for it at most once.
+# - hop.zsh is sourced by EVERY interactive shell, so this must never run at source time.
+# - An empty REPLY means "could not tell", and every caller treats that as permission to proceed.
+_hop_fzf_ver() {
+	emulate -L zsh
+	if (( ${+_HOP_FZF_VER} )); then
+		REPLY=$_HOP_FZF_VER
+		return 0
+	fi
+	local out v
+	out=$(fzf --version 2>/dev/null)
+	# fzf prints `0.60.3 (abc1234)`, so only the leading run of digits and dots is ever read.
+	v=${out%%[^0-9.]*}
+	[[ $v == <->.<->(.<->|) ]] || v=''
+	typeset -g _HOP_FZF_VER=$v
+	REPLY=$v
+	return 0
+}
+
+# _hop_fzf_ok -> 0 when the installed fzf can run the picker, else it explains and fails.
+# - Called from hop(), never from this file's top level, so a shell that never hops never forks.
+_hop_fzf_ok() {
+	emulate -L zsh
+	local REPLY
+	_hop_fzf_ver
+	local v=$REPLY
+	[[ -n $v ]] || return 0
+	_hop_ver_lt "$v" "$HOP_FZF_MIN" || return 0
+	print -ru2 -- "hop: fzf ${v} is too old; hop needs ${HOP_FZF_MIN} or newer."
+	print -ru2 -- 'hop: the picker passes --accept-nth with --select-1, which older fzf mishandles.'
+	print -ru2 -- 'hop: a distro package is the usual cause; Debian and Ubuntu ship fzf 0.44.x.'
+	print -ru2 -- 'hop: install an upstream release: https://github.com/junegunn/fzf/releases'
+	return 1
+}
+
 # _hop_pick <label> <header> [query] [reload] [root] [drill] [restore] [up]  <targets on stdin
 # - Emits the key line (empty for plain Enter) and then dir<TAB>preview.
 # - Every verb rides --expect or print(), never become(), since only the parent shell can cd.
