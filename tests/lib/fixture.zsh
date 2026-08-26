@@ -224,9 +224,12 @@ stub_bin() {
 		print -rl -- \
 			'#!/bin/sh' \
 			'# hop test stub: records the call and exits 0, so nothing reaches the desktop.' \
-			"printf '%s' '${n}' >> \"\$HOP_FIX_LOG\"" \
-			'for a in "$@"; do printf "\t%s" "$a" >> "$HOP_FIX_LOG"; done' \
-			'printf "\n" >> "$HOP_FIX_LOG"' \
+			'# ONE append per call: the same 2+N-append interleaving this stub shares with the pty one.' \
+			'# - Two stubs running at once could splice their lines together and corrupt the only field a check reads.' \
+			'# - The FORMAT is built from literals only and every byte of data stays in the arguments.' \
+			'fmt="%s"' \
+			'for a in "$@"; do fmt="$fmt\t%s"; done' \
+			"printf \"\$fmt\\n\" '${n}' \"\$@\" >> \"\$HOP_FIX_LOG\"" \
 			'exit 0' > "$HOP_FIX_STUBDIR/$n"
 		chmod +x "$HOP_FIX_STUBDIR/$n" || return 1
 	done

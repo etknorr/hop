@@ -232,9 +232,14 @@ _hop_pty_shared() {
 	for n in code gh bat pbcopy pbpaste open editor vim nvim wl-copy xclip xsel; do
 		print -rl -- '#!/bin/sh' \
 			'# hop pty stub: records the call and exits 0, so nothing reaches the desktop.' \
-			"printf '%s' '${n}' >> \"\$HOP_FIX_LOG\"" \
-			'for a in "$@"; do printf "\t%s" "$a" >> "$HOP_FIX_LOG"; done' \
-			'printf "\n" >> "$HOP_FIX_LOG"' \
+			'# ONE append per call, because a concurrent stub used to interleave inside the line.' \
+			'# - This wrote the name, then each argument, then the newline, as 2+N separate appends.' \
+			'# - The preview pane runs the bat stub on every render, so a second call really does land mid-line.' \
+			'# - Measured: it recorded `batgh browse` for `gh browse`, which read as a verb that never ran.' \
+			'# - The FORMAT is built from literals only and every byte of data stays in the arguments.' \
+			'fmt="%s"' \
+			'for a in "$@"; do fmt="$fmt\t%s"; done' \
+			"printf \"\$fmt\\n\" '${n}' \"\$@\" >> \"\$HOP_FIX_LOG\"" \
 			'exit 0' > "$HOP_PTY_SHARED/$n"
 		chmod +x "$HOP_PTY_SHARED/$n" || return 1
 	done
