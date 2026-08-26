@@ -528,11 +528,14 @@ workspaces.example      a workspace list to copy
 | `HOP_WORKSPACES` | unset | colon-separated workspaces, overrides the file |
 | `HOP_REPOS` | every repo in every workspace | colon-separated repo list for `-R` |
 | `HOP_HISTFILE` | `~/.local/state/hop/history` | frecency history |
+| `HOP_HIST_MAX` | `300` | how many frecency history lines to keep |
 | `HOP_CLIPBOARD` | unset | overrides the copy verb's clipboard command, skipping the probe |
 | `HOP_VIM` | `1` | `0` disables the modal layer |
 | `HOP_FZF_HEIGHT` | `80%` | picker height; **empty means fullscreen** |
 | `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
 | `HOP_FZF_MIN` | `0.60.3` | the fzf floor; lower it if the check is wrong about your build |
+| `HOP_DEBUG` | unset | `1` logs every key dispatch, readable via `--doctor` |
+| `HOP_DEBUG_LOG` | `~/.local/state/hop/debug.log` | where that log goes |
 | `HOP_HOME` | derived from `hop.zsh` | install directory |
 
 ### `HOP_FZF_HEIGHT`
