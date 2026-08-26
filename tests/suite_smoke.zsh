@@ -93,6 +93,63 @@ docout=$(hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor" 2>&1)
 assert_contains "$docout" 'NONE, so hop opens the workspace or repo picker'
 assert_contains "$help" "$HOP_FIX_NOCONFIG" 'the help must name the config file you would create'
 
+# --doctor=short is the mode a public issue form tells reporters to paste.
+
+t 'hop --doctor collapses $HOME to ~ and never prints it literally'
+typeset dochome
+dochome=$(HOP_DEBUG_LOG="${HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor')
+assert_not_contains "$dochome" "$HOME"
+assert_contains "$dochome" '~/hop-doctor-sentinel.log'
+
+t 'hop --doctor=short never prints $HOME, even forced to try'
+typeset docshortplain
+docshortplain=$(HOP_DEBUG_LOG="${HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor=short')
+assert_not_contains "$docshortplain" "$HOME"
+assert_not_contains "$docshortplain" '/Users/'
+assert_contains "$docshortplain" '(customised, withheld)' 'a forced custom path must be withheld, not shown'
+
+t 'hop --doctor=short exits 0, inside and outside a git repo'
+typeset shortrepo
+fixture_repo shortmode
+shortrepo=$REPLY
+typeset -i shortst
+hop_probe "builtin cd -q ${(q)shortrepo} && hop --doctor=short" >/dev/null
+shortst=$?
+assert_eq 0 "$shortst" 'inside a repo'
+hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor=short" >/dev/null
+shortst=$?
+assert_eq 0 "$shortst" 'outside a repo'
+
+# - This is the test that actually proves the leak is closed.
+# - A sentinel kind and workspace name must show up in full --doctor and vanish from --doctor=short.
+# - The FULL-output asserts below are the control: without them a short-mode pass could be vacuous.
+t 'hop --doctor=short omits a sentinel kind name and workspace name that hop --doctor shows'
+typeset sentroot sentwstarget sentwsfile
+fixture_repo sentinel
+sentroot=$REPLY
+fixture_tmpdir sentinelwstarget
+sentwstarget=$REPLY
+fixture_tmpdir sentinelwscfg
+sentwsfile="${REPLY}/workspaces"
+print -rl -- "zzsentinelws = ${sentwstarget}" > "$sentwsfile"
+fixture_config 'hop_kind zzsentinel --dirs "no-such-family" --desc "sentinel kind for doctor tests"'
+
+typeset sentfull sentshort
+sentfull=$(HOP_WORKSPACES_FILE=$sentwsfile hop_probe "builtin cd -q ${(q)sentroot} && hop --doctor")
+sentshort=$(HOP_WORKSPACES_FILE=$sentwsfile hop_probe "builtin cd -q ${(q)sentroot} && hop --doctor=short")
+fixture_config_reset
+
+assert_contains "$sentfull" 'zzsentinel' 'control: the sentinel kind never loaded'
+assert_contains "$sentfull" 'zzsentinelws' 'control: the sentinel workspace never loaded'
+assert_contains "$sentfull" "$sentwstarget" 'control: the sentinel workspace path never loaded'
+
+assert_not_contains "$sentshort" 'zzsentinel'
+assert_not_contains "$sentshort" 'zzsentinelws'
+assert_not_contains "$sentshort" "$sentwstarget"
+
+# A bare `typeset REPLY` further down would otherwise echo whatever REPLY still holds here.
+unset REPLY
+
 # ---------------------------------------------------------------------------
 # --version: the release contract other tooling (hop upgrade) depends on.
 # ---------------------------------------------------------------------------
