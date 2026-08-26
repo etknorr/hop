@@ -115,28 +115,9 @@ TMPOUT=$(mktemp "${${TMPDIR:-/tmp}:A}/hop-run.XXXXXX") || exit 1
 trap 'rm -f -- "$TMPOUT"' EXIT INT TERM
 
 # perl's alarm is the timeout on this box, and a missing perl must not silently drop the bound.
-# - A bare `alarm` + `exec` kills only the suite, and ORPHANS every grandchild it started.
-# - That is not hypothetical: it left an fzf hung on a tty-less pty, reparented to init, for 28 min.
-# - So the suite gets its OWN process group, and the timeout kills the group rather than one pid.
-# - Killing the group is also why a stuck preview or reload subshell can no longer survive a run.
 typeset -a BOUND=()
 if (( ${+commands[perl]} )); then
-	BOUND=(perl -e '
-my $limit = shift @ARGV;
-my $pid = fork();
-if (!defined $pid) { exit 127 }
-if (!$pid) {
-	setpgrp(0, 0);
-	exec @ARGV;
-	exit 127;
-}
-$SIG{ALRM} = sub { kill("KILL", -$pid); waitpid($pid, 0); exit 142 };
-alarm $limit;
-waitpid($pid, 0);
-my $status = $?;
-alarm 0;
-exit($status == 0 ? 0 : (($status >> 8) || 1));
-' "$HOP_T_TIMEOUT")
+	BOUND=(perl -e 'alarm shift @ARGV; exec @ARGV' "$HOP_T_TIMEOUT")
 fi
 
 zmodload -F zsh/datetime b:strftime p:EPOCHREALTIME 2>/dev/null
