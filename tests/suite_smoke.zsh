@@ -64,12 +64,15 @@ stalenoise=$(zsh -f -c "${stalepins}
 source ${(q)HOP_HOME}/hop.zsh" 2>&1 >/dev/null)
 assert_empty "$stalenoise"
 
+# Named once, because the registry-block assertion further down compares against the same set.
+typeset -a SHIPPED_KINDS=(tg mod helm serverless puppet backstage dir file)
+
 t 'hop --help exits 0 and lists the registry, not a hardcoded kind list'
 typeset help
 help=$(hop_probe 'hop --help')
 assert_contains "$help" 'usage: hop'
 typeset hk
-for hk in tg mod helm serverless puppet backstage dir file; do
+for hk in "${SHIPPED_KINDS[@]}"; do
 	assert_contains "$help" "$hk"
 done
 
@@ -205,7 +208,19 @@ for hline in "${helplines[@]}"; do
 		inreg=1
 	fi
 done
-assert_ge $#reglines 2 'the kinds registry block was not found in the help text'
+# The exact set of names in the block, not a floor on how many lines it has.
+# - A floor of 2 also passed with six of the eight kinds missing, and that is the real risk:
+#   a kind that never reaches the registry is invisible, since nobody reads --help in a test.
+# - Names, not a count, so a rename fails here too rather than silently substituting.
+# - Two-step array assignments on both sides: `${(o)a}` inside a scalar expansion does NOT sort.
+typeset -a regkinds=()
+for hline in "${reglines[@]}"; do
+	# The line is `printf '    %s %-12s %s'`, so the name starts at column 7 and ends at a space.
+	[[ $hline == '    '?' '* ]] || continue
+	regkinds+=("${${hline:6}%% *}")
+done
+typeset -a regsorted=(${(o)regkinds}) shipsorted=(${(o)SHIPPED_KINDS})
+assert_eq "${(j:,:)shipsorted}" "${(j:,:)regsorted}" 'the registry block must list every shipped kind, exactly'
 
 # A registry line is `printf '    %s %-12s %s'`: four spaces, the mark, a space, the padded name.
 # - Anchoring on those columns is what keeps a prose mention of a kind out of the match.
@@ -340,8 +355,19 @@ done
 # A missing python3, or a python3 with no PyYAML, is a skip here, not a failure.
 if (( ${+commands[python3]} )) && python3 -c 'import yaml' 2>/dev/null; then
 	typeset -a yamlfiles=("$HOP_HOME"/.github/**/*.yml(N))
-	t 'every .github yml file is a glob hit, not an empty list'
-	assert_ge $#yamlfiles 1 'a glob typo would make every yaml check vanish'
+	t 'the .github yml glob finds exactly the files that are there'
+	# The exact list, not a floor: `>= 1` passed on a glob that had rotted to one subdirectory.
+	# - The parse loop below only covers what the glob returned, so a partial match checks nothing
+	#   and reports nothing. The dropped files are the ones you would never think to look for.
+	# - Adding a workflow is meant to fail this line once. That is the tripwire, not friction.
+	typeset -a yamlsorted=(${(o)${yamlfiles[@]#${HOP_HOME}/}})
+	typeset -a yamlwant=(
+		.github/ISSUE_TEMPLATE/bug_report.yml
+		.github/ISSUE_TEMPLATE/config.yml
+		.github/ISSUE_TEMPLATE/feature_request.yml
+		.github/workflows/ci.yml
+	)
+	assert_eq "${(j:,:)yamlwant}" "${(j:,:)yamlsorted}" 'the yml glob no longer matches the files in .github'
 
 	typeset yf yrel
 	for yf in "${yamlfiles[@]}"; do
