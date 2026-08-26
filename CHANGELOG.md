@@ -35,7 +35,7 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 - An escape guard, so bytes a terminal prints can no longer run a hop verb.
   fzf delivers escape sequences it can't parse as ordinary keystrokes, and in NORMAL mode letters are verbs, so a terminal answering a background-colour query typed `11;rgb:1e1e/1e1e/1e1e` into the picker and the `b` in `rgb` ran `gh browse`.
-  Every action that leaves the picker now checks how recently its key arrived, and it fails open rather than swallow a real keypress.
+  Every action that leaves the picker now checks how recently its key arrived, through `bin/hop-guard`, and it fails open rather than swallow a real keypress.
   `HOP_GUARD_WINDOW` sets the threshold, default 150ms, and `HOP_GUARD_WINDOW=0` disables the guard.
   Navigation stays outside the guard deliberately, since `j`, `k`, `g` and `G` must not fork a process on every cursor move, so a hostile sequence can still scroll the list or switch mode.
   It can no longer open an editor, write the clipboard or open a browser tab, and the README documents the gaps that remain.
