@@ -59,7 +59,10 @@ jobs:
             fi
           '
 
+      # Must stay strictly inside timeout-minutes above, or one hung suite eats the whole job budget and the per-suite bound never fires.
       - name: Run test suite
+        env:
+          HOP_T_TIMEOUT: '120'
         run: zsh tests/run
 
   lint:
