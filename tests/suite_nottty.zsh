@@ -298,14 +298,17 @@ typeset NT_PTY_RES='' NT_PTY_ERR='' NT_PTY_CERR='' NT_PTY_READY=''
 typeset -i NT_PTY_ST=0 NT_PTY_HAVE=0
 if zmodload zsh/zpty 2>/dev/null && fixture_tmpdir ntpty; then
 	typeset ntp=$REPLY
-	print -rl -- "$(fixture_pins)" "$(nt_pins)" "export NT_RES=${(q)ntp}/res" \
-		"print -r -- ready > ${(q)ntp}/ready" "$NT_SHAPES" > "$ntp/shapes.zsh"
+	# The child redirects its OWN stderr, so no redirect operator goes in the zpty command string.
+	# - zpty does not hand that string to a shell on every zsh version, so a `2>` there is not portable.
+	# - Measured: adding one took both CI runners from a working child to a child that never started.
+	print -rl -- "exec 2> ${(q)ntp}/childerr" "$(fixture_pins)" "$(nt_pins)" \
+		"export NT_RES=${(q)ntp}/res" "print -r -- ready > ${(q)ntp}/ready" "$NT_SHAPES" > "$ntp/shapes.zsh"
 	: > "$ntp/res"
 	: > "$ntp/ready"
 	: > "$ntp/childerr"
 	: > "$ntp/zptyerr"
 	# Deliberately NOT inside a $(...): a zpty entry dies with the subshell that created it.
-	zpty -b NTPTY "zsh -f ${ntp}/shapes.zsh 2> ${ntp}/childerr" 2> "$ntp/zptyerr"
+	zpty -b NTPTY "zsh -f ${ntp}/shapes.zsh" 2> "$ntp/zptyerr"
 	NT_PTY_ST=$?
 	if (( NT_PTY_ST == 0 )); then
 		NT_PTY_HAVE=1
