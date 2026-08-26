@@ -232,7 +232,20 @@ rawvars=(${(f)"$(grep -rhoE '(^|[^A-Za-z0-9_])(HOP|XDG)_[A-Z_]+' "${reply[@]}")"
 prodvars=(${(u)rawvars/#[^A-Z_]/})
 prodvars=(${prodvars:#HOP_HOME})
 prodvars=(${prodvars:#HOP_VIM_*})
-assert_ge $#prodvars 15 'the scan found almost no settings, so it would pass while checking nothing'
+# An EXACT set, not a `>=` floor: a floor lets the scan rot down to it and still report healthy.
+# - At `>= 10` against 14 found, a scan degrading to 10 would have passed with an empty diff.
+# - A >= floor produced a vacuous or false-passing test four times this release, this one included.
+# - A setting appearing or disappearing in the source now forces a deliberate edit of both lists.
+typeset -a expected=(
+	HOP_CLIPBOARD HOP_CONFIG HOP_DEBUG HOP_DEBUG_LOG HOP_DEFAULT_KINDS
+	HOP_FZF_HEIGHT HOP_FZF_MIN HOP_HISTFILE HOP_HIST_MAX HOP_HOPRC
+	HOP_REPOS HOP_VIM HOP_WORKSPACES HOP_WORKSPACES_FILE
+	XDG_CACHE_HOME XDG_CONFIG_HOME XDG_STATE_HOME
+)
+# Sorted through an array, because `(o)` does not sort inside a quoted scalar expansion.
+typeset -a expsorted=(${(o)expected}) gotsorted=(${(o)prodvars})
+assert_eq "${(j:, :)expsorted}" "${(j:, :)gotsorted}" \
+	'the settings the source reads changed; update this list and the pin list together'
 pinnames=(${${(f)"$(fixture_pin_pairs /nonexistent)"}%%=*})
 unpinned=(${prodvars:|pinnames})
 assert_empty "${(j:, :)unpinned}" 'a probe could inherit these from the developer running the suite'
