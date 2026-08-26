@@ -329,9 +329,11 @@ nine guarded keys go dead at once. `esc` is then the only way out of the picker.
 instance by reloading it with a menu and using `$FZF_PROMPT` as the mode flag. `enter` switches to
 that kind; `esc` returns to exactly the list you came from, row count unchanged.
 
-Menu counts are cached per repo *and* per `HEAD`, so a branch switch invalidates them for free. A
-cache miss renders instantly without counts and warms in a detached subshell, so `:` never blocks on
-a full sweep of every kind.
+Menu counts are cached per repo, per `HEAD`, *and* per the index's own state, so a commit, a branch
+switch and a bare `git add` all invalidate them for free. The index has to be in the key because
+enumeration reads it rather than `HEAD`'s tree, so staging a file changes the counts while `HEAD`
+stands still. A cache miss renders instantly without counts and warms in a detached subshell, so `:`
+never blocks on a full sweep of every kind.
 
 A kind with zero matches in the current repo is hidden from the menu entirely, which is what keeps
 one shared config from cluttering unrelated repos.
