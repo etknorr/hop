@@ -16,14 +16,33 @@ _hop_kinds() {
   _values -s , 'kind' "${kinds[@]}"
 }
 
+# Release tags already in the local clone, newest first, so completing costs no network.
+# A tag not fetched yet simply does not complete; `hop upgrade` fetches before it resolves one.
+_hop_versions() {
+  local -a tags
+  tags=(${(f)"$(git -C "${HOP_HOME:-.}" tag --list 'v*' --sort=-v:refname 2>/dev/null)"})
+  tags=(${tags:#})
+  (( $#tags )) || return 1
+  _describe -t hop-versions 'release' tags
+}
+
 # The trailing words are an fzf query, not a filename, so there is nothing real
 # to complete. Offer the two literal targets hop treats specially and otherwise
 # say so rather than dumping the filesystem.
 _hop_query() {
   local -a targets
+  # `upgrade` is a verb rather than a query, so past it there is a wholly different argument set.
+  if [[ ${words[1]:-} == upgrade ]]; then
+    _arguments -s \
+      '(--check --dry-run -n)'{--check,--dry-run,-n}'[report installed vs released, change nothing]' \
+      '(- *)'{-h,--help}'[show upgrade usage and exit]' \
+      '1:release:_hop_versions'
+    return
+  fi
   targets=(
     '/:repo root'
     '-:previous directory (cd -)'
+    'upgrade:update this install to a release'
   )
   _describe -t hop-targets 'target' targets
   _message -e query 'fzf query words'

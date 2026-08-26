@@ -18,6 +18,7 @@ source "$HOP_HOME/lib/workspaces.zsh"
 source "$HOP_HOME/lib/ui.zsh"
 source "$HOP_HOME/lib/actions.zsh"
 source "$HOP_HOME/lib/doctor.zsh"
+source "$HOP_HOME/lib/upgrade.zsh"
 
 # Kinds come from your config, or from every shipped preset when there is no config yet.
 # - An unconfigured install still works, which is what makes hop useful in a fresh clone.
@@ -56,6 +57,9 @@ _hop_usage() {
 	print -r -- '  hop --doctor        dump config, tools and kind counts for a bug report'
 	print -r -- '  hop --doctor=short  the same, minus paths and names; safe to paste publicly'
 	print -r -- '  HOP_DEBUG=1 hop     log every key dispatch, then read it with --doctor'
+	print -r -- '  hop upgrade         fast-forward main to the newest release, then exec zsh'
+	print -r -- '  hop upgrade 0.1.0   pin the install to exactly that release, detached'
+	print -r -- '  hop upgrade --check what is installed vs what is released; changes nothing'
 	print -r -- '  hop -V, --version   print the installed version'
 	print -r -- '  hop -h, --help      this text'
 	print -r -- ''
@@ -322,6 +326,17 @@ hop() {
 				_hop_doctor
 				return $?
 				;;
+			upgrade)
+				# Only the FIRST word is the verb, so a target named upgrade still searches.
+				if (( $#words || opts )); then
+					words+=("$1")
+					shift
+					continue
+				fi
+				shift
+				_hop_upgrade "$@"
+				return $?
+				;;
 			-k | --kinds)
 				if (( $# < 2 )); then
 					print -ru2 -- 'hop: -k needs a comma-separated kind list'
@@ -383,6 +398,8 @@ hop() {
 		print -ru2 -- 'hop: fzf is not installed'
 		return 1
 	fi
+	# A too-old fzf otherwise fails as a bare `unknown option`, which names no cause and no fix.
+	_hop_fzf_ok || return 1
 
 	local query="${(j: :)words}"
 
