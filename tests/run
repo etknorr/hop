@@ -119,7 +119,10 @@ trap 'rm -f -- "$TMPOUT"' EXIT INT TERM
 # - Proven: `trap "" ALRM; sleep 12` ran all 12 seconds under a 3s bound and exited 0.
 # - It also reaped nothing: five fzf processes outlived a run, orphaned to init, hung 11+ minutes.
 # - So perl forks instead, keeps the alarm in a process the suite cannot reach, and kills the GROUP.
+# - That makes a child trapping ALRM structurally irrelevant rather than a case to handle.
+# - The group is what gets killed, because a preview or reload runs in a fresh $SHELL grandchild.
 # - Both sides call setpgid, because either one may lose the race to the other's first exec.
+# - KILL, never TERM: a hung fzf traps TERM in raw mode, and a real TERM left it alive.
 # - A killed group exits 142, which is what perl's own alarm death used to report.
 typeset -a BOUND=()
 if (( ${+commands[perl]} )); then
@@ -130,9 +133,8 @@ if (( ${+commands[perl]} )); then
 		if ($pid == 0) { setpgrp(0, 0); exec @ARGV; exit 127 }
 		setpgrp($pid, $pid);
 		$SIG{ALRM} = sub {
-			kill(-15, $pid);
-			select(undef, undef, undef, 0.5);
-			kill(-9, $pid);
+			kill("KILL", -$pid);
+			waitpid($pid, 0);
 			exit 142;
 		};
 		alarm $secs;
