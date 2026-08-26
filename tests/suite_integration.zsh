@@ -248,13 +248,20 @@ cnt_root=$(it_count "$out")
 
 typeset -i ELAPSED_MS=$(( (t1 - t0) * 1000 ))
 typeset verdict=over
-(( ELAPSED_MS <= 1000 )) && verdict=under
+(( ELAPSED_MS <= 5000 )) && verdict=under
 
 # A test NAME must be byte-identical across runs, so a measured value belongs in the failure detail.
 # - A name carrying a duration cannot be addressed by HOP_T_FILTER, since you cannot predict it.
 # - It also defeats diffing one run's names against another's, which is how a phantom delta appears.
-t 'default-kind enumeration is under its 1000ms budget'
-assert_eq under "$verdict" "enumeration took ${ELAPSED_MS}ms against a 1000ms budget"
+# The budget is deliberately loose, because a tight one buys nothing here and costs intermittency.
+# - This fixture yields 11 targets, so complexity cannot show: O(n squared) over 11 is still 121.
+# - Measured on 18 cores, enumeration is 61-75ms idle and 149ms under real contention.
+# - A shared CI runner has 2 to 4 cores, so 1000ms was untested headroom rather than known headroom.
+# - A subprocess costs about 9ms here, so a per-row fork storm was already invisible at 1000ms.
+# - What this still catches is a hang or a per-row cost heavy enough to make hop feel slow.
+# - An intermittent red teaches a maintainer to ignore red, which is worse than a loose bound.
+t 'default-kind enumeration is under its 5000ms budget'
+assert_eq under "$verdict" "enumeration took ${ELAPSED_MS}ms against a 5000ms budget"
 
 t 'default-kind enumeration yields every target in the fixture, silently'
 assert_eq 11 $cnt_root 'five tg units, one module, two values dirs, and root plus two dir rows'
@@ -547,9 +554,13 @@ if [[ -n $TESTREPO && -d $TESTREPO/.git ]]; then
 	t1=${EPOCHREALTIME:-0}
 	ELAPSED_MS=$(( (t1 - t0) * 1000 ))
 	verdict=over
-	(( ELAPSED_MS <= 2000 )) && verdict=under
+	(( ELAPSED_MS <= 10000 )) && verdict=under
 
-	t 'real checkout: default-kind enumeration is under its 2000ms budget'
+	# Looser than the fixture's budget, and for a stronger reason than load: the INPUT is unknown.
+	# - $HOP_TEST_REPO is whatever checkout you point it at, so its row count is not controlled.
+	# - A fixed bound over an uncontrolled input asserts repo SIZE while claiming to assert speed.
+	# - Aimed at a large monorepo a tight bound goes red saying nothing about a regression.
+	t 'real checkout: default-kind enumeration is under its 10000ms budget'
 	assert_eq under "$verdict" "enumeration took ${ELAPSED_MS}ms at real scale"
 
 	t 'real checkout: enumeration is silent on stderr'
