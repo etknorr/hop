@@ -66,6 +66,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   status.
 - `hop upgrade <TAB>` no longer offers a single garbage candidate (every tag joined by spaces)
   when the user has `column.ui=always` set; release tags are now listed with `for-each-ref`.
+- The `:` kind menu's count cache no longer stays blind to `git add`. It enumerates via the
+  index (`git ls-files --cached`) but was keyed only on `(root, HEAD)`, so staging a file into a
+  kind that had none, with HEAD unchanged, left that kind hidden from the menu until the next
+  commit. The key now also tracks the index file's mtime and size.
 
 ## [0.1.0] - 2026-08-25
 
