@@ -1,8 +1,20 @@
 # hop manual smoke checklist
 
-`tests/run` covers everything that can be checked headlessly. Only what needs a real terminal is
-here: fzf does not paint into a synthetic pty on this machine, in either height or fullscreen mode,
-and two attempts at driving it through one hung until they were killed. Do not script these.
+`tests/run` covers everything that can be checked without eyes on a screen, and that is now more
+than this file used to claim. `tests/suite_pty.zsh` drives the real picker through a `zsh/zpty`
+pseudo-terminal and sends real keystrokes, so the items marked **[auto]** below are asserted on
+every run and only need a human when one of them fails.
+
+Two earlier attempts at scripting this hung, and the diagnosis in this file used to be that fzf
+cannot paint into a synthetic pty. That was wrong twice over. In `--height` mode fzf emits a
+cursor-position request and blocks forever on a reply `zsh/zpty` never sends, which is why
+`HOP_FZF_HEIGHT=` and fullscreen are mandatory there. Separately, nothing was draining the pty's
+output side, so fzf filled the buffer, blocked in `write()` and silently dropped every later
+keystroke. Neither problem is fzf refusing to run.
+
+What is genuinely still manual is what has no machine-readable outcome. `zsh/zpty` cannot set a
+window size, so nothing automated can judge whether a header wrapped, a column got clipped, or the
+layout is readable at all. That is the list below.
 
 Run after any change to `lib/ui.zsh`, `bin/hop-kinds`, or the keymap. Start clean, because the
 modal layer is built from `bind`/`unbind` and a half-reloaded shell hides a restore bug:
@@ -16,7 +28,7 @@ exec zsh && cd "$REPO" && hop
 
 ## NORMAL mode navigation
 
-- [ ] `j` `j` `k` moves the selection down twice and up once, and the query line stays empty.
+- [ ] **[auto]** `j` `j` `k` moves the selection down twice and up once, query line still empty.
 - [ ] `g` jumps to the first row, `G` to the last.
 - [ ] `^d` then `^u` move a half page down then back.
 - [ ] `x` `z` `w` `1` do nothing at all: no insert, no bell, no movement.
@@ -24,20 +36,22 @@ exec zsh && cd "$REPO" && hop
 
 ## The mode boundary, and the rebind that restores it
 
-- [ ] `/` switches the header to `SEARCH` and the prompt to `/`.
-- [ ] Type `vpc`: all three letters appear in the query and the list filters.
+- [ ] **[auto]** `/` switches the header to `SEARCH` and the prompt to `/`.
+- [ ] **[auto]** Type `vpc`: all three letters appear in the query and the list filters.
 - [ ] `q` types a literal `q` in SEARCH instead of quitting.
-- [ ] `esc` returns the header to `NORMAL` and clears the query.
+- [ ] **[auto]** `esc` returns the header to `NORMAL` and clears the query.
 - [ ] **After that round trip, every verb still works**: `j` `k` `g` `G` `^d` `^u` `p` `r` all act,
       and `o` `O` `e` `y` `Y` `b` each fire once and exit. This is the whole unbind/rebind restore.
+      `j` alone is **[auto]**; the other twelve keys are still yours to check.
 - [ ] Do `/` `abc` `esc` twice in a row, then confirm `j` still moves rather than typing.
+- [ ] `/` `zzz` `esc` leaves a list you can still navigate, rather than a dead empty one.
 
 ## Overlays and the view switch
 
 - [ ] `?` fills the preview with the keymap; `j` closes it and the real file preview comes back.
 - [ ] `?` `?` toggles the overlay off without leaving a stale `keys` label.
 - [ ] `:` opens the kind list in place, `j`/`k` move in it, `enter` switches the view.
-- [ ] `:` then `esc` returns to the exact list you came from, row count unchanged.
+- [ ] **[auto]** `:` then `esc` returns to the list you came from, and `enter` still `cd`s.
 - [ ] `:` then `/` filters the kind list, and `esc` still goes back rather than quitting.
 
 ## Layout

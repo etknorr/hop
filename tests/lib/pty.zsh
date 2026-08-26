@@ -1,0 +1,391 @@
+#!/usr/bin/env zsh
+# hop pty harness: drive the REAL interactive picker through a synthetic terminal.
+# - This is the only place in tests/ allowed to start fzf without --filter.
+# - Everything here was derived by execution, so the comments record what failed, not theory.
+# - fzf in --height mode emits ESC[6n and blocks forever on a report zpty never sends.
+# - So HOP_FZF_HEIGHT='' forces fullscreen, and that alone is what makes the picker runnable here.
+# - Nothing reads the pty's output side, so fzf fills the buffer, blocks in write() and DROPS keys.
+# - pty_settle therefore drains continuously; that drain is load-bearing, not hygiene.
+# - zsh/zpty cannot set the window size (no TIOCSWINSZ), so the rendered UI is never usable.
+# - Assertions read only the trace file, the stub log, and the child's final $PWD. Never the screen.
+# - fzf reports its own state instead, through FZF_DEFAULT_OPTS binds on focus, change and result.
+# - Those write $FZF_PROMPT, which IS hop's mode variable, to a file that no ANSI can corrupt.
+# - hop binds none of those three events, and a default-opts bind for an unmentioned event survives.
+
+typeset -g  HOP_PTY_NAME=HOPPTY
+typeset -g  HOP_PTY_WORK=''
+typeset -g  HOP_PTY_TRACE=''
+typeset -g  HOP_PTY_ERR=''
+typeset -g  HOP_PTY_PWDF=''
+typeset -g  HOP_PTY_PIDF=''
+typeset -g  HOP_PTY_REPO=''
+typeset -g  HOP_PTY_SHARED=''
+typeset -ga HOP_PTY_PIDS=()
+
+# The fixture's four scopes, in the order `hop -k tg` lists them. Neutral names on purpose.
+typeset -ga HOP_PTY_ROWS=(alpha bravo charlie delta)
+# What the canary's fzf actually returned, so the gate's own test can assert on it.
+typeset -g  HOP_PTY_CANARY=''
+
+# Seconds a key with no observable event is given to land. Raise it on a loaded runner.
+typeset -gF HOP_PTY_SETTLE=${HOP_PTY_SETTLE:-0.25}
+# Ceiling on every poll, so a wedged fzf fails one test instead of eating the suite's alarm.
+typeset -gF HOP_PTY_WAIT=${HOP_PTY_WAIT:-10}
+
+# pty_supported -> 0 when zsh/zpty loads. The suite skips everything when this fails.
+pty_supported() {
+	emulate -L zsh
+	zmodload zsh/zpty 2>/dev/null
+}
+
+# _hop_pty_drain -> swallow whatever the pty has produced so far, never blocking.
+# - An undrained pty wedges fzf mid-write, and the keystrokes typed after that are lost silently.
+_hop_pty_drain() {
+	local junk
+	while zpty -r -t "$HOP_PTY_NAME" junk 2>/dev/null; do :; done
+	return 0
+}
+
+# pty_settle [seconds] -> let the child work for a while, draining the whole time.
+pty_settle() {
+	emulate -L zsh
+	local -F want=${1:-$HOP_PTY_SETTLE} spent=0
+	while (( spent < want )); do
+		_hop_pty_drain
+		sleep 0.02
+		(( spent += 0.02 ))
+	done
+	return 0
+}
+
+# _hop_pty_lines -> REPLY_A holds the trace file's non-empty lines.
+_hop_pty_lines() {
+	emulate -L zsh
+	REPLY_A=()
+	[[ -r ${HOP_PTY_TRACE:-} ]] || return 1
+	REPLY_A=("${(@f)$(<"$HOP_PTY_TRACE")}")
+	REPLY_A=(${REPLY_A:#})
+	return 0
+}
+
+# pty_wait_lines <n> -> poll until the trace holds at least n lines, draining as it goes.
+# - This is both the readiness barrier and the per-key barrier. Never a fixed sleep.
+pty_wait_lines() {
+	emulate -L zsh
+	local -i want=$1
+	local -F spent=0
+	local -a REPLY_A
+	while (( spent < HOP_PTY_WAIT )); do
+		_hop_pty_drain
+		_hop_pty_lines && (( $#REPLY_A >= want )) && return 0
+		sleep 0.02
+		(( spent += 0.02 ))
+	done
+	return 1
+}
+
+# pty_trace -> the whole trace, for a failure message.
+pty_trace() {
+	emulate -L zsh
+	local -a REPLY_A
+	_hop_pty_lines || return 1
+	print -rl -- "${REPLY_A[@]}"
+}
+
+# pty_count -> how many trace lines exist now, which is what a pty_key barrier is measured against.
+pty_count() {
+	emulate -L zsh
+	local -a REPLY_A
+	_hop_pty_lines
+	print -r -- $#REPLY_A
+}
+
+# pty_last [kind] -> the newest trace line, optionally only of kind F, C or R.
+pty_last() {
+	emulate -L zsh
+	local -a REPLY_A
+	_hop_pty_lines || return 1
+	local -a want=("${REPLY_A[@]}")
+	[[ -n ${1:-} ]] && want=(${(M)want:#$1 *})
+	(( $#want )) || return 1
+	print -r -- "${want[-1]}"
+}
+
+# pty_get <field> [kind] -> one bracketed field out of the newest trace line.
+# - Bracketed rather than tab-separated because an EMPTY query is the interesting case here.
+# - zsh's `read` collapses the repeated tabs an empty field produces, which loses the field.
+pty_get() {
+	emulate -L zsh
+	local line
+	line=$(pty_last "${2:-}") || return 1
+	local v=${line#*"${1}=["}
+	[[ $v == "$line" ]] && return 1
+	print -r -- "${v%%]*}"
+}
+
+# pty_err -> whatever the child wrote to stderr, which is where hop's own messages land.
+pty_err() {
+	emulate -L zsh
+	[[ -r ${HOP_PTY_ERR:-} ]] || return 1
+	print -rn -- "$(<"$HOP_PTY_ERR")"
+}
+
+# pty_pwd -> the child's $PWD after the picker exited, or empty while it is still running.
+pty_pwd() {
+	emulate -L zsh
+	[[ -r ${HOP_PTY_PWDF:-} ]] || return 0
+	print -rn -- "$(<"$HOP_PTY_PWDF")"
+}
+
+# pty_wait_exit -> poll until the child records its final $PWD, meaning hop returned.
+pty_wait_exit() {
+	emulate -L zsh
+	local -F spent=0
+	while (( spent < HOP_PTY_WAIT )); do
+		_hop_pty_drain
+		[[ -s ${HOP_PTY_PWDF:-} ]] && return 0
+		sleep 0.02
+		(( spent += 0.02 ))
+	done
+	return 1
+}
+
+# pty_calls [name] -> the stub binaries this session recorded, newest last.
+pty_calls() {
+	emulate -L zsh
+	local log="${HOP_PTY_WORK}/calls.log"
+	[[ -r $log ]] || return 1
+	local -a lines=("${(@f)$(<"$log")}")
+	lines=(${lines:#})
+	(( $# )) && lines=(${(M)lines:#$1$'\t'*})
+	print -rl -- "${lines[@]}"
+	return 0
+}
+
+# _hop_pty_shared -> REPLY is a dir holding the trace script, the stub bins and the driver.
+# - Built once per suite: none of the three depends on the session, only their output paths do.
+_hop_pty_shared() {
+	emulate -L zsh
+	if [[ -n $HOP_PTY_SHARED ]]; then
+		REPLY=$HOP_PTY_SHARED
+		return 0
+	fi
+	local REPLY
+	fixture_tmpdir ptyshared || return 1
+	HOP_PTY_SHARED=$REPLY
+
+	print -rl -- '#!/bin/sh' \
+		'# hop pty trace: fzf reporting its own state, which no screen scrape could do reliably.' \
+		"printf '%s prompt=[%s] pos=[%s] count=[%s] query=[%s] state=[%s]\\n' \\" \
+		'  "$1" "$FZF_PROMPT" "$FZF_POS" "$FZF_MATCH_COUNT" "$FZF_QUERY" "$FZF_INPUT_STATE" \' \
+		'  >> "$HOP_PTY_TRACE"' > "$HOP_PTY_SHARED/trace.sh"
+	chmod +x "$HOP_PTY_SHARED/trace.sh" || return 1
+
+	# Each stub reads $HOP_FIX_LOG at CALL time, so a per-session value is all the isolation needed.
+	local n
+	for n in code gh bat pbcopy pbpaste open editor vim nvim wl-copy xclip xsel; do
+		print -rl -- '#!/bin/sh' \
+			'# hop pty stub: records the call and exits 0, so nothing reaches the desktop.' \
+			"printf '%s' '${n}' >> \"\$HOP_FIX_LOG\"" \
+			'for a in "$@"; do printf "\t%s" "$a" >> "$HOP_FIX_LOG"; done' \
+			'printf "\n" >> "$HOP_FIX_LOG"' \
+			'exit 0' > "$HOP_PTY_SHARED/$n"
+		chmod +x "$HOP_PTY_SHARED/$n" || return 1
+	done
+
+	print -rl -- \
+		'# hop pty driver: runs inside the pty, and is the only thing that starts real hop.' \
+		'print -r -- $$ > "$HOP_PTY_PIDF"' \
+		'source "$HOP_HOME/hop.zsh" || exit 97' \
+		'builtin cd -q -- "$HOP_PTY_REPO" || exit 96' \
+		'eval "$HOP_PTY_CMD" 2> "$HOP_PTY_ERR"' \
+		'print -r -- "$PWD" > "$HOP_PTY_PWDF"' > "$HOP_PTY_SHARED/driver.zsh"
+
+	REPLY=$HOP_PTY_SHARED
+	return 0
+}
+
+# pty_fixture_repo -> REPLY is a committed repo of four neutrally named terragrunt units.
+# - Built once per suite: a git init per test costs more than every keystroke in it.
+# - The `tg` layout is scope/name under terraform/, so the four scopes ARE the four rows in order.
+# - Every test drives `hop -k tg` for that reason: one kind means row 1 is alpha and row 2 is bravo.
+pty_fixture_repo() {
+	emulate -L zsh
+	if [[ -n $HOP_PTY_REPO ]]; then
+		REPLY=$HOP_PTY_REPO
+		return 0
+	fi
+	fixture_repo ptyrepo || return 1
+	local d
+	for d in "${HOP_PTY_ROWS[@]}"; do
+		fixture_write "terraform/${d}/vpc/terragrunt.hcl" "# unit ${d}" || return 1
+	done
+	fixture_commit 'pty fixture' || return 1
+	HOP_PTY_REPO=$HOP_FIX_REPO
+	REPLY=$HOP_PTY_REPO
+	return 0
+}
+
+# pty_row <n> -> the directory the nth row of `hop -k tg` cds to.
+pty_row() {
+	emulate -L zsh
+	print -rn -- "${HOP_PTY_REPO}/terraform/${HOP_PTY_ROWS[$1]}/vpc"
+}
+
+# pty_open [hop-command] -> start the picker under a pty and block until its first focus event.
+# - Non-zero means the picker never reported ready, which every test treats as a failure.
+pty_open() {
+	emulate -L zsh
+	local cmd=${1:-hop}
+	pty_close
+
+	local REPLY
+	_hop_pty_shared || return 1
+	local shared=$REPLY
+	pty_fixture_repo || return 1
+	fixture_tmpdir ptyrun || return 1
+	HOP_PTY_WORK=$REPLY
+	HOP_PTY_TRACE="$HOP_PTY_WORK/trace"
+	HOP_PTY_ERR="$HOP_PTY_WORK/err"
+	HOP_PTY_PWDF="$HOP_PTY_WORK/pwd"
+	HOP_PTY_PIDF="$HOP_PTY_WORK/pid"
+	: > "$HOP_PTY_TRACE"
+	: > "$HOP_PTY_ERR"
+	: > "$HOP_PTY_WORK/calls.log"
+
+	export HOP_PTY_TRACE HOP_PTY_ERR HOP_PTY_PWDF HOP_PTY_PIDF HOP_PTY_REPO
+	export HOP_PTY_CMD=$cmd
+	export HOP_FIX_LOG="$HOP_PTY_WORK/calls.log"
+
+	# The bind spec MUST be shell-quoted INSIDE the variable, which is not obvious and not optional.
+	# - `--bind=focus:execute-silent(true)` gives rc=2 and `invalid command line string`.
+	export FZF_DEFAULT_OPTS="--bind 'focus:execute-silent(${shared}/trace.sh F)'"
+	FZF_DEFAULT_OPTS+=" --bind 'change:execute-silent(${shared}/trace.sh C)'"
+	FZF_DEFAULT_OPTS+=" --bind 'result:execute-silent(${shared}/trace.sh R)'"
+
+	zpty -b "$HOP_PTY_NAME" "zsh -f ${shared}/driver.zsh" || return 1
+	pty_wait_lines 1 || return 1
+	[[ -s $HOP_PTY_PIDF ]] && HOP_PTY_PIDS+=("$(<"$HOP_PTY_PIDF")")
+	return 0
+}
+
+# pty_key <key> [expected-trace-lines] -> one keystroke, then wait for it to have landed.
+# - ALWAYS `zpty -w -n`: without -n zpty appends a newline, so the key arrives as key+Enter.
+# - That silently means `accept`, and it corrupted three spikes with phantom off-by-ones.
+# - One key per write with a settle: a batched zero-sleep send produced `ctrl-o|alpha` for `charlie`.
+# - Passing the expected count returns as soon as the event lands, which beats any sleep on both axes.
+pty_key() {
+	emulate -L zsh
+	local key=$1 want=${2:-}
+	case $key in
+		esc) key=$'\e' ;;
+		enter) key=$'\r' ;;
+		space) key=' ' ;;
+	esac
+	zpty -w -n "$HOP_PTY_NAME" "$key" || return 1
+	if [[ -n $want ]]; then
+		pty_wait_lines "$want" || return 1
+		# The event fired, but a long action chain can still have change-prompt etc. to go.
+		pty_settle 0.15
+		return 0
+	fi
+	pty_settle
+}
+
+# pty_key_ev <key> -> send a key that MUST move fzf's state, and wait for the event it produces.
+# - Reading the count first is what makes this a barrier rather than an optimistic sleep.
+pty_key_ev() {
+	emulate -L zsh
+	local -i n
+	n=$(pty_count)
+	pty_key "$1" $(( n + 1 ))
+}
+
+# pty_close -> reap the child's whole process group, then drop the pty.
+# - `zpty -d` was proven NOT to reap: it leaves fzf orphaned and hung, reparented to init.
+# - The driver records its own $$ and zpty makes it a session leader, so -PID is the group.
+pty_close() {
+	emulate -L zsh
+	local p=''
+	[[ -s ${HOP_PTY_PIDF:-} ]] && read -r p < "$HOP_PTY_PIDF"
+	if [[ -n $p ]]; then
+		kill -- -$p 2>/dev/null
+		HOP_PTY_PIDS=(${HOP_PTY_PIDS:#$p})
+	fi
+	zpty -d "$HOP_PTY_NAME" 2>/dev/null
+	HOP_PTY_PIDF=''
+	return 0
+}
+
+# pty_reap_all -> last-resort cleanup for every session this suite ever opened.
+pty_reap_all() {
+	emulate -L zsh
+	local p
+	for p in "${HOP_PTY_PIDS[@]}"; do
+		[[ -n $p ]] && kill -- -$p 2>/dev/null
+	done
+	HOP_PTY_PIDS=()
+	zpty -d 2>/dev/null
+	return 0
+}
+
+# _hop_pty_onexit -> the runner's own EXIT trap is REPLACED by this, so it is restated in full.
+# - Reaping has to survive the suite dying, because an unreaped fzf hangs on its pty forever.
+_hop_pty_onexit() {
+	(( ${+functions[_hop_t_report]} )) && _hop_t_report
+	pty_reap_all
+	(( ${+functions[fixture_cleanup]} )) && fixture_cleanup
+	return 0
+}
+trap _hop_pty_onexit EXIT INT TERM
+
+# pty_env -> pin HOME, the XDG roots and every hop path at throwaway values, once.
+# - The real ~/.config/hop is personal, so reading it would make results depend on whose laptop ran.
+# - Call it AFTER the fixture repo exists, because git needs a sane HOME to init one.
+pty_env() {
+	emulate -L zsh
+	local REPLY
+	_hop_pty_shared || return 1
+	fixture_tmpdir ptyhome || return 1
+	export HOME=$REPLY
+	mkdir -p "$HOME/.config" "$HOME/.local/state" || return 1
+	export XDG_CONFIG_HOME="$HOME/.config"
+	export XDG_STATE_HOME="$HOME/.local/state"
+	export HOP_CONFIG="$HOP_FIX_NOCONFIG"
+	export HOP_HISTFILE=/dev/null
+	export HOP_HOPRC=''
+	export HOP_VIM=1
+	# Empty, not unset: this is the one flag that keeps ESC[6n out of the pty.
+	export HOP_FZF_HEIGHT=''
+	export EDITOR="${HOP_PTY_SHARED}/editor" VISUAL="${HOP_PTY_SHARED}/editor"
+	# PATH is exported here rather than through stub_bin, because PATH is what the zpty child gets.
+	# - An audit found a `local PATH` does not survive the fork to `zsh -f`, so it must be global.
+	export PATH="${HOP_PTY_SHARED}:$PATH"
+	return 0
+}
+
+# pty_canary -> 0 when a real keystroke reaches fzf and print()+accept comes back out.
+# - Deliberately mirrors hop's own mechanism, since every letter verb is print(key)+accept.
+# - This is the gate: a runner that loses pty capability must turn CI RED, not skip 8 tests.
+# - It uses no trace script, so the gate does not depend on the trace contract as well.
+pty_canary() {
+	emulate -L zsh
+	local REPLY
+	fixture_tmpdir ptycanary || return 1
+	local w=$REPLY
+	print -rl -- alpha bravo > "$w/list"
+	zpty -b "$HOP_PTY_NAME" "fzf --no-height --layout=reverse --bind 'o:print(ctrl-o)+accept' < ${w}/list > ${w}/out 2> ${w}/err" || return 1
+	pty_settle 0.4
+	zpty -w -n "$HOP_PTY_NAME" 'o'
+	local -F spent=0
+	while (( spent < HOP_PTY_WAIT )); do
+		_hop_pty_drain
+		[[ -s $w/out ]] && break
+		sleep 0.02
+		(( spent += 0.02 ))
+	done
+	zpty -d "$HOP_PTY_NAME" 2>/dev/null
+	HOP_PTY_CANARY=''
+	[[ -r $w/out ]] && read -r HOP_PTY_CANARY < "$w/out"
+	[[ $HOP_PTY_CANARY == ctrl-o ]]
+}
