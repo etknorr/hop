@@ -30,7 +30,8 @@ _hop_doctor_tool() {
 		return 0
 	fi
 	local v
-	v=$("$name" "$@" 2>&1 | head -1)
+	# The redirect binds to "$name", not to head: after the pipe it fixes nothing and still hangs.
+	v=$("$name" "$@" </dev/null 2>&1 | head -1)
 	printf '  %-8s %s\n' "$name" "${v:-present}"
 }
 

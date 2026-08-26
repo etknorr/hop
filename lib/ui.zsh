@@ -305,7 +305,8 @@ _hop_fzf_ver() {
 		return 0
 	fi
 	local out v
-	out=$(fzf --version 2>/dev/null)
+	# Stdin is closed because fzf-tmux, shipped beside fzf, reads the caller's stdin with `cat <&0`.
+	out=$(fzf --version </dev/null 2>/dev/null)
 	# fzf prints `0.60.3 (abc1234)`, so only the leading run of digits and dots is ever read.
 	v=${out%%[^0-9.]*}
 	[[ $v == <->.<->(.<->|) ]] || v=''
