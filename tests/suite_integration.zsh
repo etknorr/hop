@@ -152,6 +152,11 @@ it_stub_fzf() {
 	print -rl -- \
 		'#!/bin/sh' \
 		'# hop test stub: records the call, draws nothing, exits 1 like fzf on no match.' \
+		'# A --version query neither reads stdin nor records, because real fzf does not read it either.' \
+		'# - lib/ui.zsh runs `fzf --version` with stdout captured and stderr dropped, but stdin INHERITED.' \
+		'# - So the cat below inherited the runners stdin, and on anything without EOF it blocked forever.' \
+		'# - Guarded first, before the records are truncated, so a version query cannot erase the rows.' \
+		'case " $* " in *" --version "*) exit 0 ;; esac' \
 		': > "$HOP_FZF_ARGV"' \
 		'for a in "$@"; do printf "%s\n" "$a" >> "$HOP_FZF_ARGV"; done' \
 		'cat > "$HOP_FZF_STDIN"' \
@@ -313,6 +318,54 @@ print -r -- \$PWD")
 	done
 else
 	skip 'hop <unique query> cds straight to the match' 'fzf is not installed'
+fi
+
+# ---------------------------------------------------------------------------
+# The stub's own contract, which every it_run_stub test below silently depends on.
+# ---------------------------------------------------------------------------
+# `_hop_fzf_ver` is the one fzf call in the product that is never handed rows on a pipe.
+# - lib/ui.zsh runs it as `$(fzf --version 2>/dev/null)`: stdout captured, stderr dropped, stdin INHERITED.
+# - So the stub's `cat` inherited whatever stdin the runner had, and blocked on anything without EOF.
+# - Measured before the guard: this suite under a never-closing fifo took 81s and failed 7 of its tests.
+# - Worst case is a 120s discard of the whole run, reported as a timeout that blames a terminal.
+# - Both checks below are bounded, because the defect is a hang and an unbounded test reproduces it.
+t 'a --version query neither reads stdin nor erases the records the other tests read'
+it_stub_fzf
+assert_nonempty "$IT_STUBDIR" 'the stub was never built, so neither check below means anything'
+# This is the half that fails in ORDINARY CI, where stdin is /dev/null and nothing blocks at all.
+# - Reverting the guard truncates both records here, since `cat` on /dev/null succeeds instantly.
+# - A guard that only fails when a human pipes into the runner would not be much of a guard.
+print -r -- 'SENTINEL' > "$IT_FZF_ARGV"
+print -r -- 'SENTINEL' > "$IT_FZF_STDIN"
+typeset -i it_vst
+# The env vars are what it_run_stub normally supplies, and without them the stub cannot even open
+# its record files: it errors out at the first redirect and never reaches the `cat` under test.
+hop_bound 10 env "HOP_FZF_ARGV=${IT_FZF_ARGV}" "HOP_FZF_STDIN=${IT_FZF_STDIN}" \
+	"$IT_STUBDIR/fzf" --version < /dev/null
+it_vst=$?
+assert_eq 0 $it_vst 'real fzf --version exits 0 without reading stdin, and the stub must do the same'
+assert_eq SENTINEL "$(it_slurp "$IT_FZF_ARGV")" 'a version query must not touch the argv record'
+assert_eq SENTINEL "$(it_slurp "$IT_FZF_STDIN")" 'a version query must not touch the row record'
+
+# perl as well as mkfifo: with no perl hop_bound runs unbounded, and that is the hang this prevents.
+if (( ${+commands[perl]} )) && (( ${+commands[mkfifo]} )); then
+	t 'the stub exits on a --version query even when stdin never reaches EOF'
+	# A fifo held open read-write is what reproduces the real shape of this defect.
+	# - `sleep 60 |` closes at 60s and releases the suite, which masks the worst case as merely slow.
+	# - Read-write also means no writer PROCESS exists for the suite to wait on or to clean up.
+	typeset it_fifo="$IT_STUBDIR/nostdin"
+	rm -f -- "$it_fifo"
+	mkfifo -- "$it_fifo"
+	typeset -i it_fst
+	exec {it_fd}<> "$it_fifo"
+	hop_bound 10 env "HOP_FZF_ARGV=${IT_FZF_ARGV}" "HOP_FZF_STDIN=${IT_FZF_STDIN}" \
+		"$IT_STUBDIR/fzf" --version <&$it_fd
+	it_fst=$?
+	exec {it_fd}>&-
+	rm -f -- "$it_fifo"
+	assert_eq 0 $it_fst 'the stub blocked on stdin that never ends, which is the 120s discard in miniature'
+else
+	skip 'the stub exits on a --version query even when stdin never reaches EOF' 'perl or mkfifo is missing'
 fi
 
 # ---------------------------------------------------------------------------
