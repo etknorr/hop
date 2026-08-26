@@ -1,7 +1,7 @@
 #compdef hop
 # zsh completion for hop. See ~/.config/hop/README.md.
 #
-# Flags: -a/--all, -k/--kinds <kinds>, -R/--repos, --vim/--no-vim, -h/--help.
+# Flags: -a/--all, -k/--kinds <kinds>, -R/--repos, --vim/--no-vim, -h/--help, -V/--version.
 # -k takes a comma-separated list of kind names, completed one at a time with
 # already-chosen kinds excluded (that is what `_values -s ,` gives us).
 
@@ -60,7 +60,9 @@ _hop() {
     '(-c --cwd --here)'{-c,--cwd,--here}'[only targets under $PWD, for any kind]' \
     '(--vim --no-vim)--no-vim[search-first fzf, no modal layer (same as HOP_VIM=0)]' \
     '(--vim --no-vim)--vim[force the modal layer on when HOP_VIM=0 is set]' \
+    '(- *)--doctor=-[dump config, tools and kind counts for a bug report]:mode:(short)' \
     '(- *)'{-h,--help}'[show usage and exit]' \
+    '(- *)'{-V,--version}'[show the installed version and exit]' \
     '*::query:_hop_query'
 }
 

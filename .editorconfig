@@ -1,0 +1,21 @@
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+charset = utf-8
+
+# zsh source: hop.zsh, lib/*.zsh, presets/*.zsh, config.example.zsh, tests/*.zsh, bin/* — all tabs.
+[{hop.zsh,*.zsh,bin/*,tests/run}]
+indent_style = tab
+
+# The zsh completion function is the one file in the repo that follows zsh's own
+# completion-function convention of 2-space indent rather than the repo's tab default.
+[completions/_hop]
+indent_style = space
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2

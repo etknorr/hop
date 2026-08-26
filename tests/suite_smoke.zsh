@@ -93,6 +93,89 @@ docout=$(hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor" 2>&1)
 assert_contains "$docout" 'NONE, so hop opens the workspace or repo picker'
 assert_contains "$help" "$HOP_FIX_NOCONFIG" 'the help must name the config file you would create'
 
+# --doctor=short is the mode a public issue form tells reporters to paste.
+
+t 'hop --doctor collapses $HOME to ~ and never prints it literally'
+typeset dochome
+dochome=$(HOP_DEBUG_LOG="${HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor')
+assert_not_contains "$dochome" "$HOME"
+assert_contains "$dochome" '~/hop-doctor-sentinel.log'
+
+t 'hop --doctor=short never prints $HOME, even forced to try'
+typeset docshortplain
+docshortplain=$(HOP_DEBUG_LOG="${HOME}/hop-doctor-sentinel.log" hop_probe 'hop --doctor=short')
+assert_not_contains "$docshortplain" "$HOME"
+assert_not_contains "$docshortplain" '/Users/'
+assert_contains "$docshortplain" '(customised, withheld)' 'a forced custom path must be withheld, not shown'
+
+t 'hop --doctor=short exits 0, inside and outside a git repo'
+typeset shortrepo
+fixture_repo shortmode
+shortrepo=$REPLY
+typeset -i shortst
+hop_probe "builtin cd -q ${(q)shortrepo} && hop --doctor=short" >/dev/null
+shortst=$?
+assert_eq 0 "$shortst" 'inside a repo'
+hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor=short" >/dev/null
+shortst=$?
+assert_eq 0 "$shortst" 'outside a repo'
+
+# - This is the test that actually proves the leak is closed.
+# - A sentinel kind and workspace name must show up in full --doctor and vanish from --doctor=short.
+# - The FULL-output asserts below are the control: without them a short-mode pass could be vacuous.
+t 'hop --doctor=short omits a sentinel kind name and workspace name that hop --doctor shows'
+typeset sentroot sentwstarget sentwsfile
+fixture_repo sentinel
+sentroot=$REPLY
+fixture_tmpdir sentinelwstarget
+sentwstarget=$REPLY
+fixture_tmpdir sentinelwscfg
+sentwsfile="${REPLY}/workspaces"
+print -rl -- "zzsentinelws = ${sentwstarget}" > "$sentwsfile"
+fixture_config 'hop_kind zzsentinel --dirs "no-such-family" --desc "sentinel kind for doctor tests"'
+
+typeset sentfull sentshort
+sentfull=$(HOP_WORKSPACES_FILE=$sentwsfile hop_probe "builtin cd -q ${(q)sentroot} && hop --doctor")
+sentshort=$(HOP_WORKSPACES_FILE=$sentwsfile hop_probe "builtin cd -q ${(q)sentroot} && hop --doctor=short")
+fixture_config_reset
+
+assert_contains "$sentfull" 'zzsentinel' 'control: the sentinel kind never loaded'
+assert_contains "$sentfull" 'zzsentinelws' 'control: the sentinel workspace never loaded'
+assert_contains "$sentfull" "$sentwstarget" 'control: the sentinel workspace path never loaded'
+
+assert_not_contains "$sentshort" 'zzsentinel'
+assert_not_contains "$sentshort" 'zzsentinelws'
+assert_not_contains "$sentshort" "$sentwstarget"
+
+# A bare `typeset REPLY` further down would otherwise echo whatever REPLY still holds here.
+unset REPLY
+
+# ---------------------------------------------------------------------------
+# --version: the release contract other tooling (hop upgrade) depends on.
+# ---------------------------------------------------------------------------
+t 'VERSION is a bare semver, no v prefix'
+typeset ver ok
+read -r ver < "$HOP_HOME/VERSION"
+assert_nonempty "$ver" 'VERSION must not be empty'
+if [[ $ver == <->.<->.<-> ]]; then ok=1; else ok=0; fi
+assert_eq 1 "$ok" "VERSION does not match ^[0-9]+.[0-9]+.[0-9]+\$: got ${ver}"
+
+t 'hop --version exits 0 and contains the VERSION contents'
+typeset verout
+verout=$(hop_probe 'hop --version')
+assert_contains "$verout" "$ver"
+assert_contains "$verout" 'hop '
+
+t 'hop -V is the same as --version'
+typeset vshort
+vshort=$(hop_probe 'hop -V')
+assert_eq "$verout" "$vshort"
+
+t 'CHANGELOG.md keeps an Unreleased heading, so a release cannot strand entries'
+typeset changelog
+changelog=$(<"$HOP_HOME/CHANGELOG.md")
+assert_contains "$changelog" '## [Unreleased]'
+
 t 'hop --help does not star an opt-in kind'
 typeset -a helplines=(${(f)help})
 typeset fileline=${${(M)helplines:#*[[:space:]]file[[:space:]]*}[1]}
@@ -147,4 +230,39 @@ if (( ${+commands[fzf]} )); then
 	assert_not_contains "$hit" '/a/sqs'
 else
 	skip 'fzf --filter matches a row without opening a terminal' 'fzf is not installed'
+fi
+
+# ---------------------------------------------------------------------------
+# Repo governance: the files a contributor or an issue reporter actually hits.
+# ---------------------------------------------------------------------------
+typeset -a governance=(
+	"$HOP_HOME/CONTRIBUTING.md"
+	"$HOP_HOME/.editorconfig"
+	"$HOP_HOME/.github/pull_request_template.md"
+	"$HOP_HOME/.github/ISSUE_TEMPLATE/bug_report.yml"
+	"$HOP_HOME/.github/ISSUE_TEMPLATE/feature_request.yml"
+	"$HOP_HOME/.github/ISSUE_TEMPLATE/config.yml"
+)
+
+typeset gf grel
+for gf in "${governance[@]}"; do
+	grel=${gf#${HOP_HOME}/}
+	t "${grel} exists"
+	assert_file "$gf"
+done
+
+# A missing python3, or a python3 with no PyYAML, is a skip here, not a failure.
+if (( ${+commands[python3]} )) && python3 -c 'import yaml' 2>/dev/null; then
+	typeset -a yamlfiles=("$HOP_HOME"/.github/**/*.yml(N))
+	t 'every .github yml file is a glob hit, not an empty list'
+	assert_ge $#yamlfiles 1 'a glob typo would make every yaml check vanish'
+
+	typeset yf yrel
+	for yf in "${yamlfiles[@]}"; do
+		yrel=${yf#${HOP_HOME}/}
+		t "${yrel} parses as YAML"
+		assert_status 0 python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$yf"
+	done
+else
+	skip 'every .github yml file parses as YAML' 'python3 or its yaml module is not installed'
 fi

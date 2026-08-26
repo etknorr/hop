@@ -97,8 +97,31 @@ _hop_act_folder() {
 _hop_act_copy() {
 	emulate -L zsh
 	local what=$1
-	_hop_need pbcopy 'copy to the clipboard' || return 1
-	print -rn -- "$what" | pbcopy
+	local -a cmd
+	# HOP_CLIPBOARD is a hard override, word-split so `xclip -sel c` works, and skips the probe below.
+	if [[ -n ${HOP_CLIPBOARD:-} ]]; then
+		cmd=(${=HOP_CLIPBOARD})
+	# Preference order, first match wins:
+	# - pbcopy: native on macOS.
+	# - wl-copy: Wayland, checked before X11 because a Wayland session often still has xclip installed.
+	# - xclip / xsel: the two common X11 clipboard tools.
+	# - clip.exe: WSL's bridge back to the Windows clipboard.
+	elif (( ${+commands[pbcopy]} )); then
+		cmd=(pbcopy)
+	elif (( ${+commands[wl-copy]} )); then
+		cmd=(wl-copy)
+	elif (( ${+commands[xclip]} )); then
+		cmd=(xclip -selection clipboard)
+	elif (( ${+commands[xsel]} )); then
+		cmd=(xsel --clipboard --input)
+	elif (( ${+commands[clip.exe]} )); then
+		cmd=(clip.exe)
+	else
+		# _hop_need only ever names ONE command, and no single tool is right across every platform here.
+		print -ru2 -- 'hop: no clipboard tool found, install pbcopy, wl-copy, xclip, xsel, or clip.exe (WSL)'
+		return 1
+	fi
+	print -rn -- "$what" | "${cmd[@]}"
 	print -r -- "hop: copied ${what}"
 }
 
