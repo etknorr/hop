@@ -132,6 +132,19 @@ out=$(_fz_probe '0.44.1' 'HOP_FZF_MIN=0.1.0 _hop_fzf_ok' 2>&1)
 st=$?
 assert_eq 0 "$st" 'the minimum has to be overridable, or a false positive is unfixable'
 
+t 'a HOP_FZF_MIN with a non-numeric field still returns a verdict, not a math error'
+# `local -i` on the field made an override like 0.60.3rc1 abort the caller with a bad math expression.
+out=$(_fz_probe '0.74.1' 'HOP_FZF_MIN=0.60.3rc1 _hop_fzf_ok' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_not_contains "$out" 'bad math expression'
+
+t 'a garbage HOP_FZF_MIN fails open rather than blocking every hop'
+out=$(_fz_probe '0.74.1' 'HOP_FZF_MIN=latest _hop_fzf_ok' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_not_contains "$out" 'bad math expression'
+
 t 'the shipped minimum is the one the changelog justifies'
 out=$(_fz_probe '0.74.1' 'print -r -- $HOP_FZF_MIN' 2>&1)
 assert_eq '0.60.3' "$out" 'fzf 0.60.0 added --accept-nth; 0.60.3 fixed it with --select-1'

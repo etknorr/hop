@@ -210,15 +210,18 @@ _hop_vim_binds() {
 typeset -g HOP_FZF_MIN=${HOP_FZF_MIN:-0.60.3}
 
 # _hop_ver_lt <a> <b> -> 0 when dotted version a is older than b, comparing three fields.
+# - Non-digits are stripped per field rather than evaluated, because HOP_FZF_MIN is user-settable.
+# - A bare `local -i` here made `0.60.3rc1` abort the caller with `bad math expression`.
 _hop_ver_lt() {
 	emulate -L zsh
 	local -a x=(${(s:.:)1}) y=(${(s:.:)2})
-	local -i i a b
+	local -i i
+	local a b
 	for i in 1 2 3; do
-		a=${x[i]:-0}
-		b=${y[i]:-0}
-		(( a < b )) && return 0
-		(( a > b )) && return 1
+		a=${${x[i]:-0}//[^0-9]/}
+		b=${${y[i]:-0}//[^0-9]/}
+		(( ${a:-0} < ${b:-0} )) && return 0
+		(( ${a:-0} > ${b:-0} )) && return 1
 	done
 	return 1
 }
