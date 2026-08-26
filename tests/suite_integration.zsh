@@ -464,15 +464,14 @@ assert_contains "$out" "$WTREE/terraform/sandbox/vpc/main.tf"
 # become() is banned: it replaces the fzf process, and only the parent shell can cd.
 # ---------------------------------------------------------------------------
 # Comment lines are stripped first, because ui.zsh documents the ban in a comment.
+fixture_sources shipped
+typeset -a SRC=("${reply[@]}")
+
+# This runs FIRST: a typo'd glob once dropped all of lib/ while the old numeric floor stayed happy.
+t 'every component of the become() scan list found files'
+assert_empty "$REPLY" 'a mistyped glob would make the become() scan vacuous'
+
 t 'no become() anywhere in the executable source'
-typeset -a SRC=(
-	"$HOP_HOME/hop.zsh"
-	"$HOP_HOME"/lib/*.zsh(N)
-	"$HOP_HOME"/bin/*(N.)
-	"$HOP_HOME"/presets/*.zsh(N)
-	"$HOP_HOME"/completions/_*(N.)
-)
-assert_ge $#SRC 10 'a glob typo would make this check vacuous'
 bad=''
 for f in "${SRC[@]}"; do
 	while IFS= read -r line; do

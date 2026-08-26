@@ -114,10 +114,33 @@ typeset TMPOUT
 TMPOUT=$(mktemp "${${TMPDIR:-/tmp}:A}/hop-run.XXXXXX") || exit 1
 trap 'rm -f -- "$TMPOUT"' EXIT INT TERM
 
-# perl's alarm is the timeout on this box, and a missing perl must not silently drop the bound.
+# perl is the timeout on this box, and a missing perl must not silently drop the bound.
+# - `alarm N; exec` was NOT a bound: it became the child, so a child trapping ALRM ignored it.
+# - Proven: `trap "" ALRM; sleep 12` ran all 12 seconds under a 3s bound and exited 0.
+# - It also reaped nothing: five fzf processes outlived a run, orphaned to init, hung 11+ minutes.
+# - So perl forks instead, keeps the alarm in a process the suite cannot reach, and kills the GROUP.
+# - Both sides call setpgid, because either one may lose the race to the other's first exec.
+# - A killed group exits 142, which is what perl's own alarm death used to report.
 typeset -a BOUND=()
 if (( ${+commands[perl]} )); then
-	BOUND=(perl -e 'alarm shift @ARGV; exec @ARGV' "$HOP_T_TIMEOUT")
+	BOUND=(perl -e '
+		my $secs = shift @ARGV;
+		my $pid = fork();
+		die "fork: $!" unless defined $pid;
+		if ($pid == 0) { setpgrp(0, 0); exec @ARGV; exit 127 }
+		setpgrp($pid, $pid);
+		$SIG{ALRM} = sub {
+			kill(-15, $pid);
+			select(undef, undef, undef, 0.5);
+			kill(-9, $pid);
+			exit 142;
+		};
+		alarm $secs;
+		waitpid($pid, 0);
+		my $st = $?;
+		alarm 0;
+		exit($st & 127 ? 128 + ($st & 127) : $st >> 8);
+	' "$HOP_T_TIMEOUT")
 fi
 
 zmodload -F zsh/datetime b:strftime p:EPOCHREALTIME 2>/dev/null
@@ -156,7 +179,7 @@ for suite in "${SUITES[@]}"; do
 		(( FAIL++ ))
 		body+=("  ${RED}✗${OFF} ${name}: suite did not finish (exit ${st})")
 		if (( st == 142 )); then
-			body+=("      ${DIM}killed by the ${HOP_T_TIMEOUT}s alarm; a test may be waiting on a terminal${OFF}")
+			body+=("      ${DIM}group killed by the ${HOP_T_TIMEOUT}s bound; a test may await a terminal${OFF}")
 		fi
 	fi
 
