@@ -471,7 +471,7 @@ done
 
 # Sorted through arrays, because `(o)` is silently dropped inside a quoted scalar expansion.
 typeset -a fzfexpected=(
-	'hop.zsh: out=$(print -r -- "$targets" | fzf --filter="$query" \'
+	'hop.zsh: out=$(print -r -- "$targets" | fzf --filter="$query" "${_HOP_MATCHER_FLAGS[@]}")'
 	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
 	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
 	'lib/ui.zsh: fzf "${args[@]}"'

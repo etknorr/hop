@@ -331,6 +331,26 @@ _hop_fzf_ok() {
 	return 1
 }
 
+# The flags deciding WHICH rows match, shared with the headless `fzf --filter` path in hop.zsh.
+# - That path is a separate fzf process, so it has to match rows exactly the way the picker would.
+# - Diverge the two and the no-terminal path silently resolves to a different row than the picker.
+# - These lived as two literal lists that a comment told you to edit together, which is not a mechanism.
+# - One array is: a sixth flag can no longer be added to one side only, which the old tripwire admitted.
+# - Only match-affecting flags belong here. Presentation and key binds stay local to each caller.
+# - --expect is deliberately absent: repeated --expect has ambiguous merge semantics, so it stays built once.
+# - tests/suite_nottty.zsh pins this array's value AND that neither caller hardcodes a matcher flag.
+typeset -ga _HOP_MATCHER_FLAGS=(
+	--delimiter=$'\t'
+	--with-nth=1
+	--accept-nth='2,3'
+	# Substring, not subsequence, because the display line is ~90 columns wide.
+	# - Measured on a 1k-row repo: a 3-word fuzzy query hit 13 rows where exact hit exactly 1.
+	# - One service name fuzzy-matched 22 rows and exactly 3; 'eks staging' was 16 versus 6.
+	# - fzf's ' prefix still opts one term back into fuzzy, so nothing is actually lost.
+	--exact
+	--tiebreak=begin,length
+)
+
 # _hop_pick <label> <header> [query] [reload] [root] [drill] [restore] [up]  <targets on stdin
 # - Emits the key line (empty for plain Enter) and then dir<TAB>preview.
 # - Every verb rides --expect or print(), never become(), since only the parent shell can cd.
@@ -352,9 +372,7 @@ _hop_pick() {
 	local -a args
 	args=(
 		--ansi
-		--delimiter=$'\t'
-		--with-nth=1
-		--accept-nth='2,3'
+		"${_HOP_MATCHER_FLAGS[@]}"
 		--no-multi
 		--layout=reverse
 		--info=inline
@@ -363,12 +381,6 @@ _hop_pick() {
 		--header-first
 		--header-border=bottom
 		--pointer='▸'
-		--tiebreak=begin,length
-		# Substring, not subsequence, because the display line is ~90 columns wide.
-		# - Measured on a 1k-row repo: a 3-word fuzzy query hit 13 rows where exact hit exactly 1.
-		# - One service name fuzzy-matched 22 rows and exactly 3; 'eks staging' was 16 versus 6.
-		# - fzf's ' prefix still opts one term back into fuzzy, so nothing is actually lost.
-		--exact
 		--select-1
 		--expect="$_hop_expect"
 		--preview="$prev_cmd"
