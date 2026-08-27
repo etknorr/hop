@@ -13,6 +13,14 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   Nothing enforced or even recorded that, and `pgrep -x zpty` could never have caught it either, since `zpty` is a builtin whose child carries the spawned command's name instead.
   The guard asks zsh's own parser which function bodies hold a spawn, rather than checking what column the line starts in, so a spawn indented inside a top-level `if` fails it too.
 
+### Changed
+
+- The flags deciding which rows match are one array now, rather than two lists a comment asked you to edit together.
+  `hop` resolves headlessly through `fzf --filter` when there is no terminal, and that is a separate fzf process, so it restated `--delimiter`, `--with-nth`, `--accept-nth`, `--exact` and `--tiebreak` in order to match rows the way the picker does.
+  Diverging them makes the no-terminal path resolve to a different row than the picker would, while both paths still work, so nothing looks wrong.
+  The tripwire watching for that could only compare the two copies to each other, and such a comparison goes vacuous the moment the copies are gone, because two empty sets are equal; it also never covered a sixth flag added to one side only.
+  So the tests pin the array's value and separately forbid either caller from hardcoding a matcher flag, which makes divergence impossible to express rather than merely watched for.
+
 ### Fixed
 
 - A test suite killed by its bound reported every result it had already produced as zero.

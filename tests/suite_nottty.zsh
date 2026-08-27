@@ -217,34 +217,60 @@ zzzz=0
 <empty>=4' "$NT_AGREE" 'the headless matcher must count rows exactly as --select-1 would'
 
 # ---------------------------------------------------------------------------
-# The headless flags are a COPY of the picker's, so a tripwire has to catch them drifting apart.
+# Both fzf calls take their match-affecting flags from ONE array, and that is what these pin.
 # ---------------------------------------------------------------------------
-# _hop_pick_headless restates five flags _hop_pick owns, because --filter is a separate fzf process.
-# - Diverging them makes the headless path match differently from the picker it stands in for.
-# - That failure is silent: both sides still run, and only the row chosen is wrong.
-# - So both sets are extracted from the live function bodies and compared, rather than trusted.
-# - `functions` renders quoting canonically, so the two sides come out byte for byte identical.
-# - The picker's set is ALSO asserted against a literal, which is what stops this going vacuous.
-# - Without that, a typo'd pattern matching nothing on BOTH sides would compare equal and pass.
-# - Proven: breaking the pattern so both sides return empty fails the literal, not the comparison.
-# - Known limit: this pins the five flags that exist today, not a sixth added to one side only.
+# The picker and the headless `fzf --filter` are separate processes that must match rows identically.
+# - Diverging them makes the no-terminal path resolve to a different row, and it fails silently.
+# - They used to be two literal lists compared to each other, which had two weaknesses.
+# - Comparing the two sides went vacuous the moment both sides stopped holding literals: both empty
+#   compare equal, and only the literal assertion noticed. That is exactly what happened here.
+# - And equality admitted a SIXTH flag added to one side only, since it pinned the five then present.
+# - So the value is pinned against a literal, and each caller is checked for hardcoding, separately.
 typeset -g NT_MF_PAT='--(delimiter|with-nth|accept-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|smart-case)(=[^ )]*)?'
+
+# The VALUES fzf receives, in the order the array declares them, not the source text that built them.
+# - So --accept-nth='2,3' appears here as its value, and --delimiter carries a REAL tab.
 typeset -a NT_MF_WANT=(
-	"--accept-nth='2,3'"
-	"--delimiter=\$'\\t'"
+	--delimiter=$'\t'
+	'--with-nth=1'
+	'--accept-nth=2,3'
 	'--exact'
 	'--tiebreak=begin,length'
-	'--with-nth=1'
 )
-typeset NT_MF_PICK='' NT_MF_HEAD=''
-NT_MF_PICK=$(hop_probe "functions _hop_pick | grep -oE -- ${(q)NT_MF_PAT} | sort -u")
-NT_MF_HEAD=$(hop_probe "functions _hop_pick_headless | grep -oE -- ${(q)NT_MF_PAT} | sort -u")
+typeset NT_MF_ACTUAL=''
+NT_MF_ACTUAL=$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}"')
 
-t "the picker's matcher flags are the set the headless path was written against"
-assert_eq "${(F)NT_MF_WANT}" "$NT_MF_PICK" 'the picker changed its matcher, so _hop_pick_headless must change with it'
+t 'the shared matcher flags are exactly the set both fzf calls were written against'
+assert_eq "${(F)NT_MF_WANT}" "$NT_MF_ACTUAL" 'the matcher changed, so every claim about how hop matches rows is now unverified'
 
-t 'the headless matcher flags have not drifted from the picker'
-assert_eq "$NT_MF_PICK" "$NT_MF_HEAD" 'the two fzf calls would now match rows differently, and silently'
+# Hardcoding a matcher flag in either caller is the only way they can diverge again, so it is banned.
+# - This is strictly stronger than comparing the two sites: a sixth flag added to one side fails here.
+# - Counted, not matched: a count of 0 cannot be satisfied by a pattern that matches nothing anywhere,
+#   because the assertions below prove the same pattern still finds the flags in the array itself.
+typeset NT_MF_PICK_HARD='' NT_MF_HEAD_HARD='' NT_MF_PAT_ALIVE=''
+NT_MF_PICK_HARD=$(hop_probe "functions _hop_pick | grep -cE -- ${(q)NT_MF_PAT} || true")
+NT_MF_HEAD_HARD=$(hop_probe "functions _hop_pick_headless | grep -cE -- ${(q)NT_MF_PAT} || true")
+NT_MF_PAT_ALIVE=$(hop_probe "print -rl -- \"\${_HOP_MATCHER_FLAGS[@]}\" | grep -cE -- ${(q)NT_MF_PAT} || true")
+
+t 'the flag pattern still matches something, so the two zero counts below mean absence'
+assert_eq 5 "$NT_MF_PAT_ALIVE" 'the pattern matches nothing at all, so it cannot prove either caller is clean'
+
+t 'the picker hardcodes no matcher flag of its own'
+assert_eq 0 "$NT_MF_PICK_HARD" 'a hardcoded flag here can drift from the headless path again'
+
+t 'the headless path hardcodes no matcher flag of its own'
+assert_eq 0 "$NT_MF_HEAD_HARD" 'a hardcoded flag here is how this silently stopped matching like the picker'
+
+# Each caller must actually PASS the array, since dropping it entirely would also pass the bans above.
+typeset NT_MF_PICK_USES='' NT_MF_HEAD_USES=''
+NT_MF_PICK_USES=$(hop_probe 'functions _hop_pick | grep -c _HOP_MATCHER_FLAGS || true')
+NT_MF_HEAD_USES=$(hop_probe 'functions _hop_pick_headless | grep -c _HOP_MATCHER_FLAGS || true')
+
+t 'the picker passes the shared matcher flags'
+assert_eq 1 "$NT_MF_PICK_USES" 'without this the picker would run with fzf defaults and no test would say so'
+
+t 'the headless path passes the shared matcher flags'
+assert_eq 1 "$NT_MF_HEAD_USES" 'without this the headless path would match on fzf defaults instead'
 
 # ---------------------------------------------------------------------------
 # The predicate itself: a terminal, not stdin, is what it reads.

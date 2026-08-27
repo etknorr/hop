@@ -227,20 +227,18 @@ _hop_tty_ok() {
 # - --filter ignores exactly one flag _hop_pick passes, which is --disabled.
 # - _hop_pick adds --disabled ONLY for an empty query, where every row matches either way.
 # - So that discrepancy is unreachable rather than merely unobserved, and needs no handling here.
-# - The five flags below are duplicated from _hop_pick deliberately, not by oversight.
+# - The match-affecting flags come from _HOP_MATCHER_FLAGS, which lib/ui.zsh defines and this file sources.
 # - --filter is a separate fzf process, so it has to match rows exactly the way the picker would.
-# - --delimiter, --with-nth, --accept-nth, --exact and --tiebreak MUST change together in both.
-# - Diverge them and this path silently matches differently from the picker it stands in for.
-# - tests/suite_nottty.zsh extracts both flag sets and fails when they stop being equal.
-# - One shared source for them is the real fix, and it needs lib/ui.zsh; filed as a follow-up.
+# - They were restated here, under a comment asking you to keep two copies in step by hand.
+# - Sharing the array makes that structural instead: there is no second list left to forget.
+# - tests/suite_nottty.zsh pins the array's value and fails if either caller hardcodes a flag again.
 # - fzf's stderr is NOT suppressed, because --filter still parses every option it is handed.
 # - A genuine complaint about one of these flags has to reach the user, not look like an empty result.
 _hop_pick_headless() {
 	emulate -L zsh
 	local targets=$1 query=${2:-} label=$3
 	local out
-	out=$(print -r -- "$targets" | fzf --filter="$query" \
-		--delimiter=$'\t' --with-nth=1 --accept-nth='2,3' --exact --tiebreak=begin,length)
+	out=$(print -r -- "$targets" | fzf --filter="$query" "${_HOP_MATCHER_FLAGS[@]}")
 	local -a rows=("${(@f)out}")
 	rows=(${rows:#})
 	_hop_dbg "headless label=${label} rows=${#rows} query=${query}"
