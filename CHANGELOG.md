@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Fixture directories orphaned by a killed suite are reaped at startup.
   A suite that cannot run its cleanup leaves its entire fixture set behind, and 2053 entries had accumulated under the temp directory before anyone counted them.
   The sweep is age-gated so a concurrent run's fixtures survive, and it matches files as well as directories, because the runner's own scratch file leaks the same way.
+- The recording stubs the test suite uses now write each logged call in a single append, so two of them running at once can no longer splice their lines together.
+  Each stub wrote the command name, then every argument, then the newline, as separate appends, and a second stub landing between them corrupted the line.
+  The preview pane runs one of those stubs on every render, so this was reachable rather than theoretical: it recorded `batgh browse` in place of `gh browse`, which read as a verb that never ran and sent an entire investigation after the wrong component.
+  The race is far too rare to hold a test to, measured at one corrupted trial in six under sixty-way concurrency, so what is asserted instead is the property that makes interleaving impossible: exactly one append per call.
 - The picker no longer leaves a `hop-guard.XXXXXX` directory in your temp dir every time it is killed outright.
   Each picker makes one private directory for the escape guard's timestamp and removes it on `EXIT HUP TERM`, but `SIGKILL` cannot be trapped, so `kill -9`, an OOM kill, or a terminal tearing down the process group left the directory behind for good and one accumulated per killed picker.
   A trap cannot fix what a trap cannot catch, so the picker now sweeps guard directories older than a day before creating its own.
@@ -63,12 +67,12 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   The comment claiming the threshold has the headroom a loaded runner needs is corrected to say the opposite.
   The shipped default is unchanged, because the failure direction is fail-open: heavy load reverts to the nuisance the guard was written for rather than swallowing a keypress you did make.
 - A real keypress could also read as a verb that never ran, for a reason with nothing to do with the guard.
-  The pty stubs append their name, then their arguments, then their newline, as three separate appends to one shared log, and the preview pane runs the `bat` stub on every render.
+  The pty stubs appended their name, then their arguments, then their newline, as separate appends to one shared log, and the preview pane runs the `bat` stub on every render.
   A concurrent call lands between those appends and records `batgh browse ...` in place of `gh browse ...`, which corrupts the only field the check reads.
   It presented as the browse verb never running, with an empty stderr and the dispatch already logged, which pointed the investigation at the guard rather than at the log.
   That suite drops the `bat` stub now, leaving the log exactly one writer, and `bin/hop-preview` falls through to the `cat`/`head` path it already uses on a machine without `bat`.
   The controls also report hop's stderr and any line no single stub could have written, since a verb can bail after `dispatch key=` is logged.
-  The three-append write is still there for every other pty suite to hit.
+  The multi-append write that made it possible is fixed for every suite at once, in its own entry.
 - The guard's own unit suite had four assertions with the same defect, at a higher rate than the pty flake that led here.
   Asserting that a verb was refused means asserting a 150ms threshold was crossed, measured across the very fork whose latency is being timed: 1 in 40 of those checks failed open at loadavg 44, and three of the four sat on the default window.
   They pin an explicit window now.
