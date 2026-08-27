@@ -6,6 +6,26 @@ nothing here is run by CI.**
 They are kept because they are the only record of what a mechanism *cannot* be. Re-deriving a
 withdrawn finding is expensive, and several of these probes are what bound one.
 
+## Not all of it is on this branch
+
+**The 0.1.x evidence lives on two sibling branches, and neither contains the other**, so no single
+ref holds all of it. Both descend from `b0ac7b1`, which is the last commit they share.
+
+- **`evidence/0.1.1-investigations`**, this branch: `escape-audit/`, `pty-trap/` and
+  `tally-bound/`, described below.
+- **`evidence/046-pty-flake-captures`** at `4aedcf4`: `docs/evidence/pty-flake/`, holding
+  **31 capture runs**, `run-001.txt` through `run-031.txt` with no gaps, plus `INDEX.txt` and
+  `flakeloop.zsh`. Nothing else on that branch is unique to it.
+
+**If you arrived on `4aedcf4` first, do not trust its copy of this file.** It branched before the
+`exp3.zsh` correction below, so its `pty-trap/` table still calls the flake still-open at about
+1-in-40, and both halves of that are false. **Treat this branch as the current text and that one as
+the capture set.**
+
+Those 31 runs are also the most likely way to settle the rate contradiction recorded under
+Caveats, since they are an actual sampled population rather than a remembered figure. `INDEX.txt`
+is the map of the loop that produced them.
+
 ## Why they live here rather than under `tests/`
 
 `tests/run` discovers suites with a non-recursive glob over `tests/suite_*.zsh`, and
