@@ -1,6 +1,6 @@
 # Investigation evidence
 
-Preserved artifacts from two 0.1.x investigations. **Nothing here is part of the test suite, and
+Preserved artifacts from three 0.1.x investigations. **Nothing here is part of the test suite, and
 nothing here is run by CI.**
 
 They are kept because they are the only record of what a mechanism *cannot* be. Re-deriving a
@@ -44,6 +44,28 @@ Headers cite task #43.
 | `sabotage.zsh` | A sabotage matrix: each guard reverted in turn to prove the corresponding test fails when the thing it protects is removed. |
 | `bound2.pl` | The `tests/run` process bound verbatim (fork, child `setpgrp`, parent alarm, `KILL` on the negative pid), for cases that must keep a controlling terminal where `setsid` would destroy the thing under test. |
 
+## `tally-bound/`
+
+Captures proving that a suite killed by its bound used to discard every result it had already
+printed, and the baseline showing the fix changes nothing on a clean run. Headers cite tasks #58
+and #59. `hop_bound` kills the process group with `KILL`, which no trap can catch, so the child's
+sentinel line never arrived and the parent counted zero; the parent now counts the markers it is
+already holding instead.
+
+**`pr59-tally/` is the expensive set: the two `*.color.txt` files can only be regenerated under a
+pty**, because the runner decides colour from `[[ -t 1 ]]` and it cannot be forced by an
+environment variable. They were captured by running the harness under `script -q /dev/null`. Do not
+delete them on the assumption that a rerun would reproduce them from a normal shell.
+
+| File | What it establishes |
+| --- | --- |
+| `pr59-tally/hop-wt-tally-base.{color,nocolor}.txt` | The defect, before the fix. One suite under `HOP_T_TIMEOUT=5` prints 15 checkmark lines and reports `0 passed, 1 failed`. `base` is the tree at `origin/main`. |
+| `pr59-tally/hop-wt-tally-reap.{color,nocolor}.txt` | The same run after the fix: 15 printed, `15 passed, 1 failed`. `reap` names the `fix/tally-reap-timeout` branch, not the fixture reap. |
+| `baseline/full.hop-wt-tally-{base,reap}.txt` | Full-suite runs on both trees, **`579 passed, 0 failed, 7 skipped` on each**. The delta is zero because nothing approached the bound at loadavg ~5, so every suite emitted its sentinel and the new counting branch never ran. This is the negative check that the fix cannot double-count. |
+| `tripwire/tw2.txt`, `tripwire/tw6.txt` | Fixtures for the counter's own tripwire: two marker lines at two-space indent, and one detail line at six-space indent. The counter must answer 2 for the first and 0 for the second, which is what distinguishes a working counter from one that always reports zero. |
+| `harness/hop-proof59.sh` | Produced everything in `pr59-tally/`. Counts markers with its own `perl` rather than the runner's logic, so the check shares no mechanism with what it verifies. |
+| `harness/hop-baseline.sh` | Produced everything in `baseline/` and `tripwire/`. Runs the tripwire first, then the two full suites. |
+
 ## Caveats
 
 - **`sabotage.zsh` uses `pgrep -x fzf` and `pgrep -x zpty` for its leftover check.** That check is
@@ -53,5 +75,11 @@ Headers cite task #43.
   file is left as written; treat those two lines as a record of the era, not as a method to copy.
 - **`realcanary.zsh` hardcodes `/private/tmp/hop-pristine`**, which no longer exists. It documents
   the experiment rather than being runnable as-is.
-- Both source directories lived under `/private/tmp`, which macOS reaps on an access-time clock and
+- **Both harness scripts hardcode `/private/tmp/hop-wt-tally-base` and
+  `/private/tmp/hop-wt-tally-reap`**, the two worktrees they compared, which no longer exist. Point
+  `tree` at any two checkouts to rerun them. They also write into `/private/tmp/hop-proof59-out`.
+- **`hop-baseline.sh` reports its own wall time as `0.00s`**, because `EPOCHREALTIME` was unset in
+  the shell that ran it. Every elapsed figure quoted above is the runner's own, which is sound
+  because `tests/run` loads `zsh/datetime` itself. Ignore that column, do not trust it.
+- All source directories lived under `/private/tmp`, which macOS reaps on an access-time clock and
   clears on reboot. That is why they are committed here.

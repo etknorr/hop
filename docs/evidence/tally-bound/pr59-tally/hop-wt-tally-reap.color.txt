@@ -1,0 +1,20 @@
+^D[1msuite_core[0m
+  [32m✓[0m the stub fzf really is the only fzf a probe can see
+  [32m✓[0m hop -w reports a non-zero fzf status instead of swallowing it
+  [32m✓[0m hop -R reports the same status the same way, so the two pickers cannot drift
+  [32m✓[0m hop -w on a no-match says so, rather than printing nothing at all
+  [32m✓[0m hop -w on a user cancel stays silent and succeeds
+  [32m✓[0m esc out of the repo picker is silent too, which is what makes 130 a shared rule
+  [32m✓[0m both pickers route through the one _hop_fzf_status, so the ladder cannot be duplicated
+  [32m✓[0m _hop_ws_picker leaves no _hop_key or _hop_st behind in the calling shell
+  [32m✓[0m HOP_DEBUG=1 logs a pick that found no match, which used to log nothing at all
+  [32m✓[0m HOP_DEBUG=1 logs a user cancel, so an abandoned pick is distinguishable from a crash
+  [32m✓[0m HOP_DEBUG=1 logs a hard fzf failure, the case a bug report cannot diagnose without it
+  [32m✓[0m the row count reaches the log, so "empty list" and "list did not match" are tellable apart
+  [32m✓[0m HOP_DEBUG unset still writes nothing, so the new call site stays opt-in
+  [32m✓[0m the fixture really is reached through a symlink, or the cases below prove nothing
+  [32m✓[0m hop -c finds targets in a subtree entered through a symlink
+  [31m✗[0m suite_core: suite did not finish (exit 142) after 5.01s at load 6.31
+      [2mkilled by this runner's 5s bound; raise HOP_T_TIMEOUT when loaded[0m
+
+[31mFAIL[0m  15 passed, 1 failed  in 5.17s
