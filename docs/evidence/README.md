@@ -22,9 +22,9 @@ ref holds all of it. Both descend from `b0ac7b1`, which is the last commit they 
 1-in-40, and both halves of that are false. **Treat this branch as the current text and that one as
 the capture set.**
 
-Those 31 runs are also the most likely way to settle the rate contradiction recorded under
-Caveats, since they are an actual sampled population rather than a remembered figure. `INDEX.txt`
-is the map of the loop that produced them.
+Those 31 runs are what settled the flake's rate at about 1 in 6, which Caveats records along with
+the reason its `INDEX.txt` cannot be counted at face value. They were captured at `87be1ed`, an
+ancestor of the fix in `b3dd791`, so they measure the flake as it actually behaved.
 
 ## Why they live here rather than under `tests/`
 
@@ -96,12 +96,30 @@ delete them on the assumption that a rerun would reproduce them from a normal sh
   file is left as written; treat those two lines as a record of the era, not as a method to copy.
 - **`realcanary.zsh` hardcodes `/private/tmp/hop-pristine`**, which no longer exists. It documents
   the experiment rather than being runnable as-is.
-- **Do not quote a failure rate for the pty flake: the surviving figures disagree.** This file
-  previously called it "~1-in-40", which was wrong on both halves. The 1-in-40 measurement belongs
-  to the guard's own unit assertions failing open at loadavg 44, a different population, and the
-  entry recording it calls that *a higher rate than the pty flake*, while the flake was filed at
-  about 1 in 5. Those cannot both hold. The causes in `b3dd791` are verified and the rate is not, so
-  cite the causes.
+- **The pty flake ran at about 1 in 6, settled from the captures rather than from memory.** Four of
+  the 25 runs in which `suite_pty_escape` completed failed it: 16%, 95% exact interval 4.5% to 36%,
+  or 1 in 2.8 to 1 in 22. That interval contains the ~1-in-5 figure and excludes ~1-in-40, and it
+  does so under every denominator worth arguing about (25, 30 or 31). The ~1-in-40 measurement
+  belongs to the guard's own unit assertions at loadavg 44, a **different population**, so the two
+  numbers were never in competition. Do not use this rate as a constant: see the load caveat below.
+- **The FAIL column in `pty-flake/INDEX.txt` conflates three failure modes, so 9 of 30 is wrong.**
+  Only 4 rows are the flake, each reporting `566 passed, 1 failed` with the single failure inside
+  `suite_pty_escape`: runs 4, 12, 16 and 19. Three failed on "a long APC payload cannot outlast the
+  guard" and one on "a real b still browses", which are the fork-timing and stub-log-race causes
+  respectively, so both known causes appear. Runs 22 to 25 emitted **no tally at all**, run 26 shows
+  `suite_pty_escape: suite did not finish (exit 142)` so the bound killed the suite before the flake
+  could be observed, and run 31 shows exits 137 and 143, external kills. Those six cannot testify
+  either way and are excluded from both numerator and denominator.
+- **The rate is a function of load, not a constant, and this sample understates a loaded machine.**
+  The guard compares against a 150ms threshold measured across its own fork, and fork latency climbs
+  with load, so the flake is load-driven by construction. Run wall times climb 57s to 85s to 400s+
+  across the loop, and all four flake hits sit in the *faster* half. The loaded runs did not flake,
+  they got bound-killed, which **masked** the flake behind a louder failure. Treat 16% as a floor.
+- **`pty-flake/INDEX.txt` disagrees with its own directory, and never recorded load.** It indexes
+  `run-1` through `run-30` while the directory holds `run-001` through `run-031`, so **`run-031` is
+  unindexed**; it is also the run with the external kills, consistent with the loop dying before it
+  could write that row. The header says `runs requested: 45`, so 31 of 45 completed. Every row's
+  `load=` field is **empty**, which is the one covariate that would have settled the paragraph above.
 - **Both harness scripts hardcode `/private/tmp/hop-wt-tally-base` and
   `/private/tmp/hop-wt-tally-reap`**, the two worktrees they compared, which no longer exist. Point
   `tree` at any two checkouts to rerun them. They also write into `/private/tmp/hop-proof59-out`.
