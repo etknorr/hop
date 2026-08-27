@@ -40,15 +40,16 @@ Headers cite task #43.
 | `decide.zsh` | The decisive one. A `zpty -b` spawned at a script's **top level** versus inside a **function**, which is what `pty.zsh` actually does. Distinguishes the two cases the finding conflated. |
 | `realcanary.zsh` | Whether the real, unmodified `pty_canary` wipes the fixtures it depends on. Answer: no. |
 | `exp1.zsh`, `exp2.zsh` | Instrumented models of `pty_canary`'s shape, with the trap tagged by `$$` so the log names which process ran it. Note `exp2.zsh` carries `exp1`'s header verbatim; the header was not updated when it was copied. |
-| `exp3.zsh` | Models the real `_hop_pty_onexit` preamble faithfully (`_hop_t_report`, then `pty_reap_all`, which forks `ps -A`, only then `fixture_cleanup`) and measures how often the poll wins the race. **This is the artifact bearing on the still-open ~1-in-40 flake**, which exp1 could not explain because its trap went straight to cleanup and won every time. |
+| `exp3.zsh` | Models the real `_hop_pty_onexit` preamble faithfully (`_hop_t_report`, then `pty_reap_all`, which forks `ps -A`, only then `fixture_cleanup`) and measures how often the poll wins the race, which exp1 could not do because its trap went straight to cleanup and won every time. **The flake it was chasing is SOLVED, in `b3dd791`, and this race was not the cause.** `bin/hop-guard` timed each verb against the previous check's clock reading, so its discriminator was the cost of its own fork: 12.7ms mean idle against 425ms mean at loadavg 35, past the 150ms threshold. Separately, the pty stubs wrote each log line as three appends, so a concurrent `bat` render recorded `batgh browse` in place of `gh browse`. **Do not rerun this hunting an open bug.** |
 | `sabotage.zsh` | A sabotage matrix: each guard reverted in turn to prove the corresponding test fails when the thing it protects is removed. |
 | `bound2.pl` | The `tests/run` process bound verbatim (fork, child `setpgrp`, parent alarm, `KILL` on the negative pid), for cases that must keep a controlling terminal where `setsid` would destroy the thing under test. |
 
 ## `tally-bound/`
 
 Captures proving that a suite killed by its bound used to discard every result it had already
-printed, and the baseline showing the fix changes nothing on a clean run. Headers cite tasks #58
-and #59. `hop_bound` kills the process group with `KILL`, which no trap can catch, so the child's
+printed, and the baseline showing the fix changes nothing on a clean run. Only the two harness
+headers carry a task reference, #59; the bound raise beside it was #58, and the captures are raw
+runner output with no header. `hop_bound` kills the process group with `KILL`, which no trap can catch, so the child's
 sentinel line never arrived and the parent counted zero; the parent now counts the markers it is
 already holding instead.
 
@@ -75,6 +76,12 @@ delete them on the assumption that a rerun would reproduce them from a normal sh
   file is left as written; treat those two lines as a record of the era, not as a method to copy.
 - **`realcanary.zsh` hardcodes `/private/tmp/hop-pristine`**, which no longer exists. It documents
   the experiment rather than being runnable as-is.
+- **Do not quote a failure rate for the pty flake: the surviving figures disagree.** This file
+  previously called it "~1-in-40", which was wrong on both halves. The 1-in-40 measurement belongs
+  to the guard's own unit assertions failing open at loadavg 44, a different population, and the
+  entry recording it calls that *a higher rate than the pty flake*, while the flake was filed at
+  about 1 in 5. Those cannot both hold. The causes in `b3dd791` are verified and the rate is not, so
+  cite the causes.
 - **Both harness scripts hardcode `/private/tmp/hop-wt-tally-base` and
   `/private/tmp/hop-wt-tally-reap`**, the two worktrees they compared, which no longer exist. Point
   `tree` at any two checkouts to rerun them. They also write into `/private/tmp/hop-proof59-out`.
