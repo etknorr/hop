@@ -17,7 +17,10 @@ typeset -g HOP_TESTS=${0:A:h}
 typeset -g HOP_HOME=${HOP_TESTS:h}
 export HOP_TESTS HOP_HOME
 
-typeset -gi HOP_T_TIMEOUT=${HOP_T_TIMEOUT:-120}
+# 120 killed real suites: suite_pty measured 182.28s at loadavg 185 against ~13.6s at loadavg 14.
+# - A bound too high costs time only when something genuinely hangs, and a hang is unbounded anyway.
+# - A bound too low is paid on every loaded run, so 600 is ~3.3x the worst measured and still hard.
+typeset -gi HOP_T_TIMEOUT=${HOP_T_TIMEOUT:-600}
 typeset -g HOP_T_SENTINEL='##hop-test-count'
 
 # Sourced before the mode split, because the suites bound children too and must not re-derive it.
@@ -70,7 +73,7 @@ if [[ $PATTERN == (-h|--help) ]]; then
 	print -r -- '  tests/run smoke        run the suites whose filename matches *smoke*'
 	print -r -- '  tests/run "zsh -n*"    no suite matches, so this selects tests by name'
 	print -r -- ''
-	print -r -- '  HOP_T_TIMEOUT=N        seconds a single suite may take (default 120)'
+	print -r -- '  HOP_T_TIMEOUT=N        seconds a single suite may take (default 600)'
 	print -r -- '  HOP_T_REAP_HOURS=N     reap hop-* fixtures older than N hours first (default 4, 0 off)'
 	print -r -- ''
 	print -r -- '  The tree under test is the one this script lives in, so run the APPLIED copy'
@@ -144,12 +147,55 @@ typeset -F START=${EPOCHREALTIME:-0}
 typeset -i PASS=0 FAIL=0 SKIPPED=0
 typeset suite line name
 typeset -i st tallied crashed
+typeset -i MARK_PASS MARK_FAIL MARK_SKIP
 typeset -a body
+
+# _hop_t_count_markers <line...> -> count the pass, fail and skip markers a child already printed.
+# - hop_bound KILLs the group, and KILL is untrappable, so a bounded-out child emits no sentinel.
+# - Its results are already in the parent's hands, so they are counted here rather than asked for.
+# - The colour prefix is stripped, because assert.zsh wraps the glyph when HOP_T_COLOR is on.
+# - Two leading spaces are what separate a marker from the six-space detail lines under a failure.
+_hop_t_count_markers() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	MARK_PASS=0 MARK_FAIL=0 MARK_SKIP=0
+	local l
+	for l in "$@"; do
+		[[ $l == '  '* ]] || continue
+		l=${l#'  '}
+		l=${l##($'\e['[0-9;]##m)#}
+		case $l in
+			('✓'*) (( MARK_PASS++ )) ;;
+			('✗'*) (( MARK_FAIL++ )) ;;
+			('-'*)  (( MARK_SKIP++ )) ;;
+		esac
+	done
+	return 0
+}
+
+# _hop_t_loadavg -> REPLY is the 1-minute load average, or empty where neither source exists.
+# - Reported beside a timeout because "how busy was the machine" is its first question.
+# - Two sources, since Linux publishes /proc/loadavg and macOS answers through sysctl instead.
+_hop_t_loadavg() {
+	emulate -L zsh
+	REPLY=''
+	if [[ -r /proc/loadavg ]]; then
+		REPLY=${${=$(</proc/loadavg)}[1]}
+	elif (( ${+commands[sysctl]} )); then
+		REPLY=${${=$(sysctl -n vm.loadavg 2>/dev/null)}[2]}
+	fi
+	[[ -n $REPLY ]]
+}
+
+typeset -F SUITE_START
+typeset SUITE_ELAPSED LOADNOTE REPLY
 
 for suite in "${SUITES[@]}"; do
 	name=${${suite:t}%.zsh}
+	SUITE_START=${EPOCHREALTIME:-0}
 	hop_bound "$HOP_T_TIMEOUT" zsh "${0:A}" --_suite "$suite" > "$TMPOUT" 2>&1
 	st=$?
+	printf -v SUITE_ELAPSED '%.2f' $(( ${EPOCHREALTIME:-0} - SUITE_START ))
 	tallied=0
 	body=()
 	if [[ -s $TMPOUT ]]; then
@@ -167,14 +213,29 @@ for suite in "${SUITES[@]}"; do
 	fi
 
 	# A non-zero child status is the crash signal, since a suite that finishes always exits 0.
-	# - The tally is still trusted when present, so passes recorded before the crash still count.
+	# - The sentinel is authoritative when present, so the markers are only counted without one.
+	# - A bound kill leaves no sentinel, and every result the suite HAD printed used to be dropped.
+	# - Measured before this: a suite showing 16 passing tests reported "0 passed, 1 failed".
 	crashed=0
 	(( st != 0 || ! tallied )) && crashed=1
+	if (( ! tallied )); then
+		_hop_t_count_markers "${body[@]}"
+		(( PASS += MARK_PASS ))
+		(( FAIL += MARK_FAIL ))
+		(( SKIPPED += MARK_SKIP ))
+	fi
+	# Elapsed and load are reported on EVERY crash, because they are what identify the killer.
+	# - A day was lost to reading exit 143 at 110.83s as this bound firing, when 142 is its code.
+	# - Elapsed well under the bound plus a signal that is not 142 means something outside killed it.
 	if (( crashed )); then
 		(( FAIL++ ))
-		body+=("  ${RED}✗${OFF} ${name}: suite did not finish (exit ${st})")
+		LOADNOTE=''
+		_hop_t_loadavg && LOADNOTE=" at load ${REPLY}"
+		body+=("  ${RED}✗${OFF} ${name}: suite did not finish (exit ${st}) after ${SUITE_ELAPSED}s${LOADNOTE}")
 		if (( st == 142 )); then
-			body+=("      ${DIM}group killed by the ${HOP_T_TIMEOUT}s bound; a test may await a terminal${OFF}")
+			body+=("      ${DIM}killed by this runner's ${HOP_T_TIMEOUT}s bound; raise HOP_T_TIMEOUT when loaded${OFF}")
+		elif (( st > 128 )); then
+			body+=("      ${DIM}signal $(( st - 128 )) came from OUTSIDE this runner, whose own bound exits 142${OFF}")
 		fi
 	fi
 
