@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   `zpty -b` at a script's top level makes the spawned shell inherit the caller's EXIT trap, and that trap removes the pty fixtures every pty test shares, so hoisting a spawn out of `pty_open` or `pty_canary` would delete them mid-run.
   Nothing enforced or even recorded that, and `pgrep -x zpty` could never have caught it either, since `zpty` is a builtin whose child carries the spawned command's name instead.
   The guard asks zsh's own parser which function bodies hold a spawn, rather than checking what column the line starts in, so a spawn indented inside a top-level `if` fails it too.
+- A test for the tally a bound-killed suite reports, which until now was proven by hand only.
+  That code path runs only when a suite is killed outright, and no ordinary suite is ever killed, so nothing in the suite could reach it.
+  A nested `tests/run` is driven under a three-second bound against a suite that closes three tests and then hangs, and the tally it reports back is asserted to be exactly three and to equal the markers actually printed.
+  Exact on both sides rather than a floor, because `>= 1` still passes with two of the three passes silently dropped, which is this defect itself in miniature.
+  A second assertion pins the signal, since only the untrappable `KILL` reaches the marker counting at all: under a signal the suite can trap it closes its open test and reports four from a sentinel instead, which is a different mechanism that must not be mistaken for this one.
 
 ### Changed
 
