@@ -106,9 +106,12 @@ RU_REP=$(ru_reported)
 # - The two states are distinguishable, which is the only reason skipping here is honest at all.
 # - The DEFECT reads markers 3 and reported 0: the evidence exists and the runner threw it away.
 # - This reads markers 0, so there is nothing to assert over and a red would blame the wrong thing.
-# - Measured margin: the child files its three markers in ~50ms against a 3s bound, so this is remote.
-# - The worst load slowdown measured in this repo is 13x, which is still well inside that margin.
+# - Measured: the child files its three markers in 0.09s to 0.12s at loadavg 6.2, against a 3s bound.
+# - All three are still recovered at a 1s bound on that same machine, so the headroom here is ~30x.
 # - Skipping beats raising the bound, which would pay the whole margin in wall time on every run.
+# - But note WHAT this skip costs: a deliberate kill censors the very observations being counted.
+# - So a chronically loaded runner loses this coverage silently, one skip at a time, and stays green.
+# - The skip names load as the cause for that reason, so a reader can tell absence from success.
 if (( RU_MARK == 0 )); then
 	skip 'a bound-killed suite reports the passes it had already printed' \
 		"nothing was printed before the ${RU_BOUND}s bound, so this machine is too loaded to measure"
