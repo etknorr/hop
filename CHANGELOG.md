@@ -73,7 +73,7 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   That suite drops the `bat` stub now, leaving the log exactly one writer, and `bin/hop-preview` falls through to the `cat`/`head` path it already uses on a machine without `bat`.
   The controls also report hop's stderr and any line no single stub could have written, since a verb can bail after `dispatch key=` is logged.
   The multi-append write that made it possible is fixed for every suite at once, in its own entry.
-- The guard's own unit suite had four assertions with the same defect, at a higher rate than the pty flake that led here.
+- The guard's own unit suite had four assertions with the same defect.
   Asserting that a verb was refused means asserting a 150ms threshold was crossed, measured across the very fork whose latency is being timed: 1 in 40 of those checks failed open at loadavg 44, and three of the four sat on the default window.
   They pin an explicit window now.
   The malformed-window case could not simply be pinned, because the value under test is precisely the fallback to the default, so it asserts only what holds at every load and checks the fallback constant against the default constant in the source.
