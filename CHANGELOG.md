@@ -6,83 +6,46 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-27
+
 ### Added
 
-- A structural guard pinning why `tests/lib/pty.zsh` is safe, which until now it was only by accident.
-  `zpty -b` at a script's top level makes the spawned shell inherit the caller's EXIT trap, and that trap removes the pty fixtures every pty test shares, so hoisting a spawn out of `pty_open` or `pty_canary` would delete them mid-run.
-  Nothing enforced or even recorded that, and `pgrep -x zpty` could never have caught it either, since `zpty` is a builtin whose child carries the spawned command's name instead.
-  The guard asks zsh's own parser which function bodies hold a spawn, rather than checking what column the line starts in, so a spawn indented inside a top-level `if` fails it too.
-- A test for the tally a bound-killed suite reports, which until now was proven by hand only.
-  That code path runs only when a suite is killed outright, and no ordinary suite is ever killed, so nothing in the suite could reach it.
-  A nested `tests/run` is driven under a three-second bound against a suite that closes three tests and then hangs, and the tally it reports back is asserted to be exactly three and to equal the markers actually printed.
-  Exact on both sides rather than a floor, because `>= 1` still passes with two of the three passes silently dropped, which is this defect itself in miniature.
-  A second assertion pins the signal, since only the untrappable `KILL` reaches the marker counting at all: under a signal the suite can trap it closes its open test and reports four from a sentinel instead, which is a different mechanism that must not be mistaken for this one.
+- A test for the tally a bound-killed suite reports, which was proven by hand until now.
+  That path only runs when a suite is killed outright, and no ordinary suite is, so nothing in the suite reached it.
+  A nested `tests/run` runs under a three-second bound against a suite that closes three tests then hangs, and the tally it reports must be exactly three and must equal the markers actually printed.
+  Exact on both sides rather than a floor, since `>= 1` still passes with two of the three passes dropped.
+- A guard pinning why `tests/lib/pty.zsh` is safe, which until now it was only by accident.
+  `zpty -b` at a script's top level makes the spawned shell inherit the caller's EXIT trap, and that trap removes the pty fixtures every pty test shares.
+  The guard asks zsh's own parser which function bodies hold a spawn, so one indented inside a top-level `if` fails it too.
 
 ### Fixed
 
+- The picker no longer leaves a `hop-guard.XXXXXX` directory in your temp dir when it's killed outright.
+  Each picker makes one private directory for the escape guard's timestamp and removes it on `EXIT HUP TERM`, but `SIGKILL` can't be trapped, so `kill -9`, an OOM kill or a terminal tearing down the process group left one behind for good.
+  A trap can't fix what a trap can't catch, so the picker sweeps guard directories older than a day before making its own.
+  A day rather than an hour, because writing the mark rewrites an existing file and never moves the directory's own mtime, so an hourly sweep would reap the guard out from under a picker you'd left open over lunch.
+- `hop --doctor` could hang forever and print nothing, which is the worst place for it, since the issue template tells you to run exactly that command.
+  It asked six tools for their versions with stdin inherited, and the `fzf` on your `PATH` isn't always the real binary.
+  `fzf-tmux` ships alongside fzf and reads the caller's stdin whenever stdin isn't a terminal, so `hop --doctor` from a script or a pipeline hung with nothing on stdout or stderr.
+  The picker's own version check had the same shape, and both read from `/dev/null` now.
 - A test suite killed by its bound reported every result it had already produced as zero.
   The tally reached the runner only in a final sentinel line, and the bound ends a suite with `KILL`, which no trap can catch, so a suite killed with 16 passing tests on screen reported `0 passed, 1 failed`.
-  Preserving a partial tally was designed and wired, and worked for every signal except the one the runner itself sends.
-  The parent counts the result markers it is already holding when no sentinel arrives, so a killed suite keeps its passes.
-- The per-suite bound was too low for a busy machine, and a crash never said what had killed it.
-  `suite_pty` takes about 13.6s at loadavg 14 and 182.28s at loadavg 185, so the 120s bound was killing a suite that was merely slow, and the default is 600s now.
-  A crash reports its own elapsed time and the load average, and separates the runner's bound from a signal sent from outside it, which is the distinction that had exit 143 at 110.83s read as this bound firing for most of a day when the bound exits 142.
-- Fixture directories orphaned by a killed suite are reaped at startup.
-  A suite that cannot run its cleanup leaves its entire fixture set behind, and 2053 entries had accumulated under the temp directory before anyone counted them.
+  The parent counts the result markers it's already holding when no sentinel arrives.
+  The bound was also too low for a busy machine: `suite_pty` takes about 13.6s at loadavg 14 and 182.28s at loadavg 185, so the default is 600s now, and a crash reports its own elapsed time and the load average.
+- The test suite's recording stubs write each logged call in one append, so two running at once can't splice their lines together.
+  Each stub wrote the command name, then every argument, then the newline separately, and a second stub landing in between corrupted the line.
+  The preview pane runs one of those stubs on every render, so this was reachable rather than theoretical: it recorded `batgh browse` for `gh browse`, which read as a verb that never ran and sent a whole investigation after the wrong component.
+- Fixture directories orphaned by a killed suite are reaped at startup, after 2053 of them had built up under the temp directory.
   The sweep is age-gated so a concurrent run's fixtures survive, and it matches files as well as directories, because the runner's own scratch file leaks the same way.
-- The recording stubs the test suite uses now write each logged call in a single append, so two of them running at once can no longer splice their lines together.
-  Each stub wrote the command name, then every argument, then the newline, as separate appends, and a second stub landing between them corrupted the line.
-  The preview pane runs one of those stubs on every render, so this was reachable rather than theoretical: it recorded `batgh browse` in place of `gh browse`, which read as a verb that never ran and sent an entire investigation after the wrong component.
-  The race is far too rare to hold a test to, measured at one corrupted trial in six under sixty-way concurrency, so what is asserted instead is the property that makes interleaving impossible: exactly one append per call.
-- The picker no longer leaves a `hop-guard.XXXXXX` directory in your temp dir every time it is killed outright.
-  Each picker makes one private directory for the escape guard's timestamp and removes it on `EXIT HUP TERM`, but `SIGKILL` cannot be trapped, so `kill -9`, an OOM kill, or a terminal tearing down the process group left the directory behind for good and one accumulated per killed picker.
-  A trap cannot fix what a trap cannot catch, so the picker now sweeps guard directories older than a day before creating its own.
-  The sweep is a glob qualifier rather than a `find`, costing no process: measured at 1.1ms against a temp dir holding 3008 entries, where the guard's own fork costs 12.7ms on an idle machine.
-  A day rather than an hour, because writing the mark rewrites an existing file and so never moves the directory's own mtime, which means an hourly sweep would reap the guard out from under a picker you had left open over lunch.
-- `hop --doctor` could hang forever and print nothing, which is the worst place for this bug: the issue template tells you to run exactly that command.
-  It asked six external tools for their versions with stdin inherited, and the `fzf` on your `PATH` is not always the real binary.
-  `fzf-tmux` ships alongside fzf and reads the caller's stdin with `cat <&0` whenever stdin is not a terminal, so `hop --doctor` from a script or a pipeline was enough to hang it with no output and nothing to report.
-  The picker's own fzf version check had the same shape.
-  Both read from `/dev/null` now, and each is covered by a test that hangs if its redirect is removed.
-- Eight more test assertions that a floor kept from failing.
-  `assert_ge N` reads like a bound but asserts a size, so it passes on every larger value too: the modal keymap check sat at 90 against 97 real keys and stayed green with seven of them deleted, and the `--help` registry check sat at 2 against 8 kinds and stayed green with `helm` gone from the kind list entirely.
-  Each is an exact set or an exact count now.
-  A floor of 1 used honestly, to prove evidence exists before asserting over it, is kept and spelled that way.
-- One integration test was reading the wrong evidence rather than too little of it.
-  The fzf stub records the picker's rows to a file it only truncates on the runs it actually makes, so a probe that errored before reaching the picker left the previous invocation's rows in place, and with `hop -c` broken the check that every offered row is inside `$PWD` passed on rows from a different directory.
-  The record is emptied before each run now.
-  That check asserts it has rows before ranging over them too, because truncating the record fixes whose rows they are and cannot make an empty list fail.
-- The integration suite no longer hangs when the runner's stdin never reaches EOF.
-  `_hop_fzf_ver` is the one fzf call in the product that is never handed rows on a pipe, and the recording stub read stdin unconditionally, so it blocked on anything that never closes: under a fifo held open the suite took 81 seconds and failed seven of its tests.
-  The stub answers a `--version` query without reading stdin now, which is what real fzf does.
-- The core suite no longer hangs either, for the same reason and with the same fix.
-  Handed a live stdin, `tests/run core` discarded all 31 of its cases and took the full 120s bound, reporting `a test may await a terminal` when every probe was really waiting on an EOF that an open pipe never sends.
-  Its own recording stub captured stdin even when answering `--version`, so each probe burned its bound until the suite bound killed the run.
-  CI never saw it, because GitHub Actions hands the job `/dev/null`.
-- The picker-geometry tests were reading the wrong evidence, in the very pair written to stop exactly that.
-  Both opened by asserting the recorded fzf argv was non-empty, but the stub records every fzf call and `_hop_fzf_ver` runs `fzf --version` before the picker ever starts, so a non-empty argv proved only that the version probe had run.
-  Stubbing the picker's own call out entirely left the arm that checks an empty `HOP_FZF_HEIGHT` sends no `--height` passing green against an argv holding nothing but `--version`.
-  Each arm opens on `--ansi` now, a flag only the picker passes.
-- The core suite's stub matches a `--version` query anywhere in argv rather than only as the first word.
-  `_hop_fzf_ver` happens to put it first, so the narrower check was correct today and would have gone back to blocking on stdin the moment that call grew a leading flag.
-- The escape-sequence pty cases no longer depend on how loaded the machine is.
-  `bin/hop-guard` times a verb against the previous check's clock reading, so its discriminator is the cost of its own fork: 12.7ms mean idle, but 425ms mean at loadavg 35, well past the 0.15s threshold.
-  A check that slow reads as a real keypress and fails open, and the forged payload duly reached the editor verb in three runs out of four under 24-way load.
-  Those cases pin the window past any plausible fork latency now, which leaves every link they exist to prove intact.
-  The comment claiming the threshold has the headroom a loaded runner needs is corrected to say the opposite.
-  The shipped default is unchanged, because the failure direction is fail-open: heavy load reverts to the nuisance the guard was written for rather than swallowing a keypress you did make.
-- A real keypress could also read as a verb that never ran, for a reason with nothing to do with the guard.
-  The pty stubs appended their name, then their arguments, then their newline, as separate appends to one shared log, and the preview pane runs the `bat` stub on every render.
-  A concurrent call lands between those appends and records `batgh browse ...` in place of `gh browse ...`, which corrupts the only field the check reads.
-  It presented as the browse verb never running, with an empty stderr and the dispatch already logged, which pointed the investigation at the guard rather than at the log.
-  That suite drops the `bat` stub now, leaving the log exactly one writer, and `bin/hop-preview` falls through to the `cat`/`head` path it already uses on a machine without `bat`.
-  The controls also report hop's stderr and any line no single stub could have written, since a verb can bail after `dispatch key=` is logged.
-  The multi-append write that made it possible is fixed for every suite at once, in its own entry.
-- The guard's own unit suite had four assertions with the same defect.
-  Asserting that a verb was refused means asserting a 150ms threshold was crossed, measured across the very fork whose latency is being timed: 1 in 40 of those checks failed open at loadavg 44, and three of the four sat on the default window.
-  They pin an explicit window now.
-  The malformed-window case could not simply be pinned, because the value under test is precisely the fallback to the default, so it asserts only what holds at every load and checks the fallback constant against the default constant in the source.
-  Asserting that a verb *ran* needs no pin either way, because load only pushes the age further outside the window.
+- CI pins the per-suite bound inside the job's own budget, so one hung suite can't spend the whole job before the bound fires.
+  The lint leg also no longer dies when an unrelated third-party apt repo answers 403, which failed `apt-get update` outright and never reached `zsh -n`.
+- Twelve more test assertions that couldn't fail, two suites that hung, and three checks that read the wrong evidence.
+  Floors were the common cause: `assert_ge 90` against 97 real keys stayed green with seven of them deleted, and `assert_ge 2` against 8 kinds stayed green with `helm` gone from the registry entirely.
+  Each is an exact set or an exact count now, and a floor of 1 used to prove evidence exists before asserting over it is kept and spelled that way.
+  Both hangs were a stub that read stdin even when answering `--version`, so any stdin that never reached EOF blocked the whole suite.
+  The escape-sequence pty cases no longer depend on machine load either, since the guard's discriminator is the cost of its own fork: 12.7ms idle against 425ms at loadavg 35.
+
+One thing this deliberately doesn't cover: nothing asserts that a `SIGKILL`ed suite leaves no fixture directories behind, because `KILL` is untrappable and the zero-leak guard skips exactly that case. The startup reaper clears them later instead.
 
 ## [0.1.1] - 2026-08-26
 
@@ -196,6 +159,7 @@ First release.
 
 [keepachangelog]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
-[Unreleased]: https://github.com/etknorr/hop/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/etknorr/hop/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/etknorr/hop/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/etknorr/hop/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/etknorr/hop/releases/tag/v0.1.0
