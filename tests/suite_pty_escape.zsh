@@ -77,7 +77,7 @@ typeset -ga ESC_VERB_BINS=(gh pbcopy pbpaste code editor vim nvim open xclip xse
 typeset -ga ESC_STUB_BINS=("${ESC_VERB_BINS[@]}" bat)
 
 # Dropping the bat stub leaves calls.log with exactly ONE writer, which is what makes the log trustworthy.
-# - Each stub appends its name, then every argument, then the newline, as THREE separate appends.
+# - Each stub USED TO append its name, then every argument, then the newline, as 2+N separate appends.
 # - The preview pane runs bat on every render, so a second stub was writing throughout every session.
 # - Measured: a bat call landed between gh's appends and recorded `batgh<TAB>browse<TAB>--<TAB>...`.
 # - esc_verbs matches the first tab field only, so that read as "gh never ran" with an empty stderr.
@@ -86,7 +86,8 @@ typeset -ga ESC_STUB_BINS=("${ESC_VERB_BINS[@]}" bat)
 # - That path is what this machine already uses, and no case here asserts the preview pane's contents.
 # - HOP_PTY_SHARED is per-process and pty_env has already built it, so this cannot reach another suite.
 # - The cost is a coupling to pty.zsh's stub layout, which this suite already has by knowing bat is a stub.
-# - The stub's three-append write is the underlying bug, and it belongs to tests/lib/pty.zsh, not here.
+# - The stub's multi-append write was the underlying bug, and it is fixed in tests/lib/pty.zsh, not here.
+# - Dropping bat is kept even so: one writer is what makes this suite's log trustworthy by construction.
 rm -f -- "$HOP_PTY_SHARED/bat"
 
 typeset -g ESC_DISPATCH='' ESC_FIRED='' ESC_ALIVE=''
@@ -125,7 +126,7 @@ esc_verbs() {
 
 # esc_log_corrupt -> the calls.log lines no single stub could have written, joined for a message.
 # - Dropping the bat stub above removed the only concurrent writer this suite currently has.
-# - This is the tripwire for the next one, since the three-append write in pty.zsh is still there.
+# - It stays as the tripwire for a future second writer, now that the multi-append write itself is fixed.
 # - Without it a second writer would return silently to blaming the guard for an empty verb list.
 # - Proven reachable: 60 concurrent stub calls produced `batbat<TAB>...` and a line starting with a tab.
 esc_log_corrupt() {

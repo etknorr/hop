@@ -62,12 +62,12 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   The comment claiming the threshold has the headroom a loaded runner needs is corrected to say the opposite.
   The shipped default is unchanged, because the failure direction is fail-open: heavy load reverts to the nuisance the guard was written for rather than swallowing a keypress you did make.
 - A real keypress could also read as a verb that never ran, for a reason with nothing to do with the guard.
-  The pty stubs append their name, then their arguments, then their newline, as three separate appends to one shared log, and the preview pane runs the `bat` stub on every render.
+  The pty stubs appended their name, then their arguments, then their newline, as separate appends to one shared log, and the preview pane runs the `bat` stub on every render.
   A concurrent call lands between those appends and records `batgh browse ...` in place of `gh browse ...`, which corrupts the only field the check reads.
   It presented as the browse verb never running, with an empty stderr and the dispatch already logged, which pointed the investigation at the guard rather than at the log.
   That suite drops the `bat` stub now, leaving the log exactly one writer, and `bin/hop-preview` falls through to the `cat`/`head` path it already uses on a machine without `bat`.
   The controls also report hop's stderr and any line no single stub could have written, since a verb can bail after `dispatch key=` is logged.
-  The three-append write is still there for every other pty suite to hit.
+  The multi-append write that made it possible is fixed for every suite at once, in its own entry.
 - The guard's own unit suite had four assertions with the same defect, at a higher rate than the pty flake that led here.
   Asserting that a verb was refused means asserting a 150ms threshold was crossed, measured across the very fork whose latency is being timed: 1 in 40 of those checks failed open at loadavg 44, and three of the four sat on the default window.
   They pin an explicit window now.
