@@ -25,6 +25,11 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Fixture directories orphaned by a killed suite are reaped at startup.
   A suite that cannot run its cleanup leaves its entire fixture set behind, and 2053 entries had accumulated under the temp directory before anyone counted them.
   The sweep is age-gated so a concurrent run's fixtures survive, and it matches files as well as directories, because the runner's own scratch file leaks the same way.
+- The picker no longer leaves a `hop-guard.XXXXXX` directory in your temp dir every time it is killed outright.
+  Each picker makes one private directory for the escape guard's timestamp and removes it on `EXIT HUP TERM`, but `SIGKILL` cannot be trapped, so `kill -9`, an OOM kill, or a terminal tearing down the process group left the directory behind for good and one accumulated per killed picker.
+  A trap cannot fix what a trap cannot catch, so the picker now sweeps guard directories older than a day before creating its own.
+  The sweep is a glob qualifier rather than a `find`, costing no process: measured at 1.1ms against a temp dir holding 3008 entries, where the guard's own fork costs 12.7ms on an idle machine.
+  A day rather than an hour, because writing the mark rewrites an existing file and so never moves the directory's own mtime, which means an hourly sweep would reap the guard out from under a picker you had left open over lunch.
 - `hop --doctor` could hang forever and print nothing, which is the worst place for this bug: the issue template tells you to run exactly that command.
   It asked six external tools for their versions with stdin inherited, and the `fzf` on your `PATH` is not always the real binary.
   `fzf-tmux` ships alongside fzf and reads the caller's stdin with `cat <&0` whenever stdin is not a terminal, so `hop --doctor` from a script or a pipeline was enough to hang it with no output and nothing to report.

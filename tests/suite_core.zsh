@@ -395,3 +395,26 @@ t 'and a whole probe finishes when the runner is handed stdin that never reaches
 out=$(co_run 'hop -w' "HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130' <> "$CO_NOFEED"); st=$?
 assert_eq 0 "$st" 'the probe waited for an EOF its stdin was never going to send'
 assert_empty "$out" 'esc is silent, so output here means the probe took some other path'
+
+# ---------------------------------------------------------------------------
+# The escape guard's own directory: reaped, because SIGKILL cannot be trapped.
+# ---------------------------------------------------------------------------
+# _hop_pick removes its guard dir on EXIT HUP TERM, and none of those cover `kill -9`.
+# - A picker killed with -9, OOM-killed, or torn down with its process group leaks the dir permanently.
+# - It is only VISIBLE in this suite because the pty harness kills with -KILL, but it is a product bug.
+# - The reap is on the picker path, so it needs a live picker: co_run drives the real _hop_pick.
+t 'a picker reaps a hop-guard directory that a killed picker could not clean up'
+typeset CO_GR CO_GR_LEFT
+fixture_tmpdir guardreap
+CO_GR=$REPLY
+mkdir -p -- "$CO_GR/hop-guard.stale" "$CO_GR/hop-guard.fresh"
+# Aged past the one-day threshold, standing in for a picker whose EXIT trap never ran.
+touch -t 202501010000 -- "$CO_GR/hop-guard.stale"
+# hop-guard.fresh is the CONTROL and it is the half that makes this test mean anything.
+# - Without it a reaper that deleted the whole glob unconditionally would pass just as well.
+# - A live picker in another terminal owns a dir exactly like it, so reaping one is a real regression.
+co_run 'hop -w' "HOP_WORKSPACES=${CO_WS}" "TMPDIR=${CO_GR}" 'HOP_FZF_EXIT=130' >/dev/null 2>&1
+# An exact set, not a count: the picker's OWN dir is created and then removed by its trap, so the
+# only entry that may survive is the fresh one, and naming it catches a reap that ran too wide.
+CO_GR_LEFT=$(print -rl -- "$CO_GR"/hop-guard.*(N/:t) | sort | tr '\n' ',')
+assert_eq 'hop-guard.fresh,' "$CO_GR_LEFT" 'the stale dir survived, or the reap took the fresh one too'

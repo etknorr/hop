@@ -532,9 +532,10 @@ hop_bound 300 env -i PATH="$PATH" TERM=dumb SHELL=/bin/zsh \
 	zsh "${HOP_HOME}/tests/run" core >/dev/null 2>&1 </dev/null
 leakst=$?
 leaked=("$SM_LEAKTMP"/*(N))
-# hop-guard belongs to lib/ui.zsh rather than to the harness, and survives only when a child was killed.
-# - It is excluded until that is fixed, because a test that cannot pass yet is worse than no test at all.
-leakedowned=(${${leaked[@]:t}:#hop-guard*})
+# hop-guard was excluded here while lib/ui.zsh could still leak one, and that exclusion is now gone.
+# - _hop_pick reaps stale guard dirs before creating its own, so a healthy run leaves none behind.
+# - Nothing is filtered any more, which is the whole point: an exclusion is a hole in the only leak check.
+leakedowned=(${leaked[@]:t})
 
 if (( leakst != 0 )); then
 	skip 'a completed suite_core run leaves no fixture behind in its own temp root' \
