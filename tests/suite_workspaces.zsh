@@ -535,8 +535,8 @@ ${WS_REPOS}/wt" "$WS_OUT" 'in a worktree .git is a FILE, so a -d test would miss
 	t 'the worktree fixture really does have a FILE at .git'
 	assert_file "$WS_REPOS/wt/.git" 'the fixture stopped testing what it claims to test'
 else
-	skip 'a .git directory and a git WORKTREE both count as a repo' 'git worktree add failed'
-	skip 'the worktree fixture really does have a FILE at .git' 'git worktree add failed'
+	skip_cap 'a .git directory and a git WORKTREE both count as a repo' 'git worktree add failed'
+	skip 'the worktree fixture really does have a FILE at .git' 'git worktree add failed; the line above reports it'
 fi
 
 t 'depth 1 only: a repo one level deeper is not found'

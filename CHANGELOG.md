@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Added
+
+- A skip that hides lost coverage fails on CI instead, at one site per cause.
+  A missing tool is honest on a developer's machine and is coverage vanishing on a CI runner, and nothing could tell you which: `tests/run` reports a skip count, so 7 becoming 8 went unnoticed.
+  Counting was the wrong instrument anyway, since one skip line routinely stands in for several suppressed tests: the PyYAML branch emits one skip while suppressing five, so the count moves by 1 where coverage moves by 5.
+  `skip_cap` names the vanished test rather than counting it, and exactly one site per cause uses it, because six reds for one absent `fzf` is noise and not signal.
+  Five causes are covered: `fzf` absent, `perl` absent, `mkfifo` absent, `git worktree add` failing, and the nested run behind the zero-leak guard exiting non-zero.
+
 ## [0.1.2] - 2026-08-27
 
 ### Added

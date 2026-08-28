@@ -317,7 +317,7 @@ print -r -- \$PWD")
 		fi
 	done
 else
-	skip 'hop <unique query> cds straight to the match' 'fzf is not installed'
+	skip 'hop <unique query> cds straight to the match' 'fzf is not installed; suite_smoke reports it'
 fi
 
 # ---------------------------------------------------------------------------
@@ -365,7 +365,7 @@ if (( ${+commands[perl]} )) && (( ${+commands[mkfifo]} )); then
 	rm -f -- "$it_fifo"
 	assert_eq 0 $it_fst 'the stub blocked on stdin that never ends, which is the 120s discard in miniature'
 else
-	skip 'the stub exits on a --version query even when stdin never reaches EOF' 'perl or mkfifo is missing'
+	skip_cap 'the stub exits on a --version query even when stdin never reaches EOF' 'perl or mkfifo is missing'
 fi
 
 # ---------------------------------------------------------------------------
@@ -404,7 +404,7 @@ if (( HAVE_FZF )); then
 	assert_eq 1 $(( fn > xn )) "fuzzy must match strictly more than exact, got ${fn} vs ${xn}"
 else
 	# The skip must carry the SAME name as the t above, or the name varies by environment instead.
-	skip "--exact narrows 'abg' to a single row where fuzzy matches several" 'fzf is not installed'
+	skip "--exact narrows 'abg' to a single row where fuzzy matches several" 'fzf is not installed; suite_smoke reports it'
 fi
 
 # ---------------------------------------------------------------------------
