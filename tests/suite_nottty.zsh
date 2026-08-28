@@ -116,7 +116,7 @@ nt_run() {
 }
 
 if ! (( ${+commands[perl]} )); then
-	skip 'no controlling terminal' 'perl is the bound on this box, and an unbounded probe could hang forever'
+	skip_cap 'no controlling terminal' 'perl is the bound on this box, and an unbounded probe could hang forever'
 	skip 'the tty predicate under a real pty' 'needs the bounded probes above to be meaningful'
 	return 0
 fi

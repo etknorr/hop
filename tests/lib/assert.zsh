@@ -92,6 +92,26 @@ skip() {
 	return 0
 }
 
+# skip_cap <name> <reason> -> a skip on a developer's machine, a NAMED failure under $CI.
+# - A missing tool is honest locally. On a CI runner it is coverage vanishing, and must be red.
+# - The skip TALLY cannot carry this: one skip line routinely stands in for several suppressed tests.
+# - Measured: suite_smoke's PyYAML branch emits one skip while suppressing five tests, so the count
+#   moves by 1 where coverage moves by 5, which is why the reason is named rather than counted.
+# - Use it at exactly ONE site per cause. Every other site for the same cause stays a plain `skip`
+#   whose reason names the canonical one, because nine reds for one absent tool is noise, not signal.
+# - The HOP_T_OPEN test is required: `t` leaves it 0 when HOP_T_FILTER excludes this name, and
+#   _hop_t_bad would then reopen it as `(assertion outside any test)` under the wrong name.
+skip_cap() {
+	emulate -L zsh
+	if [[ -z ${CI:-} ]]; then
+		skip "$1" "$2"
+		return 0
+	fi
+	t "$1"
+	(( HOP_T_OPEN )) && _hop_t_bad "$2" 'this coverage vanished on CI instead of merely skipping'
+	return 0
+}
+
 # _hop_t_bad <label> [detail...] -> mark the open test failed and buffer its report.
 # - An assertion outside any `t` still reports, under a name that says the suite forgot one.
 _hop_t_bad() {

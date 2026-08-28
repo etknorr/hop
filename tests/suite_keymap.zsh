@@ -364,9 +364,9 @@ if (( ${+commands[fzf]} )); then
 	assert_ne 0 "${sab2items[1]}" 'a malformed unbind() call was silently accepted'
 	assert_contains "${sab2items[2]:-}" 'unsupported key'
 else
-	skip "the real, full bind set parses against this machine's installed fzf" 'fzf is not installed'
-	skip 'sanity: a bind action with a stray leading comma is rejected, not silently accepted' 'fzf is not installed'
-	skip 'sanity: a backslash-escaped comma inside unbind(...) is rejected, not silently accepted' 'fzf is not installed'
+	skip "the real, full bind set parses against this machine's installed fzf" 'fzf is not installed; suite_smoke reports it'
+	skip 'sanity: a bind action with a stray leading comma is rejected, not silently accepted' 'fzf is not installed; suite_smoke reports it'
+	skip 'sanity: a backslash-escaped comma inside unbind(...) is rejected, not silently accepted' 'fzf is not installed; suite_smoke reports it'
 fi
 
 # ---------------------------------------------------------------------------

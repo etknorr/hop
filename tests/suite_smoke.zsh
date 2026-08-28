@@ -330,7 +330,7 @@ if (( ${+commands[fzf]} )); then
 	assert_contains "$hit" '/a/vpc'
 	assert_not_contains "$hit" '/a/sqs'
 else
-	skip 'fzf --filter matches a row without opening a terminal' 'fzf is not installed'
+	skip_cap 'fzf --filter matches a row without opening a terminal' 'fzf is not installed'
 fi
 
 # ---------------------------------------------------------------------------
@@ -538,7 +538,7 @@ leaked=("$SM_LEAKTMP"/*(N))
 leakedowned=(${leaked[@]:t})
 
 if (( leakst != 0 )); then
-	skip 'a completed suite_core run leaves no fixture behind in its own temp root' \
+	skip_cap 'a completed suite_core run leaves no fixture behind in its own temp root' \
 		"the nested run exited ${leakst}, and a killed run leaks by design"
 else
 	t 'a completed suite_core run leaves no fixture behind in its own temp root'
