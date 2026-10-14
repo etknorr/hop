@@ -316,10 +316,12 @@ assert_eq 97 $#unbind_keys 'the modal layer owns 97 tokens, so a change here is 
 _km_pick_filter() {
 	emulate -L zsh
 	local -x KM_MUTATE=${1:-}
-	local -x KM_ROWS=$'vpc  tg\t/a/vpc\t/a/vpc/main.tf\nsqs  tg\t/a/sqs\t/a/sqs/main.tf'
+	local -x KM_ROWS=$'vpc  tg\t/a/vpc\t/a/vpc/main.tf\t\e[2ma/vpc/\e[0m\nsqs  tg\t/a/sqs\t/a/sqs/main.tf\t\e[2ma/sqs/\e[0m'
+	# The version is memoized BEFORE fzf is shadowed, so the version-gated --freeze-left reaches the real parse too.
 	hop_probe '
 		COLUMNS=200
 		typeset -ga KM_CAPTURED
+		_hop_fzf_ver
 		fzf() { KM_CAPTURED=("$@"); return 0; }
 		_hop_pick "label" "header" "" "reloadcmd" "/some/root" "1" "restorecmd" "1"
 		[[ -n $KM_MUTATE ]] && eval "$KM_MUTATE"

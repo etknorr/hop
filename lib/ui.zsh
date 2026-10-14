@@ -424,6 +424,12 @@ _hop_pick() {
 	local h=${HOP_FZF_HEIGHT-80%}
 	[[ -n $h ]] && args+=(--height="$h" --min-height=18)
 
+	# The path column adds ~55 columns, and freezing field 1 keeps the name in view when the path scrolls.
+	# - fzf 0.60.3 exits 2 on --freeze-left, so it is passed only from 0.67.0, and never on an unknown version.
+	local REPLY
+	_hop_fzf_ver
+	[[ -n $REPLY ]] && ! _hop_ver_lt "$REPLY" 0.67.0 && args+=(--freeze-left=1)
+
 	[[ -n $query ]] && args+=(--query="$query")
 	[[ -n $reload ]] && args+=(--bind="alt-a:reload:$reload")
 
