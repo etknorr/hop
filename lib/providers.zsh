@@ -71,6 +71,22 @@ _hop_row() {
 	print -r -- "${_HOP_C_NAME}${pn}${_HOP_OFF} ${_HOP_C_KIND}${pk}${_HOP_OFF} ${cs}${ps}${_HOP_OFF} ${ce}${pe}${_HOP_OFF} ${cr}${region}${_HOP_OFF}	${dir}	${preview}"
 }
 
+# _hop_row_split <row> -> reply is the row's TAB fields, in order.
+# - Quoted with (@) so an empty field keeps its slot, and field 3 stays the preview.
+_hop_row_split() {
+	emulate -L zsh
+	reply=("${(@ps:\t:)1}")
+}
+
+# _hop_dirs_of <row...> -> reply is field 2 of every row, index-aligned with the arguments.
+# - One array-wide substitution: 4.5ms on 1041 rows, where a per-row ${row#*\t} took 36.8ms.
+# - Quoted with (@), because the unquoted form drops an empty result and shifts every later index.
+_hop_dirs_of() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	reply=("${(@)${(@)argv/#[^$'\t']#$'\t'}/$'\t'*}")
+}
+
 # _hop_ls <root> [pathspec...] -> sets `reply` to the matching tracked paths.
 # - NUL in, NUL out: `git ls-files` C-escape-quotes any path holding a backslash or a non-ASCII byte.
 # - One real repo tracks a path ending in a space and a backslash, which breaks a newline parser.

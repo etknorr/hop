@@ -640,6 +640,45 @@ assert_contains "$five" 'terraform/platform/production/us-west-2/network/terragr
 assert_not_contains "$five" 'sandbox/dns/terragrunt.hcl'
 
 # ---------------------------------------------------------------------------
+# The two row-field readers every consumer of fields 2 and 3 goes through.
+# ---------------------------------------------------------------------------
+typeset out
+typeset -a RF_ROWS=(
+	$'a\t/a\t/a/p'
+	''
+	$'c\t/c\t/c/p\t\e[2mc/\e[0m'
+	$'d\t/d'
+	$'e\t/e\t'
+)
+
+t '_hop_row_split keeps an empty field in its slot, so field 3 is always the preview'
+typeset RF_EMPTY=$'disp\t\t/p\t'
+out=$(hop_probe "_hop_row_split ${(q)RF_EMPTY}"'; print -r -- "${#reply}|${(j:|:)reply}"')
+assert_eq '4|disp||/p|' "$out" 'a dropped empty field shifts the preview into the dir slot'
+
+t '_hop_row_split reads a real _hop_row as display, dir, preview'
+out=$(hop_probe '_hop_row_split "$(_hop_row tg acct prod us-east-1 vpc /r/vpc /r/vpc/main.tf)"; print -r -- "${#reply}|${reply[2]}|${reply[3]}"')
+assert_eq '3|/r/vpc|/r/vpc/main.tf' "$out"
+
+# Index-aligned is the contract, because _hop_rank and _hop_filter_under read rows[i] beside dirs[i].
+t '_hop_dirs_of returns field 2 of every row, one per row, even where a row is empty'
+out=$(hop_probe "_hop_dirs_of ${(j: :)${(@qq)RF_ROWS}}"'; print -r -- "${#reply}|${(j:|:)reply}"')
+assert_eq '5|/a||/c|/d|/e' "$out" 'a dropped empty result misaligns every row after it'
+
+t '_hop_dirs_of agrees with the per-row extraction it replaced'
+out=$(hop_probe '
+typeset -a rows want reply
+typeset r
+rows=("${(@f)$(_hop_row tg a prod - one "/r/a b/one" /r/one/x.tf; _hop_row tg b - - two /r/two; _hop_row dir - - - three "/r/we\ird")}")
+for r in "${rows[@]}"; do
+	r=${r#*$'"'\t'"'}
+	want+=("${r%%$'"'\t'"'*}")
+done
+_hop_dirs_of "${rows[@]}"
+[[ "${(j:|:)reply}" == "${(j:|:)want}" ]] && print -r -- "same ${#reply}: ${(j:|:)reply}"')
+assert_eq 'same 3: /r/a b/one|/r/two|/r/we\ird' "$out"
+
+# ---------------------------------------------------------------------------
 # A real checkout, only when one is named. No path here may be hardcoded.
 # ---------------------------------------------------------------------------
 # This answers one question: do the shipped kinds still hold their contract on real data.
