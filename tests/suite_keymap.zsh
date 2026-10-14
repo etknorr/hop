@@ -313,9 +313,10 @@ assert_eq 97 $#unbind_keys 'the modal layer owns 97 tokens, so a change here is 
 # - _km_pick_filter <mutate> -> "<exit status>\x1e<stderr>" from feeding the real _hop_pick argument list into the REAL fzf binary in --filter mode.
 # - fzf itself is shadowed by a function here, so it's captured rather than launched.
 # - $mutate is zsh code, eval'd against the captured KM_CAPTURED array before the real fzf call: empty for the unmodified baseline, or a one-line corruption for sanity.
+# - $setup is zsh code eval'd before _hop_pick runs, which is how a case sets the resolver's picker state and KM_QUERY.
 _km_pick_filter() {
 	emulate -L zsh
-	local -x KM_MUTATE=${1:-}
+	local -x KM_MUTATE=${1:-} KM_SETUP=${2:-}
 	local -x KM_ROWS=$'vpc  tg\t/a/vpc\t/a/vpc/main.tf\t\e[2ma/vpc/\e[0m\nsqs  tg\t/a/sqs\t/a/sqs/main.tf\t\e[2ma/sqs/\e[0m'
 	# The version is memoized BEFORE fzf is shadowed, so the version-gated --freeze-left reaches the real parse too.
 	hop_probe '
@@ -323,7 +324,8 @@ _km_pick_filter() {
 		typeset -ga KM_CAPTURED
 		_hop_fzf_ver
 		fzf() { KM_CAPTURED=("$@"); return 0; }
-		_hop_pick "label" "header" "" "reloadcmd" "/some/root" "1" "restorecmd" "1"
+		[[ -n $KM_SETUP ]] && eval "$KM_SETUP"
+		_hop_pick "label" "header" "${KM_QUERY:-}" "reloadcmd" "/some/root" "1" "restorecmd" "1"
 		[[ -n $KM_MUTATE ]] && eval "$KM_MUTATE"
 		local errfile
 		errfile=$(mktemp)
@@ -343,6 +345,14 @@ if (( ${+commands[fzf]} )); then
 	base=$(_km_pick_filter)
 	typeset -a baseitems=("${(@ps:\x1e:)base}")
 	assert_eq 0 "${baseitems[1]}" "fzf rejected hop's own args: ${baseitems[2]:-}"
+
+	# A resolver PICK is the other argv shape: ordered mode, no --select-1, a typed query and a header note.
+	# - The note holds parens on purpose: it rides --header, where a `)` cannot end an action early.
+	t "the resolver's ordered-mode picker argv parses against this machine's installed fzf"
+	typeset ordered
+	ordered=$(_km_pick_filter '' '_hop_pick_ordered=1 _hop_pick_select1=0 KM_QUERY="vpc | sqs" _hop_pick_note="no exact match for: v(p)c (showing: vpc | sqs)"')
+	typeset -a ordereditems=("${(@ps:\x1e:)ordered}")
+	assert_eq 0 "${ordereditems[1]}" "fzf rejected the ordered-mode args: ${ordereditems[2]:-}"
 
 	# - Sanity #1, mirroring a real bug this check caught.
 	# - A leading comma makes ",:ignore" not a valid action name.

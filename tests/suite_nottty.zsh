@@ -70,7 +70,7 @@ nt_pins() {
 		"export HOP_DEBUG_LOG=${(q)HOP_FIX_HOME}/.local/state/hop/debug.log" \
 		"export HOP_WORKSPACES=''" \
 		"export HOP_WORKSPACES_FILE=${(q)HOP_FIX_HOME}/.config/hop/workspaces" \
-		"export HOP_REPOS='' HOP_DEFAULT_KINDS='' HOP_CLIPBOARD='' HOP_HIST_MAX='' HOP_FZF_MIN=''" \
+		"export HOP_REPOS='' HOP_DEFAULT_KINDS='' HOP_CLIPBOARD='' HOP_HIST_MAX='' HOP_FZF_MIN='' HOP_JUMP=auto" \
 		"export FZF_DEFAULT_COMMAND='' FZF_DEFAULT_OPTS='' FZF_DEFAULT_OPTS_FILE=/dev/null" \
 		'unset HOP_FZF_HEIGHT' \
 		'unset HOP_VIM'
@@ -180,25 +180,28 @@ assert_eq "${NT_REPO1}/terraform/solo/vpc" "$NT_PWD"
 assert_eq '' "$NT_ERR"
 
 # ---------------------------------------------------------------------------
-# --filter prints the whole row on every supported fzf, so the headless path cuts the fields itself.
+# --filter prints the whole row on every supported fzf, so the resolver cuts the fields itself.
 # ---------------------------------------------------------------------------
 # On 0.60.3 the cut used to be left to --accept-nth, which --filter ignores there, so the display became the dir.
-# - Both shapes are fed through the real fzf: 3 fields today, and the 4th (rel) field the path column adds.
+# - Each shape goes through _hop_filter and the real fzf: a legacy 3-field row, a 4-field row, an empty preview.
 # - The floor CI legs run this same case against 0.60.3 and 0.67.0.
 typeset NT_ROW3=$'\e[1mthree\e[0m\t/d3\t/d3/terragrunt.hcl'
 typeset NT_ROW4=$'\e[1mfour\e[0m\t/d4\t/d4/terragrunt.hcl\t\e[2mterraform/d4/\e[0m'
 typeset NT_ROW2=$'\e[1mbare\e[0m\t/d2\t'
 typeset NT_SPLIT=''
 NT_SPLIT=$(hop_probe "
-_hop_dispatch() { print -r -- \"key=\${1:-<enter>} dir=\$2 preview=\$3\" }
-_hop_pick_headless ${(q)NT_ROW3} '' three
-_hop_pick_headless ${(q)NT_ROW4} '' four
-_hop_pick_headless ${(q)NT_ROW2} '' bare")
+typeset r l
+for r in ${(q)NT_ROW3} ${(q)NT_ROW4} ${(q)NT_ROW2}; do
+	print -r -- \"\$r\" | _hop_filter '' | while IFS= read -r l; do
+		_hop_res_fields \"\$l\"
+		print -r -- \"dir=\${reply[1]} preview=\${reply[2]}\"
+	done
+done")
 
-t 'headless: a 3-field and a 4-field row both dispatch their own dir and preview'
-assert_eq 'key=<enter> dir=/d3 preview=/d3/terragrunt.hcl
-key=<enter> dir=/d4 preview=/d4/terragrunt.hcl
-key=<enter> dir=/d2 preview=/d2' "$NT_SPLIT" 'field 1 is the display, so any other answer cds into the display text'
+t 'headless: a 3-field and a 4-field row both come back from _hop_filter with their own dir and preview'
+assert_eq 'dir=/d3 preview=/d3/terragrunt.hcl
+dir=/d4 preview=/d4/terragrunt.hcl
+dir=/d2 preview=/d2' "$NT_SPLIT" 'field 1 is the display, so any other answer cds into the display text'
 
 # The display field is ANSI-coloured, and without --ansi the matcher saw the raw SGR bytes.
 # - Measured on 1041 real rows: `0m` matched every row headless and none in the picker.
@@ -229,6 +232,63 @@ assert_eq 0 "$NT_HUNG"
 assert_eq 1 "$NT_ST"
 assert_contains "$NT_ERR" 'nothing matched the query: 0m' 'headless matched the SGR bytes of every row again'
 assert_eq "$NT_REPO4" "$NT_PWD"
+
+# ---------------------------------------------------------------------------
+# The resolver with no terminal: a clear match still jumps, and a pick explains itself.
+# ---------------------------------------------------------------------------
+# The match fixture's config reaches these probes alone, so every other case here keeps the shipped presets.
+typeset NT_MREPO='' NT_MCFG='' NT_MPIN='' NT_MLOG=''
+if match_fixture; then
+	NT_MREPO=$REPLY
+	NT_MCFG=$HOP_FIX_CONFIG
+fi
+fixture_config_reset
+NT_MPIN="export HOP_CONFIG=${(q)NT_MCFG}"
+
+# nt_slurp <file> -> its contents, or nothing; `zsh -n` evaluates a top-level $(<file).
+nt_slurp() {
+	emulate -L zsh
+	[[ -r $1 ]] && print -r -- "$(<"$1")"
+	return 0
+}
+
+t 'no ctty, an ambiguous query names the count and the best matches'
+nt_run 'hop vpc' "$NT_MREPO" "$NT_MPIN"
+assert_eq 0 "$NT_HUNG"
+assert_eq 1 "$NT_ST"
+assert_contains "$NT_ERR" '5 targets matched the query: vpc'
+assert_contains "$NT_ERR" 'hop: best matches: terraform/' 'the rels are what tell a user how to narrow it'
+assert_eq "$NT_MREPO" "$NT_PWD"
+
+t 'no ctty, a typo says what it was read as and leaves the shell where it was'
+nt_run 'hop securty-tooling-prod' "$NT_MREPO" "$NT_MPIN"
+assert_eq 0 "$NT_HUNG"
+assert_eq 1 "$NT_ST" 'an approximate match never jumps, so with no terminal it has to fail'
+assert_contains "$NT_ERR" 'hop: no exact match for: securty-tooling-prod (read as: security tooling prod)'
+assert_eq "$NT_MREPO" "$NT_PWD"
+
+t 'no ctty, a query every match sits under jumps to that dir and says so'
+nt_run 'hop security-tooling-prod' "$NT_MREPO" "$NT_MPIN"
+assert_eq 0 "$NT_HUNG"
+assert_eq 0 "$NT_ST"
+assert_eq "$NT_MREPO/terraform/acct-security-tooling-prod" "$NT_PWD"
+assert_eq 'hop: security-tooling-prod -> terraform/acct-security-tooling-prod/ (all 3 matches are under it)' "$NT_ERR" \
+	'J2 is the one jump that prints, because the target is not a row the user saw'
+
+# The control matters: a run that wrote no log at all would pass the T0 case's absence check vacuously.
+fixture_tmpdir ntdbg && NT_MLOG="$REPLY/debug.log"
+t 'no ctty, an ordinary query logs its generate step, so the T0 case below can test for its absence'
+nt_run 'hop vpc' "$NT_MREPO" "$NT_MPIN" "export HOP_DEBUG=1 HOP_DEBUG_LOG=${(q)NT_MLOG}"
+assert_contains "$(nt_slurp "$NT_MLOG")" 'generate root='
+
+fixture_tmpdir ntdbg && NT_MLOG="$REPLY/debug.log"
+t 'no ctty, a literal path jumps without enumerating anything'
+nt_run 'hop terraform/acct-security-tooling-prod' "$NT_MREPO" "$NT_MPIN" "export HOP_DEBUG=1 HOP_DEBUG_LOG=${(q)NT_MLOG}"
+assert_eq 0 "$NT_ST"
+assert_eq "$NT_MREPO/terraform/acct-security-tooling-prod" "$NT_PWD"
+assert_eq '' "$NT_ERR" 'a literal path is silent, like every jump but J2'
+assert_contains "$(nt_slurp "$NT_MLOG")" 'resolve tier=T0 rule=path verdict=jump'
+assert_not_contains "$(nt_slurp "$NT_MLOG")" 'generate' 'T0 is checked BEFORE _hop_generate, which costs about 300ms on a real repo'
 
 # ---------------------------------------------------------------------------
 # The second picker entry point: _hop_ws_picker reaches _hop_pick without going through _hop_run.
@@ -303,7 +363,7 @@ assert_eq "${(F)NT_MF_WANT}" "$NT_MF_ACTUAL" 'the matcher changed, so every clai
 #   because the assertions below prove the same pattern still finds the flags in the array itself.
 typeset NT_MF_PICK_HARD='' NT_MF_HEAD_HARD='' NT_MF_PAT_ALIVE=''
 NT_MF_PICK_HARD=$(hop_probe "functions _hop_pick | grep -vE -- ${(q)NT_MF_DECL} | grep -cE -- ${(q)NT_MF_PAT} || true")
-NT_MF_HEAD_HARD=$(hop_probe "functions _hop_pick_headless | grep -vE -- ${(q)NT_MF_DECL} | grep -cE -- ${(q)NT_MF_PAT} || true")
+NT_MF_HEAD_HARD=$(hop_probe "functions _hop_filter | grep -vE -- ${(q)NT_MF_DECL} | grep -cE -- ${(q)NT_MF_PAT} || true")
 NT_MF_PAT_ALIVE=$(hop_probe "print -rl -- \"\${_HOP_MATCHER_FLAGS[@]}\" | grep -cE -- ${(q)NT_MF_PAT} || true")
 
 t 'the flag pattern still matches something, so the two zero counts below mean absence'
@@ -312,41 +372,41 @@ assert_eq 6 "$NT_MF_PAT_ALIVE" 'the pattern matches nothing at all, so it cannot
 t 'the picker hardcodes no matcher flag of its own'
 assert_eq 0 "$NT_MF_PICK_HARD" 'a hardcoded flag here can drift from the headless path again'
 
-t 'the headless path hardcodes no matcher flag of its own'
-assert_eq 0 "$NT_MF_HEAD_HARD" 'a hardcoded flag here is how this silently stopped matching like the picker'
+t 'the resolver'"'"'s filter hardcodes no matcher flag of its own'
+assert_eq 0 "$NT_MF_HEAD_HARD" 'a hardcoded flag here is how headless silently stopped matching like the picker'
 
 # Each caller must actually PASS the array, since dropping it entirely would also pass the bans above.
 typeset NT_MF_PICK_USES='' NT_MF_HEAD_USES=''
 NT_MF_PICK_USES=$(hop_probe 'functions _hop_pick | grep -c _HOP_MATCHER_FLAGS || true')
-NT_MF_HEAD_USES=$(hop_probe 'functions _hop_pick_headless | grep -c _HOP_MATCHER_FLAGS || true')
+NT_MF_HEAD_USES=$(hop_probe 'functions _hop_filter | grep -c _HOP_MATCHER_FLAGS || true')
 
 t 'the picker passes the shared matcher flags'
 assert_eq 1 "$NT_MF_PICK_USES" 'without this the picker would run with fzf defaults and no test would say so'
 
-t 'the headless path passes the shared matcher flags'
-assert_eq 1 "$NT_MF_HEAD_USES" 'without this the headless path would match on fzf defaults instead'
+t 'the resolver'"'"'s filter passes the shared matcher flags'
+assert_eq 1 "$NT_MF_HEAD_USES" 'without this every resolve would match on fzf defaults instead'
 
 # --filter honours --accept-nth on fzf 0.73.1 and ignores it on 0.60.3 and 0.67.0, so it must never reach --filter.
 # - Handed to both, the floor printed the WHOLE row and the headless path cd'd to the display text.
 typeset NT_AN_ARRAY='' NT_AN_HEAD='' NT_AN_PICK=''
 NT_AN_ARRAY=$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}" | grep -c accept-nth || true')
-NT_AN_HEAD=$(hop_probe 'functions _hop_pick_headless | grep -c -- --accept-nth || true')
+NT_AN_HEAD=$(hop_probe 'functions _hop_filter | grep -c -- --accept-nth || true')
 NT_AN_PICK=$(hop_probe 'functions _hop_pick | grep -c -- --accept-nth= || true')
 
 t '--accept-nth is the picker'"'"'s alone, never part of what --filter is handed'
 assert_eq 0 "$NT_AN_ARRAY" 'in the shared array it reaches --filter, which reads it differently per fzf version'
-assert_eq 0 "$NT_AN_HEAD" 'the headless path must split whole rows, not trust fzf to cut them'
+assert_eq 0 "$NT_AN_HEAD" 'the resolver must split whole rows, not trust fzf to cut them'
 assert_eq 1 "$NT_AN_PICK" 'the picker still needs it, or Enter hands the parent shell the display text'
 
 t 'the picker asks for dir, preview and rel, in that order'
 assert_eq 1 "$(hop_probe 'functions _hop_pick | grep -cF -- "--accept-nth='"'"'2,3,4'"'"'" || true')" \
 	'_hop_parse_result reads exactly these three fields by position'
 
-# Two picker-only flags break --filter outright, so the headless path must never carry either.
+# Two picker-only flags break --filter outright, so the one --filter call site must never carry either.
 # - --no-sort with --with-nth=1,4 makes 0.60.3 print the TRANSFORMED line, so the dir field is lost.
 # - --freeze-left is an unknown option on 0.60.3, which exits 2 on it.
-t 'the headless path passes neither --no-sort nor --freeze-left'
-assert_eq 0 "$(hop_probe 'functions _hop_pick_headless | grep -cE -- "--(no-sort|freeze-left)" || true')" \
+t 'the resolver'"'"'s filter passes neither --no-sort nor --freeze-left'
+assert_eq 0 "$(hop_probe 'functions _hop_filter | grep -cE -- "--(no-sort|freeze-left)" || true')" \
 	'either flag in the --filter call loses the row or kills fzf on the floor version'
 
 # ---------------------------------------------------------------------------

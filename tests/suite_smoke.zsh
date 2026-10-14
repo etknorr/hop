@@ -254,7 +254,7 @@ prodvars=(${prodvars:#HOP_VIM_*})
 typeset -a expected=(
 	HOP_CLIPBOARD HOP_CONFIG HOP_DEBUG HOP_DEBUG_LOG HOP_DEFAULT_KINDS
 	HOP_FZF_HEIGHT HOP_FZF_MIN HOP_GUARD_WINDOW HOP_HISTFILE HOP_HIST_MAX
-	HOP_HOPRC HOP_REPOS HOP_VIM HOP_WORKSPACES HOP_WORKSPACES_FILE
+	HOP_HOPRC HOP_JUMP HOP_REPOS HOP_VIM HOP_WORKSPACES HOP_WORKSPACES_FILE
 	XDG_CACHE_HOME XDG_CONFIG_HOME XDG_STATE_HOME
 )
 # Sorted through an array, because `(o)` does not sort inside a quoted scalar expansion.
@@ -471,9 +471,9 @@ done
 
 # Sorted through arrays, because `(o)` is silently dropped inside a quoted scalar expansion.
 typeset -a fzfexpected=(
-	'hop.zsh: out=$(print -r -- "$targets" | fzf --filter="$query" "${_HOP_MATCHER_FLAGS[@]}")'
 	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
 	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
+	'lib/match.zsh: fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" "$@"'
 	'lib/ui.zsh: fzf "${args[@]}"'
 	'lib/ui.zsh: out=$(fzf --version </dev/null 2>/dev/null)'
 )
@@ -484,27 +484,28 @@ assert_eq "${(F)fzfexpsorted}" "${(F)fzfgotsorted}" \
 	'an fzf call site was added or changed; check whether it inherits stdin, then update this list'
 
 # ---------------------------------------------------------------------------
-# Every caller of _hop_pick pipes into it, which is what makes ITS inherited stdin correct.
+# Every caller of _hop_pick and _hop_filter pipes into it, which is what makes ITS inherited stdin correct.
 # ---------------------------------------------------------------------------
-# _hop_pick's own fzf MUST inherit stdin, because that is how the target rows arrive.
+# Both functions' own fzf MUST inherit stdin, because that is how the target rows arrive.
 # - So the safety property lives at the CALL SITE, as a pipe, and not on the fzf line itself.
 # - A new caller that forgot the pipe would leave the picker reading a terminal, or a script's stdin.
 # - That makes the whitelist a checked precondition rather than an exception to the rule above.
 typeset -a pickcalls=()
 for sf in "${smshipped[@]}"; do
 	smrel=${sf#${HOP_HOME}/}
-	smhits=$(grep -E '_hop_pick[[:space:]]+"' -- "$sf" | sed 's/^[[:space:]]*//')
+	smhits=$(grep -E '_hop_(pick|filter)[[:space:]]+"' -- "$sf" | sed 's/^[[:space:]]*//')
 	[[ -n $smhits ]] || continue
 	for smline in ${(f)smhits}; do
 		pickcalls+=("${smrel}: ${smline}")
 	done
 done
 
-t 'every _hop_pick call site is fed by a pipe, so what it inherits is rows and never a terminal'
-assert_ge $#pickcalls 2 'the call-site scan found nothing, which would make the loop below vacuous'
+# Exactly two: every picker goes through _hop_res_pick, and every --filter through _hop_match.
+t 'every _hop_pick and _hop_filter call site is fed by a pipe, so what it inherits is rows and never a terminal'
+assert_eq 2 $#pickcalls "the call sites changed, so check each one pipes: ${(j:; :)pickcalls}"
 typeset pickcall
 for pickcall in "${pickcalls[@]}"; do
-	assert_contains "$pickcall" '| _hop_pick' 'this caller does not pipe, so the picker reads whatever stdin is'
+	assert_contains "$pickcall" '| _hop_' 'this caller does not pipe, so the picker reads whatever stdin is'
 done
 
 # ---------------------------------------------------------------------------

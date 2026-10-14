@@ -90,7 +90,7 @@ _hop_vim_header() {
 	print -rn -- "${(pj:\n:)lines}"
 }
 
-# _hop_vim_binds <preview-cmd> <reload> <root> <restore> <query> [drill] [up] [guard]
+# _hop_vim_binds <preview-cmd> <reload> <root> <restore> <query> [drill] [up] [guard] [note]
 # - Appends the whole modal --bind set to `args`, which is local in _hop_pick.
 # - Also fills _hop_vim_prompt, _hop_vim_head, and the four HOP_VIM_* exports declared there.
 # - Dynamic scoping is the established pattern in this file; see _hop_parse_result.
@@ -98,7 +98,7 @@ _hop_vim_header() {
 # - An implicit read would let a probe that forgot it silently test the unguarded keymap instead.
 _hop_vim_binds() {
 	emulate -L zsh
-	local prev_cmd=$1 reload=$2 root=$3 restore=$4 query=$5 drill=${6:-} up=${7:-} guard=${8:-}
+	local prev_cmd=$1 reload=$2 root=$3 restore=$4 query=$5 drill=${6:-} up=${7:-} guard=${8:-} note=${9:-}
 	local kinds_bin="${(q)HOP_HOME}/bin/hop-kinds"
 	local guard_bin="${(q)HOP_HOME}/bin/hop-guard"
 
@@ -256,12 +256,18 @@ _hop_vim_binds() {
 	[[ -n $enter_act ]] && args+=(--bind="enter:${enter_act}")
 
 	# A CLI query means the user is already refining, so SEARCH is the start mode.
-	# - No --disabled in that branch, because --select-1 has to see a FILTERED list.
-	# - Otherwise `hop vpc prod` stops jumping straight to a unique match, hop's best trick.
+	# - No --disabled in that branch, because the typed query has to FILTER the list it opens on.
+	# - A resolver note rides --header, and its start bind skips change-header, which would wipe it.
+	# - The note embeds the query, and a `)` in it would end a change-header(...) action early.
 	if [[ -n $query ]]; then
 		_hop_vim_prompt='/ '
 		_hop_vim_head=$sh
-		args+=(--bind="start:${to_search}")
+		if [[ -n $note ]]; then
+			_hop_vim_head="${note}"$'\n'"${sh}"
+			args+=(--bind="start:${unbind_all}+enable-search+change-prompt(/ )+${prev_restore}")
+		else
+			args+=(--bind="start:${to_search}")
+		fi
 	else
 		_hop_vim_prompt='> '
 		_hop_vim_head=$nh
@@ -271,8 +277,8 @@ _hop_vim_binds() {
 
 # The oldest fzf that can run the picker below, and why it is this exact patch release.
 # - 0.60.0 added `--accept-nth`, which is how a row's dir and preview reach the parent shell.
-# - 0.60.3 made `--accept-nth` work alongside `--select-1`, and _hop_pick passes BOTH every call.
-# - So 0.60.0 would break `hop vpc prod` jumping to a unique match, which is hop's best trick.
+# - 0.60.3 made `--accept-nth` work alongside `--select-1`, and _hop_pick passes BOTH on an empty query.
+# - So 0.60.0 would break the one-row auto-accept of a bare `hop`.
 # - Debian and Ubuntu package 0.44.x, where the picker dies with `unknown option: --accept-nth`.
 # - Sources: fzf CHANGELOG, "Added `--accept-nth`" under 0.60.0, and #4287 under 0.60.3.
 # - Overridable, because a guard that locks out a working fzf is worse than the bug it prevents.
@@ -392,7 +398,6 @@ _hop_pick() {
 		--header-first
 		--header-border=bottom
 		--pointer='▸'
-		--select-1
 		--expect="$_hop_expect"
 		--preview="$prev_cmd"
 		--preview-window='right,55%,border-left,wrap,<120(down,50%,border-top,wrap)'
@@ -433,8 +438,18 @@ _hop_pick() {
 	[[ -n $query ]] && args+=(--query="$query")
 	[[ -n $reload ]] && args+=(--bind="alt-a:reload:$reload")
 
+	# These three are set by _hop_res_pick from the resolve, and read here through dynamic scope.
+	# - --select-1 is today's one-row auto-accept, so it stays the default for a caller that sets nothing.
+	# - A resolver PICK turns it off: one approximate candidate must never accept itself.
+	# - Ordered mode opens with the resolver's best rows first, and fzf's ranking returns at the first keystroke.
+	# - No other change bind exists, so toggle-sort+unbind(change) collides with nothing.
+	local note=${_hop_pick_note:-}
+	(( ${_hop_pick_select1:-1} )) && args+=(--select-1)
+	(( ${_hop_pick_ordered:-0} )) && args+=(--no-sort --bind='change:toggle-sort+unbind(change)')
+
 	# No temp file any more: the view mode lives in $FZF_PROMPT, which fzf exports for us.
 	local _hop_vim_prompt='hop ▸ ' _hop_vim_head=$header
+	[[ -n $note ]] && _hop_vim_head="${note}"$'\n'"${header}"
 	local -x HOP_VIM_TO_NORMAL='' HOP_VIM_HELP_ON='' HOP_VIM_HELP_OFF=''
 	local -x HOP_VIM_TO_MENU='' HOP_VIM_PICK_KIND='' HOP_VIM_MENU_BACK=''
 
@@ -464,7 +479,7 @@ _hop_pick() {
 			guard_f="${guard_dir}/mark"
 			trap "rm -rf -- ${(q)guard_dir} 2>/dev/null" EXIT HUP TERM
 		fi
-		_hop_vim_binds "$prev_cmd" "$reload" "$root" "$restore" "$query" "$drill" "$up" "$guard_f"
+		_hop_vim_binds "$prev_cmd" "$reload" "$root" "$restore" "$query" "$drill" "$up" "$guard_f" "$note"
 	fi
 	args+=(--prompt="$_hop_vim_prompt" --header="$_hop_vim_head")
 

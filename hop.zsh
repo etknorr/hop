@@ -23,6 +23,7 @@ source "$HOP_HOME/lib/providers.zsh"
 source "$HOP_HOME/lib/dsl.zsh"
 source "$HOP_HOME/lib/workspaces.zsh"
 source "$HOP_HOME/lib/ui.zsh"
+source "$HOP_HOME/lib/match.zsh"
 source "$HOP_HOME/lib/actions.zsh"
 source "$HOP_HOME/lib/doctor.zsh"
 source "$HOP_HOME/lib/upgrade.zsh"
@@ -45,10 +46,12 @@ fi
 
 _hop_usage() {
 	emulate -L zsh
-	print -r -- 'usage: hop [-a|--all] [-k KIND[,KIND...]] [-R] [--no-vim] [-h] [/|-] [words...]'
+	print -r -- 'usage: hop [-a|--all] [-k KIND[,KIND...]] [-R] [-p] [--no-vim] [-h] [/|-] [words...]'
 	print -r -- ''
 	print -r -- '  hop                 pick from the default kinds, starting in NORMAL mode'
-	print -r -- '  hop vpc prod        prefill the query; a unique match jumps with no UI'
+	print -r -- '  hop vpc prod        a clear match jumps with no UI; otherwise the picker opens best-first'
+	print -r -- '  hop terraform/x     a path that exists jumps straight there, before any matching'
+	print -r -- '  hop -p, --pick      always open the picker, even for a clear match (HOP_JUMP=never)'
 	print -r -- '  hop -a, --all       include every registered kind, not just the defaults'
 	print -r -- '  hop -k tg,helm      restrict to specific kinds'
 	print -r -- '  hop -c, --cwd       only targets under $PWD, for any kind'
@@ -246,79 +249,64 @@ _hop_tty_ok() {
 	{ : < /dev/tty } 2>/dev/null
 }
 
-# _hop_pick_headless <targets> <query> <label> -> resolve with no terminal, or explain and fail.
-# - --filter is the one fzf mode needing no terminal, and it prints each matching row WHOLE.
-# - It used to be trusted to honour --accept-nth, which fzf 0.73.1 does and 0.60.3 and 0.67.0 do not.
-# - On those the display landed in dir, and the floor said `hop: not a directory: vpc tg ...`.
-# - So the row is split here by _hop_row_split, and fields 2 and 3 are read by position.
-# - EXACTLY ONE match is dispatched as plain Enter, which is what --select-1 does today.
-# - That keeps `hop <unique-query>` working from a script, and preserving it is why this is a separate path.
-# - A guard in FRONT of the picker runs before uniqueness is known, so it would refuse that working case.
-# - The real rule is "exactly one match", not "a query was given", which is a genuine distinction.
-# - A ONE-ROW target list with an EMPTY query also auto-accepts today, and counting matches covers both.
-# - Zero or many cannot be resolved without a human, so both name the cause AND the count.
-# - A bare `no match` would be a lie when 37 rows matched, and the count is what ends the bug hunt.
-# - Nothing matched and N matched get DIFFERENT messages, because the next move differs.
-# - A typo wants correcting; a broad query wants narrowing, and one string cannot say both.
-# - --filter ignores exactly one flag _hop_pick passes, which is --disabled.
-# - _hop_pick adds --disabled ONLY for an empty query, where every row matches either way.
-# - So that discrepancy is unreachable rather than merely unobserved, and needs no handling here.
-# - The match-affecting flags come from _HOP_MATCHER_FLAGS, which lib/ui.zsh defines and this file sources.
-# - --filter is a separate fzf process, so it has to match rows exactly the way the picker would.
-# - They were restated here, under a comment asking you to keep two copies in step by hand.
-# - Sharing the array makes that structural instead: there is no second list left to forget.
-# - tests/suite_nottty.zsh pins the array's value and fails if either caller hardcodes a flag again.
-# - fzf's stderr is NOT suppressed, because --filter still parses every option it is handed.
-# - A genuine complaint about one of these flags has to reach the user, not look like an empty result.
-_hop_pick_headless() {
+# _hop_res_pick <label> <header> <query> <targets> <reload> <root> <drill> <restore> <up> -> act on a resolve.
+# - The caller has run _hop_resolve, terminal or not, so a clear match jumps with no picker drawn at all.
+# - 0 means the picker returned a row in _hop_key/_hop_dir/_hop_preview/_hop_rel, for the caller to dispatch.
+# - 1 means the call is over, and _hop_st is what the caller returns: a jump, a headless report or a cancel.
+# - A resolver PICK opens in ordered mode, best rows first, and never with --select-1.
+# - So one approximate candidate cannot auto-accept; only an empty query keeps today's one-row accept.
+_hop_res_pick() {
 	emulate -L zsh
-	local targets=$1 query=${2:-} label=$3
-	local out
-	out=$(print -r -- "$targets" | fzf --filter="$query" "${_HOP_MATCHER_FLAGS[@]}")
-	local -a rows=("${(@f)out}")
-	rows=(${rows:#})
-	_hop_dbg "headless label=${label} rows=${#rows} query=${query}"
-
-	if (( $#rows == 1 )); then
-		local -a reply
-		_hop_row_split "${rows[1]}"
-		local dir=${reply[2]-} preview=${reply[3]-}
-		[[ -n $preview ]] || preview=$dir
-		# An empty key is plain Enter, the only verb allowed to cd; see _hop_dispatch.
-		_hop_dispatch '' "$dir" "$preview"
-		return $?
+	local label=$1 header=$2 query=$3 targets=$4 reload=$5 root=$6 drill=$7 restore=$8 up=$9
+	if [[ $_hop_res_verdict == jump ]]; then
+		_hop_res_jump
+		_hop_st=$?
+		return 1
 	fi
-
-	print -ru2 -- 'hop: no terminal available, so the picker cannot run (/dev/tty could not be opened).'
-	if (( $#rows == 0 )); then
-		print -ru2 -- "hop: nothing matched${query:+ the query: $query}, so there was nothing to jump to."
-	else
-		print -ru2 -- "hop: ${#rows} targets matched${query:+ the query: $query}, and picking one needs a terminal."
-		print -ru2 -- 'hop: narrow the query until exactly one target matches and hop will jump straight to it.'
+	# No terminal means the picker would block forever, so the resolve is reported instead.
+	if ! _hop_tty_ok; then
+		_hop_headless_report "$query" "$label"
+		_hop_st=$?
+		return 1
 	fi
-	return 1
+	local _hop_pick_ordered=0 _hop_pick_select1=0 _hop_pick_note=$_hop_res_note
+	local input=$targets out
+	local -i st
+	case $_hop_res_verdict in
+		pick)
+			_hop_pick_ordered=1
+			input=$(_hop_res_input "$targets")
+			;;
+		empty)
+			[[ ${_hop_jump:-$HOP_JUMP} != never ]] && _hop_pick_select1=1
+			;;
+	esac
+	local -a trows=("${(f)targets}")
+	out=$(print -r -- "$input" | _hop_pick "$label" "$header" "$_hop_res_query" "$reload" "$root" "$drill" "$restore" "$up")
+	st=$?
+	_hop_fzf_status "$st" "$label" "${#trows}" "$query" || return 1
+	if ! _hop_parse_result "$out"; then
+		_hop_st=0
+		return 1
+	fi
+	return 0
 }
 
-# _hop_run <label> <query> <reload> <targets> [root] [restore]
+# _hop_run <label> <query> <reload> <targets> [root] [restore] [up]
 # - fzf's status is read by _hop_fzf_status, which this shares with _hop_ws_picker.
 # - _hop_key/_hop_dir/_hop_preview/_hop_rel are local here so nothing leaks into the interactive shell.
+# - So are the resolver's fields, which _hop_resolve writes by name.
 # - root is passed through only so the modal `:` kind picker can re-enumerate; '' disables it.
 _hop_run() {
 	emulate -L zsh
 	local label=$1 query=$2 reload=$3 targets=$4 root=${5:-} restore=${6:-} up=${7:-}
 	local _hop_key _hop_dir _hop_preview _hop_rel _hop_st
-	local header out st
-	local -a trows=("${(f)targets}")
-	header=$(_hop_header "$reload")
-	# No terminal means the picker would block forever, so resolve headlessly instead of opening it.
-	if ! _hop_tty_ok; then
-		_hop_pick_headless "$targets" "$query" "$label"
-		return $?
-	fi
-	out=$(print -r -- "$targets" | _hop_pick "$label" "$header" "$query" "$reload" "$root" '' "$restore" "$up")
-	st=$?
-	_hop_fzf_status "$st" "$label" "${#trows}" "$query" || return $_hop_st
-	_hop_parse_result "$out" || return 0
+	local _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
+	local -i _hop_res_n _hop_res_m _hop_res_inj
+	local -a _hop_res_rows
+	_hop_resolve "$query" "$targets" "$root" "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}" "${_hop_under:-}"
+	_hop_res_pick "$label" "$(_hop_header "$reload")" "$query" "$targets" "$reload" "$root" '' "$restore" "$up" \
+		|| return $_hop_st
 
 	# ctrl-h/h goes UP a level, so the caller names the picker one step out.
 	if [[ $_hop_key == ctrl-h && -n $up ]]; then
@@ -328,13 +316,18 @@ _hop_run() {
 	_hop_dispatch "$_hop_key" "$_hop_dir" "$_hop_preview"
 }
 
-# _hop_ws_picker [query] -> the WORKSPACE level: enter cds there, ctrl-l or l shows its repos.
+# _hop_ws_picker [query] [fallback] -> the WORKSPACE level: enter cds there, ctrl-l or l shows its repos.
 # - Answers "just nav to the workspace, or show its repos" without forcing the choice up front.
 # - Drilling scopes $HOP_REPOS to the chosen workspace, so the repo picker needs no new argument.
+# - fallback is set only when hop chose this level itself, outside a repo, rather than by -w.
+# - Then a query no workspace answers is tried against the repos, so `hop configuration` from ~ lands on the repo.
 _hop_ws_picker() {
 	emulate -L zsh
-	local query=${1:-} targets out st
+	local query=${1:-} fallback=${2:-} targets
 	local _hop_key _hop_dir _hop_preview _hop_rel _hop_st
+	local _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
+	local -i _hop_res_n _hop_res_m _hop_res_inj
+	local -a _hop_res_rows
 	targets=$(_hop_provider_ws)
 	if [[ -z $targets ]]; then
 		print -ru2 -- "hop: no workspaces configured (edit ${HOP_WORKSPACES_FILE})"
@@ -343,15 +336,20 @@ _hop_ws_picker() {
 
 	local -a rows=("${(f)targets}")
 	local label="workspaces  ${#rows}"
-	# Same headless resolve as _hop_run: this picker is a second entry point, not a special case.
-	if ! _hop_tty_ok; then
-		_hop_pick_headless "$targets" "$query" "$label"
-		return $?
+	_hop_resolve "$query" "$targets" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
+	if [[ -n $fallback && $_hop_res_verdict == none ]]; then
+		local REPLY
+		local -a reply
+		if _hop_repo_targets; then
+			_hop_resolve "$query" "$REPLY" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
+			if [[ $_hop_res_verdict != none ]]; then
+				_hop_repo_picker "$query"
+				return $?
+			fi
+			_hop_resolve "$query" "$targets" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
+		fi
 	fi
-	out=$(print -r -- "$targets" | _hop_pick "$label" "$(_hop_header)" "$query" '' '' drill)
-	st=$?
-	_hop_fzf_status "$st" "$label" "${#rows}" "$query" || return $_hop_st
-	_hop_parse_result "$out" || return 0
+	_hop_res_pick "$label" "$(_hop_header)" "$query" "$targets" '' '' drill '' '' || return $_hop_st
 
 	if [[ $_hop_key == ctrl-l ]]; then
 		local HOP_REPOS=$_hop_dir
@@ -374,26 +372,39 @@ hopw() {
 	return 1
 }
 
-# Testing _hop_repos' status rather than its output is what makes the zero-repos error reachable.
+# _hop_repo_targets -> 0 with REPLY the repo rows and reply the repo dirs.
+# - 1 when no repo is configured or found, and 2 when none of them is readable, so each gets its own message.
+# - Testing _hop_repos' status rather than its output is what makes the zero-repos error reachable.
+_hop_repo_targets() {
+	emulate -L zsh
+	local out
+	reply=()
+	REPLY=''
+	if out=$(_hop_repos); then
+		reply=("${(@f)out}")
+		reply=(${reply:#})
+	fi
+	(( $#reply )) || return 1
+	REPLY=$(_hop_provider_repo "${reply[@]}")
+	[[ -n $REPLY ]] || return 2
+}
+
 _hop_repo_picker() {
 	emulate -L zsh
-	local query=${1:-} out
-	local -a repos
-	if out=$(_hop_repos); then
-		repos=("${(@f)out}")
-		repos=(${repos:#})
-	fi
-	if (( $#repos == 0 )); then
-		print -ru2 -- 'hop: not in a git repository, and no repos found (set $HOP_REPOS)'
-		return 1
-	fi
-	local targets
-	targets=$(_hop_provider_repo "${repos[@]}")
-	if [[ -z $targets ]]; then
-		print -ru2 -- 'hop: no readable repos in $HOP_REPOS'
-		return 1
-	fi
-	_hop_run "repos  ${#repos} found" "$query" '' "$targets" '' '' _hop_ws_picker
+	local query=${1:-} REPLY
+	local -a reply
+	_hop_repo_targets
+	case $? in
+		1)
+			print -ru2 -- 'hop: not in a git repository, and no repos found (set $HOP_REPOS)'
+			return 1
+			;;
+		2)
+			print -ru2 -- 'hop: no readable repos in $HOP_REPOS'
+			return 1
+			;;
+	esac
+	_hop_run "repos  ${#reply} found" "$query" '' "$REPLY" '' '' _hop_ws_picker
 }
 
 hop() {
@@ -404,6 +415,8 @@ hop() {
 
 	local -a kinds words
 	local all=0 repopick=0 wspick=0 here=0 opts=0 mode=''
+	# Read by the resolver and the pickers below through dynamic scope, so no signature has to carry them.
+	local _hop_jump='' _hop_under=''
 	kinds=(${=${HOP_DEFAULT_KINDS//,/ }})
 
 	# --no-vim shadows the global for this call only, which is what _hop_vim_on reads.
@@ -437,6 +450,11 @@ hop() {
 				;;
 			-c | --cwd | --here)
 				here=1
+				opts=1
+				shift
+				;;
+			-p | --pick)
+				_hop_jump=never
 				opts=1
 				shift
 				;;
@@ -534,6 +552,29 @@ hop() {
 		return $?
 	fi
 
+	if [[ -z $_hop_jump ]]; then
+		_hop_jump=${HOP_JUMP:-auto}
+		if [[ $_hop_jump != (auto|unique|never) ]]; then
+			print -ru2 -- "hop: HOP_JUMP=${_hop_jump} is not one of auto, unique, never; using auto"
+			_hop_jump=auto
+		fi
+	fi
+
+	# T0: a typed path is a filesystem fact, so it jumps before fzf or any enumeration is paid for.
+	# - -k does not narrow it, because no kind is consulted; -w and -R name a different level, so they skip it.
+	if (( ! wspick && ! repopick && $#words == 1 )) && [[ $_hop_jump != never ]]; then
+		local -a reply
+		local -F t0=0
+		[[ -n ${HOP_DEBUG:-} ]] && zmodload -F zsh/datetime p:EPOCHREALTIME 2>/dev/null && t0=$EPOCHREALTIME
+		if _hop_literal_target "${words[1]}" "$root"; then
+			local ms=-
+			(( t0 > 0 )) && printf -v ms '%.1f' $(( (EPOCHREALTIME - t0) * 1000 ))
+			_hop_dbg "resolve tier=T0 rule=path verdict=jump n=1 inj=0 q=${words[1]} target=${reply[3]} ms=${ms}"
+			_hop_dispatch '' "${reply[1]}" "${reply[2]}"
+			return $?
+		fi
+	fi
+
 	if (( ! ${+commands[fzf]} )); then
 		print -ru2 -- 'hop: fzf is not installed'
 		return 1
@@ -551,7 +592,7 @@ hop() {
 	# Outside a repo the workspace level is strictly more useful, but only if one is configured.
 	if (( repopick )) || [[ -z $root ]]; then
 		if [[ -z $root ]] && (( ! repopick )) && _hop_ws_parse; then
-			_hop_ws_picker "$query"
+			_hop_ws_picker "$query" fallback
 			return $?
 		fi
 		_hop_repo_picker "$query"
@@ -566,6 +607,7 @@ hop() {
 	fi
 
 	local targets
+	_hop_dbg "generate root=${root} kinds=${(j:,:)kinds}"
 	targets=$(_hop_generate "$root" "${kinds[@]}")
 	if [[ -z $targets ]]; then
 		print -ru2 -- "hop: no targets in ${root} for kinds: ${(j:,:)kinds}"
@@ -583,6 +625,7 @@ hop() {
 	if (( here )); then
 		local hdir=${PWD:A} hroot=${root:A}
 		if [[ $hdir != "$hroot" ]]; then
+			_hop_under=$hdir
 			local -a reply
 			_hop_filter_under "$hdir" "${(@f)targets}"
 			targets=${(F)reply}

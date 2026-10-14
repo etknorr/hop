@@ -5,6 +5,9 @@
 typeset -g HOP_HISTFILE=${HOP_HISTFILE:-${XDG_STATE_HOME:-$HOME/.local/state}/hop/history}
 typeset -g HOP_HIST_MAX=${HOP_HIST_MAX:-300}
 
+# When a query may skip the picker: auto (any clear match), unique (one target only), never (always pick).
+typeset -g HOP_JUMP=${HOP_JUMP:-auto}
+
 # _hop_need <command> <what-for> -> 0 if runnable, else one line on stderr
 # - A bare name is resolved on $PATH, same as always.
 # - A name with a slash (absolute, or relative like ./bin/ed) is a path zsh execs directly.
