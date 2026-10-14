@@ -48,8 +48,12 @@ _hop_editor() {
 	[[ -n $REPLY ]]
 }
 
-# _hop_remember <dir> -> push dir onto the front of the MRU list, deduped and bounded.
+# _hop_remember <dir> -> push dir onto the front of the MRU list, deduped, pruned and bounded.
 # - Rewriting the whole file is fork-free via $(<file) and the list never exceeds HOP_HIST_MAX.
+# - An entry that is no longer a directory is dropped, since it can never rank a row again.
+# - Unpruned, 27 of 30 entries in one real history named dirs that were gone, crowding out live ones.
+# - The (N-/) qualifier is one stat per entry, follows a symlinked dir, and reads each entry literally.
+# - Only absolute entries are kept, so a stray relative line cannot survive by naming a dir under $PWD.
 _hop_remember() {
 	emulate -L zsh
 	local dir=$1
@@ -59,7 +63,8 @@ _hop_remember() {
 	local -a h
 	[[ -r $HOP_HISTFILE ]] && h=("${(@f)$(<"$HOP_HISTFILE")}")
 	h=("$dir" ${h:#$dir})
-	h=(${h:#})
+	h=(${(M)h:#/*})
+	h=(${^h}(N-/))
 	print -rl -- "${(@)h[1,$HOP_HIST_MAX]}" > "$HOP_HISTFILE" 2>/dev/null
 	return 0
 }

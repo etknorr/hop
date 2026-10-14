@@ -327,6 +327,32 @@ t '_hop_rank reads field 2 through _hop_dirs_of, not per row'
 out=$(co_run 'functions _hop_rank')
 assert_contains "$out" '_hop_dirs_of' 'the per-row extraction cost 51-56ms on 1041 rows'
 
+# _hop_remember prunes as it writes, so a moved checkout stops crowding the history out.
+# - we[ir]d and st*r are dirs whose names are glob patterns: `ab` beside them would match `a[b]`.
+# - link is a symlink to a dir, which (N-/) follows, so a symlinked workspace survives.
+typeset CO_PR
+fixture_tmpdir prune
+CO_PR=$REPLY
+mkdir -p -- "$CO_PR/new" "$CO_PR/live" "$CO_PR/we[ir]d" "$CO_PR/weid" "$CO_PR/st*r" "$CO_PR/real"
+ln -s -- "$CO_PR/real" "$CO_PR/link"
+: > "$CO_PR/afile"
+print -rl -- "$CO_PR/gone" "$CO_PR/live" 'relative' "$CO_PR/afile" "$CO_PR/we[ir]d" '' "$CO_PR/st*r" "$CO_PR/link" \
+	> "$CO_PR/history"
+t '_hop_remember drops entries that are no longer dirs, and keeps the rest literally and in order'
+out=$(co_run "_hop_remember ${(q)CO_PR}/new; print -r -- \"\$(<${(q)CO_PR}/history)\"" "HOP_HISTFILE=$CO_PR/history")
+assert_eq "$CO_PR/new
+$CO_PR/live
+$CO_PR/we[ir]d
+$CO_PR/st*r
+$CO_PR/link" "$out" 'gone, a file, a relative line and a blank one all have to go, and nothing may be globbed'
+
+t 'pruning runs before the HOP_HIST_MAX bound, so a stale entry never takes the place of a live one'
+print -rl -- "$CO_PR/gone" "$CO_PR/also-gone" "$CO_PR/live" "$CO_PR/real" > "$CO_PR/history"
+out=$(co_run "_hop_remember ${(q)CO_PR}/new; print -r -- \"\$(<${(q)CO_PR}/history)\"" \
+	"HOP_HISTFILE=$CO_PR/history" 'HOP_HIST_MAX=2')
+assert_eq "$CO_PR/new
+$CO_PR/live" "$out"
+
 # ---------------------------------------------------------------------------
 # Item 2: a user's own HOP_CONFIG has to reach the children that re-source hop.zsh.
 # ---------------------------------------------------------------------------
