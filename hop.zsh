@@ -46,12 +46,16 @@ fi
 
 _hop_usage() {
 	emulate -L zsh
-	print -r -- 'usage: hop [-a|--all] [-k KIND[,KIND...]] [-R] [-p] [--no-vim] [-h] [/|-] [words...]'
+	print -r -- 'usage: hop [-a|--all] [-k KIND[,KIND...]] [-R] [-p] [--cd] [-o|-e|--action=MODE] [--no-vim] [-h] [/|-] [words...]'
 	print -r -- ''
 	print -r -- '  hop                 pick from the default kinds, starting in NORMAL mode'
 	print -r -- '  hop vpc prod        a clear match jumps with no UI; otherwise the picker opens best-first'
 	print -r -- '  hop terraform/x     a path that exists jumps straight there, before any matching'
 	print -r -- '  hop -p, --pick      always open the picker, even for a clear match (HOP_JUMP=never)'
+	print -r -- '  hop -o, --open      Enter opens the target in VS Code instead of cd-ing'
+	print -r -- '  hop -e, --reveal    Enter shows the target in the VS Code explorer instead of cd-ing'
+	print -r -- '  hop --cd -o         Enter cds, then opens; --cd -e cds, then reveals'
+	print -r -- '  hop --action=MODE   Enter does MODE: cd, open, reveal, cd+open, cd+reveal (HOP_ACTION)'
 	print -r -- '  hop -a, --all       include every registered kind, not just the defaults'
 	print -r -- '  hop -k tg,helm      restrict to specific kinds'
 	print -r -- '  hop -c, --cwd       only targets under $PWD, for any kind'
@@ -90,7 +94,7 @@ _hop_usage() {
 	print -r -- '  : opens the view menu in place; enter switches, esc goes back.'
 	print -r -- ''
 	print -r -- '  SEARCH: every key types | esc back to NORMAL | enter cd'
-	print -r -- '          ctrl-o code -r file | ctrl-t code dir'
+	print -r -- '          ctrl-o code -r file | ctrl-t code -n dir'
 	print -r -- '          ctrl-y copy dir | alt-y copy file | alt-o $EDITOR file'
 	print -r -- '          ctrl-g gh browse | alt-a all kinds | ctrl-r refresh preview'
 	print -r -- '          alt-p or ctrl-/ toggle preview'
@@ -313,10 +317,10 @@ _hop_run() {
 		"$up"
 		return $?
 	fi
-	_hop_dispatch "$_hop_key" "$_hop_dir" "$_hop_preview"
+	_hop_dispatch "$_hop_key" "$_hop_dir" "$_hop_preview" "$_hop_rel"
 }
 
-# _hop_ws_picker [query] [fallback] -> the WORKSPACE level: enter cds there, ctrl-l or l shows its repos.
+# _hop_ws_picker [query] [fallback] -> the WORKSPACE level: enter goes there, ctrl-l or l shows its repos.
 # - Answers "just nav to the workspace, or show its repos" without forcing the choice up front.
 # - Drilling scopes $HOP_REPOS to the chosen workspace, so the repo picker needs no new argument.
 # - fallback is set only when hop chose this level itself, outside a repo, rather than by -w.
@@ -325,6 +329,8 @@ _hop_ws_picker() {
 	emulate -L zsh
 	local query=${1:-} fallback=${2:-} targets
 	local _hop_key _hop_dir _hop_preview _hop_rel _hop_st
+	# Read by _hop_act_enter: a workspace row names a whole folder, so open and reveal both mean `code -n` on it.
+	local -i _hop_folder_rows=1
 	local _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
 	local -i _hop_res_n _hop_res_m _hop_res_inj
 	local -a _hop_res_rows
@@ -356,7 +362,7 @@ _hop_ws_picker() {
 		_hop_repo_picker
 		return $?
 	fi
-	_hop_dispatch "$_hop_key" "$_hop_dir" "$_hop_preview"
+	_hop_dispatch "$_hop_key" "$_hop_dir" "$_hop_preview" "$_hop_rel"
 }
 
 # hopw -> cd to the workspace containing $PWD, longest prefix first.
@@ -392,6 +398,8 @@ _hop_repo_targets() {
 _hop_repo_picker() {
 	emulate -L zsh
 	local query=${1:-} REPLY
+	# A repo row names a whole folder too, exactly as a workspace row does in _hop_ws_picker.
+	local -i _hop_folder_rows=1
 	local -a reply
 	_hop_repo_targets
 	case $? in
@@ -415,8 +423,11 @@ hop() {
 
 	local -a kinds words
 	local all=0 repopick=0 wspick=0 here=0 opts=0 mode=''
-	# Read by the resolver and the pickers below through dynamic scope, so no signature has to carry them.
-	local _hop_jump='' _hop_under=''
+	local -i act_cd=0 act_open=0 act_reveal=0
+	local act_flag=''
+	# Read by the resolver, the pickers, the legends and _hop_act_enter through dynamic scope.
+	# - So no signature has to carry them, and none of them outlives this call.
+	local _hop_jump='' _hop_under='' _hop_mode=''
 	kinds=(${=${HOP_DEFAULT_KINDS//,/ }})
 
 	# --no-vim shadows the global for this call only, which is what _hop_vim_on reads.
@@ -457,6 +468,30 @@ hop() {
 				_hop_jump=never
 				opts=1
 				shift
+				;;
+			--cd)
+				act_cd=1
+				opts=1
+				shift
+				;;
+			-o | --open)
+				act_open=1
+				opts=1
+				shift
+				;;
+			-e | --reveal)
+				act_reveal=1
+				opts=1
+				shift
+				;;
+			--action=*)
+				act_flag=${1#--action=}
+				opts=1
+				shift
+				;;
+			--action)
+				print -ru2 -- "hop: --action needs a mode, as --action=MODE: ${(j:, :)_HOP_ACTIONS}"
+				return 2
 				;;
 			--no-vim)
 				HOP_VIM=0
@@ -535,6 +570,22 @@ hop() {
 		esac
 	done
 
+	# The flags replace HOP_ACTION for this call, so two that disagree are refused rather than one picked.
+	if (( act_open && act_reveal )); then
+		print -ru2 -- 'hop: -o and -e are exclusive'
+		return 2
+	fi
+	if [[ -n $act_flag ]]; then
+		if (( act_cd || act_open || act_reveal )); then
+			print -ru2 -- 'hop: --action=MODE cannot be combined with --cd, -o or -e'
+			return 2
+		fi
+		if (( ! ${_HOP_ACTIONS[(Ie)$act_flag]} )); then
+			print -ru2 -- "hop: --action=${act_flag} is not one of ${(j:, :)_HOP_ACTIONS}"
+			return 2
+		fi
+	fi
+
 	if [[ $mode == '-' ]]; then
 		cd -
 		return $?
@@ -550,6 +601,22 @@ hop() {
 		fi
 		_hop_act_cd "$root"
 		return $?
+	fi
+
+	# Resolved after `hop /` and `hop -`, which are navigation by name and stay a pure cd.
+	if [[ -n $act_flag ]]; then
+		_hop_mode=$act_flag
+	elif (( act_open )); then
+		_hop_mode=open
+	elif (( act_reveal )); then
+		_hop_mode=reveal
+	fi
+	if (( act_cd )); then
+		_hop_mode=cd${_hop_mode:++${_hop_mode}}
+	elif [[ -z $_hop_mode ]]; then
+		local REPLY
+		_hop_action_mode "${HOP_ACTION:-cd}"
+		_hop_mode=$REPLY
 	fi
 
 	if [[ -z $_hop_jump ]]; then
@@ -570,7 +637,7 @@ hop() {
 			local ms=-
 			(( t0 > 0 )) && printf -v ms '%.1f' $(( (EPOCHREALTIME - t0) * 1000 ))
 			_hop_dbg "resolve tier=T0 rule=path verdict=jump n=1 inj=0 q=${words[1]} target=${reply[3]} ms=${ms}"
-			_hop_dispatch '' "${reply[1]}" "${reply[2]}"
+			_hop_dispatch '' "${reply[1]}" "${reply[2]}" "${reply[3]}"
 			return $?
 		fi
 	fi

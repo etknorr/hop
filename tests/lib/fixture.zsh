@@ -301,6 +301,9 @@ fixture_pin_derived() {
 # - The two FZF_* pins are the ones no scan of hop's own source can find, because FZF reads them.
 # - Measured: FZF_DEFAULT_OPTS='--exact' silently disabled the CONTROL arm of the --exact guard,
 #   so the fuzzy comparison returned one row and the test stopped proving anything.
+# - The last five are what _hop_code_usable reads, and no HOP_ scan finds them either.
+# - Run from a VS Code terminal or over SSH, they would send every code verb to the editor fallback.
+# - DISPLAY is a dummy rather than empty, so a Linux CI runner with no screen still reaches the code stub.
 fixture_pin_settings() {
 	emulate -L zsh
 	local home=$1
@@ -319,8 +322,15 @@ fixture_pin_settings() {
 		'HOP_HIST_MAX=' \
 		'HOP_GUARD_WINDOW=' \
 		'HOP_JUMP=auto' \
+		'HOP_ACTION=cd' \
+		'HOP_CODE=code' \
 		'FZF_DEFAULT_OPTS=' \
-		'FZF_DEFAULT_COMMAND='
+		'FZF_DEFAULT_COMMAND=' \
+		'VSCODE_IPC_HOOK_CLI=' \
+		'SSH_CONNECTION=' \
+		'SSH_TTY=' \
+		'WAYLAND_DISPLAY=' \
+		'DISPLAY=:hop-tests'
 }
 
 # fixture_pin_pairs <home> -> both lists as `VAR=value`, for the callers that hand pins to `env`.

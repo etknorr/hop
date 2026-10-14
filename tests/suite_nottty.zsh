@@ -70,7 +70,7 @@ nt_pins() {
 		"export HOP_DEBUG_LOG=${(q)HOP_FIX_HOME}/.local/state/hop/debug.log" \
 		"export HOP_WORKSPACES=''" \
 		"export HOP_WORKSPACES_FILE=${(q)HOP_FIX_HOME}/.config/hop/workspaces" \
-		"export HOP_REPOS='' HOP_DEFAULT_KINDS='' HOP_CLIPBOARD='' HOP_HIST_MAX='' HOP_FZF_MIN='' HOP_JUMP=auto" \
+		"export HOP_REPOS='' HOP_DEFAULT_KINDS='' HOP_CLIPBOARD='' HOP_HIST_MAX='' HOP_FZF_MIN='' HOP_JUMP=auto HOP_ACTION=cd HOP_CODE=code" \
 		"export FZF_DEFAULT_COMMAND='' FZF_DEFAULT_OPTS='' FZF_DEFAULT_OPTS_FILE=/dev/null" \
 		'unset HOP_FZF_HEIGHT' \
 		'unset HOP_VIM'

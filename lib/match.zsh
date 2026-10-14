@@ -640,13 +640,13 @@ _hop_res_input() {
 	print -rl -- "${front[@]}" "${(@)all:|front}"
 }
 
-# _hop_res_jump -> act on a JUMP verdict: the J2 note, if any, then plain Enter on the target.
+# _hop_res_jump -> act on a JUMP verdict: the J2 note, if any, then Enter on the target.
 _hop_res_jump() {
 	emulate -L zsh
 	[[ -n $_hop_res_note ]] && print -ru2 -- "$_hop_res_note"
 	local -a f=("${(@ps:\t:)_hop_res_target}")
-	# An empty key is plain Enter, the only verb allowed to cd; see _hop_dispatch.
-	_hop_dispatch '' "${f[1]}" "${f[2]}"
+	# An empty key is plain Enter, which applies the call's mode; see _hop_act_enter.
+	_hop_dispatch '' "${f[1]}" "${f[2]}" "${f[3]}"
 }
 
 # _hop_headless_report <query> <label> -> with no terminal, act on a resolve that needs no human, or explain and fail.

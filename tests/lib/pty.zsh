@@ -492,6 +492,11 @@ pty_env() {
 	export HOP_DEBUG='' HOP_DEBUG_LOG="$HOME/.local/state/hop/debug.log"
 	export HOP_WORKSPACES='' HOP_WORKSPACES_FILE="$HOME/.config/hop/workspaces"
 	export HOP_REPOS='' HOP_DEFAULT_KINDS='' HOP_CLIPBOARD='' HOP_HIST_MAX='' HOP_FZF_MIN='' HOP_JUMP=''
+	# Enter is pinned to cd, which is what every enter test below asserts, and `code` is the shared stub.
+	export HOP_ACTION=cd HOP_CODE=code
+	# What _hop_code_usable reads: a VS Code terminal or an SSH session would turn `o` into the editor.
+	# - DISPLAY is a dummy so a Linux runner with no screen still counts as able to open VS Code.
+	export VSCODE_IPC_HOOK_CLI='' SSH_CONNECTION='' SSH_TTY='' WAYLAND_DISPLAY='' DISPLAY=':hop-tests'
 	# The newest variable hop reads, and the one a developer is most likely to have exported by hand.
 	# - Empty keeps bin/hop-guard's own 150ms default, exactly as HOP_FZF_MIN above keeps fzf's floor.
 	# - Left unpinned, an exported HOP_GUARD_WINDOW=0 turns seven suite_pty_escape negatives red.
