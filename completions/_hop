@@ -1,9 +1,14 @@
 #compdef hop
-# zsh completion for hop. See ~/.config/hop/README.md.
+# zsh completion for hop. See README.md in the hop checkout, $HOP_HOME.
 #
-# Flags: -a/--all, -k/--kinds <kinds>, -R/--repos, --vim/--no-vim, -h/--help, -V/--version.
+# Flags:
+# - -a/--all, -k/--kinds <kinds>, -c/--cwd/--here, -R/--repos, -w/--workspaces
+# - -p/--pick, and what Enter does: --cd, -o/--open, -e/--reveal, --action=MODE
+# - --vim/--no-vim, --doctor[=short], -h/--help, -V/--version
 # -k takes a comma-separated list of kind names, completed one at a time with
 # already-chosen kinds excluded (that is what `_values -s ,` gives us).
+# The exclusion lists mirror the combinations hop itself refuses with exit 2.
+# - -o and -e are exclusive, and --action=MODE cannot be combined with --cd, -o or -e.
 
 # Kinds come straight from the registry hop.zsh already built in this shell, so a kind
 # declared in your own config completes with no change here.
@@ -60,6 +65,11 @@ _hop() {
     '(-R --repos)'{-R,--repos}'[pick a repo from $HOP_REPOS instead of the current one]' \
     '(-w --workspaces)'{-w,--workspaces}'[pick a workspace root; l shows its repos]' \
     '(-c --cwd --here)'{-c,--cwd,--here}'[only targets under $PWD, for any kind]' \
+    '(-p --pick)'{-p,--pick}'[always open the picker, even for a clear match]' \
+    '(--cd --action)--cd[cd to the target, then do what -o or -e asks]' \
+    '(-o --open -e --reveal --action)'{-o,--open}'[enter opens the target in VS Code instead of cd-ing]' \
+    '(-o --open -e --reveal --action)'{-e,--reveal}'[enter shows the target in the VS Code explorer]' \
+    '(--cd -o --open -e --reveal --action)--action=-[what enter does, as HOP_ACTION]:mode:(cd open reveal cd+open cd+reveal)' \
     '(--vim --no-vim)--no-vim[search-first fzf, no modal layer (same as HOP_VIM=0)]' \
     '(--vim --no-vim)--vim[force the modal layer on when HOP_VIM=0 is set]' \
     '(- *)--doctor=-[dump config, tools and kind counts for a bug report]:mode:(short)' \

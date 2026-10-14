@@ -49,7 +49,7 @@ _hop_usage() {
 	local REPLY
 	_hop_enter_mode
 	local enter=$REPLY
-	print -r -- 'usage: hop [-a|--all] [-k KIND[,KIND...]] [-R] [-p] [--cd] [-o|-e|--action=MODE] [--no-vim] [-h] [/|-] [words...]'
+	print -r -- 'usage: hop [-a|--all] [-k KIND[,KIND...]] [-c] [-R|-w] [-p] [--cd] [-o|-e|--action=MODE] [--no-vim] [-h] [/|-] [words...]'
 	print -r -- ''
 	print -r -- '  hop                 pick from the default kinds, starting in NORMAL mode'
 	print -r -- '  hop vpc prod        a clear match jumps with no UI; otherwise the picker opens best-first'
