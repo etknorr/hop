@@ -141,6 +141,7 @@ it_filter_fuzzy() {
 # it_stub_fzf -> a directory holding a recording fzf, put first on PATH only for the runs that ask.
 # - It writes its argv and its stdin to files, then exits 1, which is fzf's own no-match status.
 # - So hop runs its whole real path and then reports no match, with nothing interactive anywhere.
+# - A --filter call is the resolver, not the picker, so it goes to the real fzf and records nothing.
 typeset -g IT_STUBDIR='' IT_FZF_ARGV='' IT_FZF_STDIN=''
 it_stub_fzf() {
 	emulate -L zsh
@@ -158,6 +159,7 @@ it_stub_fzf() {
 		'# - So the cat below inherited the runners stdin, and on anything without EOF it blocked forever.' \
 		'# - Guarded first, before the records are truncated, so a version query cannot erase the rows.' \
 		'case " $* " in *" --version "*) exit 0 ;; esac' \
+		"$(fixture_fzf_passthrough)" \
 		': > "$HOP_FZF_ARGV"' \
 		'for a in "$@"; do printf "%s\n" "$a" >> "$HOP_FZF_ARGV"; done' \
 		'cat > "$HOP_FZF_STDIN"' \

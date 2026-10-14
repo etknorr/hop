@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # hop core suite: the four defects in hop.zsh itself, each with a case that fails if the fix is reverted.
-# - Every fzf here is a STUB that draws nothing and exits with whatever status the test asked for.
-# - The real fzf is never started, not even with --filter, so no case in this file can touch a tty.
+# - Every picker here is a STUB that draws nothing and exits with whatever status the test asked for.
+# - The resolver's --filter calls go to the real fzf, which never opens a terminal, so no case here can touch a tty.
 
 # ---------------------------------------------------------------------------
 # A stub fzf, plus a probe that runs hop() against it.
@@ -9,6 +9,7 @@
 
 # co_stub_fzf -> a directory holding a recording fzf, first on PATH only for the probes that ask.
 # - It records argv and stdin, then exits $HOP_FZF_EXIT, which is how a status ladder gets tested.
+# - A --filter call is the resolver, not the picker, so it goes to the real fzf and records nothing.
 # - `--version` is answered by the same script, and a non-version string makes _hop_fzf_ok pass.
 typeset -g CO_STUBDIR='' CO_ARGV='' CO_STDIN=''
 co_stub_fzf() {
@@ -22,6 +23,7 @@ co_stub_fzf() {
 	print -rl -- \
 		'#!/bin/sh' \
 		'# hop test stub: records the call, draws nothing, exits the status the test picked.' \
+		"$(fixture_fzf_passthrough)" \
 		': > "$HOP_FZF_ARGV"' \
 		'for a in "$@"; do printf "%s\n" "$a" >> "$HOP_FZF_ARGV"; done' \
 		'# The real fzf reads no stdin for --version, and _hop_fzf_ver pipes it none.' \
