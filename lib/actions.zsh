@@ -63,8 +63,11 @@ _hop_act_cd() {
 	_hop_remember "$dir"
 }
 
-# code -r reveals the file's directory in the explorer, so this doubles as "show me where this lives".
-# - Falls back to $VISUAL/$EDITOR rather than hard-failing, since `code` is not on every machine.
+# ctrl-o: open the preview in VS Code, or in $VISUAL/$EDITOR when `code` is not on this machine.
+# - A file gets `code -r`, which opens it in the last-focused window instead of a new one.
+# - `-r` does not reveal anything by itself: the explorer follows only with explorer.autoReveal, inside an open folder.
+# - A directory gets `code -n`, because `code -r <dir>` reloads the focused window onto that folder.
+# - A dir preview is real: a row whose dir holds no previewable file previews the dir itself.
 _hop_act_open() {
 	emulate -L zsh
 	local target=$1
@@ -73,7 +76,11 @@ _hop_act_open() {
 		return 1
 	fi
 	if (( ${+commands[code]} )); then
-		code -r "$target"
+		if [[ -d $target ]]; then
+			code -n "$target"
+		else
+			code -r "$target"
+		fi
 		return $?
 	fi
 	_hop_act_edit "$target"
@@ -93,6 +100,8 @@ _hop_act_edit() {
 	"${cmd[@]}" "$target"
 }
 
+# ctrl-t: the row's dir as a VS Code folder, always in a window of its own.
+# - `-n` because a bare `code <dir>` obeys window.openFoldersInNewWindow, and at `off` it replaces the open workspace.
 _hop_act_folder() {
 	emulate -L zsh
 	local dir=$1
@@ -101,7 +110,7 @@ _hop_act_folder() {
 		return 1
 	fi
 	if (( ${+commands[code]} )); then
-		code "$dir"
+		code -n "$dir"
 		return $?
 	fi
 	_hop_act_edit "$dir"
