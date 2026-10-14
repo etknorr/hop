@@ -676,17 +676,9 @@ hop() {
 		return 2
 	fi
 
-	local targets
-	_hop_dbg "generate root=${root} kinds=${(j:,:)kinds}"
-	targets=$(_hop_generate "$root" "${kinds[@]}")
-	if [[ -z $targets ]]; then
-		print -ru2 -- "hop: no targets in ${root} for kinds: ${(j:,:)kinds}"
-		return 1
-	fi
-
 	# -c narrows every kind to the subtree you are standing in, not just the file kind.
 	# - Enumeration still starts at the repo root, because a kind's bases are repo-root relative.
-	# - Filtering the rows afterwards is what makes one flag work identically for all kinds.
+	# - Filtering the rows afterwards, in _hop_rows, is what makes one flag work identically for all kinds.
 	# - $PWD is LOGICAL while the rows are built from git's PHYSICAL root, so both sides resolve first.
 	# - Unresolved, every row was dropped in any repo under macOS /tmp or a symlinked parent.
 	# - _hop_act_browse fixed this same class with ${1:A}, and its comment names the /tmp case.
@@ -694,29 +686,33 @@ hop() {
 	# - So a directory whose name contains a backslash silently matched nothing at all.
 	if (( here )); then
 		local hdir=${PWD:A} hroot=${root:A}
-		if [[ $hdir != "$hroot" ]]; then
-			_hop_under=$hdir
-			local -a reply
-			_hop_filter_under "$hdir" "${(@f)targets}"
-			targets=${(F)reply}
-			if [[ -z $targets ]]; then
-				print -ru2 -- "hop: no targets under ${PWD} for kinds: ${(j:,:)kinds}"
-				return 1
-			fi
-		fi
+		[[ $hdir != "$hroot" ]] && _hop_under=$hdir
 	fi
 
+	local targets
+	local -i st
+	_hop_dbg "generate root=${root} kinds=${(j:,:)kinds}"
+	targets=$(_hop_rows "$root" "$_hop_under" "${kinds[@]}")
+	st=$?
+	if (( st == 2 )); then
+		print -ru2 -- "hop: no targets under ${PWD} for kinds: ${(j:,:)kinds}"
+		return 1
+	fi
+	if (( st )) || [[ -z $targets ]]; then
+		print -ru2 -- "hop: no targets in ${root} for kinds: ${(j:,:)kinds}"
+		return 1
+	fi
 	local -a rows=("${(f)targets}")
-	targets=$(_hop_rank "$targets")
 
 	# alt-a always reloads with every registered kind, which is the whole point of the binding.
+	# - Both reloads carry the -c dir, so a reload narrows exactly as the list it replaces did.
 	local -a rkinds=("${_HOP_ALL_KINDS[@]}")
 	local reload
-	reload=$(_hop_reload_cmd "$root" "${rkinds[@]}")
+	reload=$(_hop_reload_cmd "$root" "$_hop_under" "${rkinds[@]}")
 
 	# restore is what esc out of the `:` view menu regenerates, so cancelling loses nothing.
 	local restore
-	restore=$(_hop_reload_cmd "$root" "${kinds[@]}")
+	restore=$(_hop_reload_cmd "$root" "$_hop_under" "${kinds[@]}")
 
 	_hop_run "${root:t}  ${#rows} targets  ${(j:,:)kinds}" "$query" "$reload" "$targets" "$root" "$restore" _hop_repo_picker
 }

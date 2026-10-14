@@ -376,7 +376,7 @@ assert_not_contains "$out" 'terragrunt units' 'a user config replaces the preset
 t 'the reload command forwards HOP_CONFIG, so alt-a regenerates with the user kinds'
 out=$(co_run "export HOP_CONFIG=${(q)CO_CFG}
 source \${HOP_HOME}/hop.zsh
-_hop_reload_cmd ${(q)CO_REPO} mine")
+_hop_reload_cmd ${(q)CO_REPO} '' mine")
 assert_contains "$out" "HOP_CONFIG=" 'the child gets no registry unless the config path is named'
 assert_contains "$out" "$CO_CFG"
 
@@ -384,19 +384,114 @@ t 'and running that reload command really does emit the user rows, not unknown k
 out=$(co_run "unset HOP_CONFIG
 HOP_CONFIG=${(q)CO_CFG}
 source \${HOP_HOME}/hop.zsh
-eval \"\$(_hop_reload_cmd ${(q)CO_REPO} mine)\"")
+eval \"\$(_hop_reload_cmd ${(q)CO_REPO} '' mine)\"")
 assert_not_contains "$out" 'unknown kind' 'alt-a and r printed this and then blanked the picker'
 assert_contains "$out" "$CO_REPO/mine/alpha" 'the reload child has to produce the same rows hop did'
 
 t 'the reload child keeps zsh -f, so a reload can never source the user rc files'
 out=$(co_run "source \${HOP_HOME}/hop.zsh
-_hop_reload_cmd ${(q)CO_REPO} mine")
+_hop_reload_cmd ${(q)CO_REPO} '' mine")
 assert_contains "$out" 'zsh -f -c' 'dropping -f would run .zshrc inside every reload'
 
 t 'a HOP_CONFIG assigned AFTER hop.zsh was sourced still reaches the reload child'
 out=$(co_run "HOP_CONFIG=${(q)CO_CFG}
-_hop_reload_cmd ${(q)CO_REPO} mine")
+_hop_reload_cmd ${(q)CO_REPO} '' mine")
 assert_contains "$out" "$CO_CFG" 'the live value is what the child needs, not the one seen at source time'
+
+# ---------------------------------------------------------------------------
+# Every reload goes through _hop_rows, so alt-a, r, esc out of `:` and a kind switch keep -c and the MRU.
+# ---------------------------------------------------------------------------
+# Each reload used to run a bare _hop_generate: enumeration order, every row in the repo.
+# - git lists acct/prod before acct/stage, so a history naming stage is what makes the MRU observable.
+# - co_dirs lives in a file because its tab literals would not survive one more level of quoting.
+typeset CO_STAGE="$CO_REPO/terraform/acct/stage/us-east-1" CO_PROD="$CO_REPO/terraform/acct/prod/us-east-1"
+typeset CO_RHIST CO_RHELP
+fixture_tmpdir reloads
+CO_RHIST="$REPLY/history"
+CO_RHELP="$REPLY/help.zsh"
+print -rl -- "$CO_STAGE" > "$CO_RHIST"
+cat > "$CO_RHELP" <<'EOF'
+# co_dirs -> field 2 of every row on stdin, one per line, in order.
+co_dirs() {
+	emulate -L zsh
+	local l
+	while IFS= read -r l; do
+		l=${l#*$'\t'}
+		print -r -- "${l%%$'\t'*}"
+	done
+}
+EOF
+
+t 'a reload ranks visited dirs first, as the list it replaces was ranked'
+out=$(co_run "source ${(q)CO_RHELP}
+eval \"\$(_hop_reload_cmd ${(q)CO_REPO} '' tg)\" | co_dirs" "HOP_HISTFILE=${CO_RHIST}")
+assert_eq "$CO_STAGE" "${${(f)out}[1]}" 'alt-a and r put the rows back in enumeration order'
+assert_contains "$out" "$CO_PROD" 'with no -c the reload still has every row'
+
+# The same plain-assignment shape as the HOP_CONFIG cases above: an unexported value never reaches a child on its own.
+t 'a HOP_HISTFILE that was never exported still reaches the reload child'
+out=$(co_run "unset HOP_HISTFILE
+HOP_HISTFILE=${(q)CO_RHIST}
+source ${(q)CO_RHELP}
+print -r -- \"attr=\${(t)HOP_HISTFILE}\"
+eval \"\$(_hop_reload_cmd ${(q)CO_REPO} '' tg)\" | co_dirs")
+assert_contains "$out" 'attr=scalar' 'control: the history path has to be unexported here, or this proves nothing'
+assert_eq "$CO_STAGE" "${${(f)out}[2]}" 'the child fell back to its own default history and lost the MRU'
+
+t 'an empty HOP_HISTFILE goes to the child as /dev/null, so a reload cannot turn history back on'
+out=$(co_run "HOP_HISTFILE=''
+_hop_reload_cmd ${(q)CO_REPO} '' tg")
+assert_contains "$out" "HOP_HISTFILE='/dev/null'" 'the child would read the default history file instead'
+
+t 'a reload under -c keeps only the rows under that dir'
+out=$(co_run "source ${(q)CO_RHELP}
+eval \"\$(_hop_reload_cmd ${(q)CO_REPO} ${(q)CO_REPO}/terraform/acct/stage tg dir)\" | co_dirs")
+assert_eq "$CO_STAGE" "$out" 'the reload dropped -c and offered the whole repo, dir rows and all'
+
+t '_hop_rows says which way it came up empty, so hop() can word each case'
+out=$(co_run "_hop_rows ${(q)CO_REPO} '' nosuchfamily 2>/dev/null; print -r -- st=\$?
+_hop_rows ${(q)CO_REPO} ${(q)CO_REPO}/mine tg; print -r -- st=\$?")
+assert_eq $'st=1\nst=2' "$out" '1 is no rows at all, 2 is no rows under the -c dir'
+
+# hop -c builds both reload strings itself, so the end-to-end case reads them back out of the picker's argv.
+# - alt-a is the `alt-a:reload:` bind, and r's is the `r:reload(...)` one NORMAL mode adds.
+t 'hop -c hands its subtree to the alt-a and r reloads it gives the picker'
+co_run "builtin cd -q -- ${(q)CO_STAGE}
+hop -c -k tg" 'HOP_FZF_EXIT=1' >/dev/null 2>&1
+reply=("${(@f)$(cat -- "$CO_ARGV")}")
+typeset CO_ALTA=${${(M)reply:#--bind=alt-a:reload:*}#--bind=alt-a:reload:}
+typeset CO_RBIND=${${${(M)reply:#--bind=r:reload\(*}#--bind=r:reload\(}%\)}
+assert_nonempty "$CO_ALTA" 'control: the picker got no alt-a reload at all'
+assert_nonempty "$CO_RBIND" 'control: the picker got no r reload at all'
+out=$(co_run "source ${(q)CO_RHELP}
+eval ${(q)CO_ALTA} | co_dirs")
+# alt-a reloads every kind, and the file kind adds a row for the unit's own terragrunt.hcl, in the same dir.
+assert_eq "$CO_STAGE" "${(F)${(@u)${(f)out}}}" 'alt-a under hop -c reloaded the whole repo with every kind'
+out=$(co_run "source ${(q)CO_RHELP}
+eval ${(q)CO_RBIND} | co_dirs")
+assert_eq "$CO_STAGE" "$out" 'r under hop -c reloaded the whole repo'
+
+t 'bin/hop-kinds rows ranks visited dirs first, and --under narrows it'
+out=$(co_run "source ${(q)CO_RHELP}
+\${HOP_HOME}/bin/hop-kinds rows ${(q)CO_REPO} tg | co_dirs" "HOP_HISTFILE=${CO_RHIST}")
+assert_eq "$CO_STAGE" "${${(f)out}[1]}" 'switching kinds with : lost the MRU order'
+out=$(co_run "source ${(q)CO_RHELP}
+\${HOP_HOME}/bin/hop-kinds rows ${(q)CO_REPO} --under=${(q)CO_REPO}/terraform/acct/prod tg dir | co_dirs")
+assert_eq "$CO_PROD" "$out" 'switching kinds with : under hop -c offered the whole repo'
+
+# fzf runs a reload through `sh -c`, so the `:` kind switch is run that way too, exactly as built.
+t 'the : kind switch carries the -c dir, and its reload runs under sh as fzf runs it'
+out=$(co_run "typeset -a args
+typeset _hop_vim_prompt _hop_vim_head
+typeset -x HOP_VIM_TO_NORMAL HOP_VIM_HELP_ON HOP_VIM_HELP_OFF HOP_VIM_TO_MENU HOP_VIM_PICK_KIND HOP_VIM_MENU_BACK
+typeset _hop_under=${(q)CO_REPO}/terraform/acct/prod
+_hop_vim_binds prev '' ${(q)CO_REPO} '' ''
+print -r -- \"\$HOP_VIM_PICK_KIND\"")
+typeset CO_PICK=${${out#reload\(}%%\)+change-prompt*}
+assert_contains "$CO_PICK" '--under=' 'control: the kind switch was built without the -c dir'
+out=$(co_run "source ${(q)CO_RHELP}
+sh -c ${(q)${CO_PICK//\{2\}/tg}} | co_dirs")
+assert_eq "$CO_PROD" "$out" 'the kind switch under hop -c offered rows outside the subtree'
 
 # ---------------------------------------------------------------------------
 # The default picker geometry, which the fixture's own pin takes out of every other probe.

@@ -191,7 +191,11 @@ _hop_vim_binds() {
 		kind_act="$HOP_VIM_TO_MENU"
 
 		# {2} is the kind name, because hop-kinds menu puts it in field 2 for exactly this.
-		HOP_VIM_PICK_KIND="reload(${kinds_bin} rows ${(q)root} {2})+change-prompt(> )+change-header(${nh})+${prev_restore}+first"
+		# - hop()'s -c dir rides along as --under, so the view you switch to stays inside it.
+		# - HOP_HISTFILE is named for the reason _hop_reload_cmd gives: an unexported one never reaches the child.
+		local under_arg=''
+		[[ -n ${_hop_under:-} ]] && under_arg=" ${(q):---under=${_hop_under}}"
+		HOP_VIM_PICK_KIND="reload(HOP_HISTFILE=${(q)${HOP_HISTFILE:-/dev/null}} ${kinds_bin} rows ${(q)root}${under_arg} {2})+change-prompt(> )+change-header(${nh})+${prev_restore}+first"
 
 		# Esc out of the menu regenerates the view you came from, so cancelling is lossless.
 		[[ -n $restore ]] && HOP_VIM_MENU_BACK="reload(${restore})+change-prompt(> )+change-header(${nh})+${prev_restore}+first"
@@ -510,22 +514,25 @@ _hop_pick() {
 	return $?
 }
 
-# _hop_reload_cmd <root> <kind...> -> a shell command string that regenerates the list.
+# _hop_reload_cmd <root> <under|''> <kind...> -> a shell command string that regenerates the list.
 # - alt-a's reload runs in a fresh shell, so it re-sources hop.zsh instead of calling a function.
 # - Sourcing hop.zsh and not just providers.zsh is what gives the child the same kind registry.
-# - `zsh -f` skips rc files; the args after the script become $1.. for _hop_generate.
+# - `zsh -f` skips rc files; the args after the script become $1.. for _hop_rows.
 # - `-f` is NOT optional: without it this child would source the user's rc files on every reload.
 # - So every variable the child needs is named here, one at a time, rather than let rc loading back in.
 # - HOP_CONFIG is what decides the child's kind registry, and forwarding it is the whole point.
 # - Passing the LIVE value also covers a HOP_CONFIG assigned after hop.zsh was sourced.
 # - Without it the child fell back to the shipped presets and rejected the user's own kinds.
+# - HOP_HISTFILE is forwarded for the same reason, so the reloaded rows keep the MRU order of the first list.
+# - An empty one goes as /dev/null, because the child's own default would otherwise turn history back on.
 _hop_reload_cmd() {
 	emulate -L zsh
-	local root=$1
-	shift
-	local script='source "$HOP_HOME/hop.zsh"; _hop_generate "$@"'
+	local root=$1 under=$2
+	shift 2
+	local script='source "$HOP_HOME/hop.zsh"; _hop_rows "$@"'
 	local cmd="HOP_HOME=${(qq)HOP_HOME} HOP_CONFIG=${(qq)HOP_CONFIG}"
-	cmd+=" HOP_HOPRC=${(qq)${HOP_HOPRC:-}} zsh -f -c ${(qq)script} hop ${(qq)root}"
+	cmd+=" HOP_HOPRC=${(qq)${HOP_HOPRC:-}} HOP_HISTFILE=${(qq)${HOP_HISTFILE:-/dev/null}}"
+	cmd+=" zsh -f -c ${(qq)script} hop ${(qq)root} ${(qq)under}"
 	local k
 	for k in "$@"; do
 		cmd+=" ${(qq)k}"

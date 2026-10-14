@@ -404,3 +404,23 @@ _hop_generate() {
 	done
 	return 0
 }
+
+# _hop_rows <root> <under|''> <kind...> -> print the rows a list shows: generated, kept under <under>, MRU-ranked.
+# - hop() and every reload child go through this one pipeline, so alt-a, r and esc out of `:` keep -c and the MRU.
+# - Each reload used to run a bare _hop_generate, which put the rows back in enumeration order and dropped -c.
+# - 1 when the kinds produced no row, 2 when no row lies under <under>, so hop() can word each failure.
+_hop_rows() {
+	emulate -L zsh
+	local root=$1 under=$2
+	shift 2
+	local targets
+	targets=$(_hop_generate "$root" "$@")
+	[[ -n $targets ]] || return 1
+	if [[ -n $under ]]; then
+		local -a reply
+		_hop_filter_under "$under" "${(@f)targets}"
+		(( $#reply )) || return 2
+		targets=${(F)reply}
+	fi
+	_hop_rank "$targets"
+}
