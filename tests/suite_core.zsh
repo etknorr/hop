@@ -253,8 +253,60 @@ assert_contains "$out" "$CO_REPO/$CO_BS"
 assert_not_contains "$out" 'acct/prod' 'the filter still has to exclude everything else'
 
 t 'the -c filter no longer forks awk, per the same rule providers.zsh already follows'
-out=$(co_run 'print -r -- ${#${(M)${(f)"$(functions hop)"}:#*awk*}}')
+out=$(co_run 'print -r -- ${#${(M)${(f)"$(functions hop _hop_filter_under)"}:#*awk*}}')
 assert_eq 0 "$out" 'awk -v cannot carry a path safely, so hop() must not use it'
+
+# _hop_filter_under is the -c filter itself, so its edges are pinned directly as well as through hop -c.
+typeset -a CO_UNDER=(
+	$'a\t/r/a\t/r/a/x'
+	''
+	$'ab\t/r/ab\t/r/ab/x'
+	$'deep\t/r/a/b/c\t/r/a/b/c/x\t\e[2ma/b/c/\e[0m'
+	$'bs\t/r/a/we\\ird\t/r/a/we\\ird'
+	$'up\t/r\t/r/README.md'
+)
+t '_hop_filter_under keeps the dir itself and everything beneath it, in order, and nothing beside it'
+out=$(co_run "_hop_filter_under /r/a ${(j: :)${(@qq)CO_UNDER}}"'; print -rl -- "${reply[@]%%$'"'\t'"'*}"')
+assert_eq 'a
+deep
+bs' "$out" '/r/ab is a sibling that merely shares a prefix, and /r is above the dir'
+
+# ---------------------------------------------------------------------------
+# _hop_rank: the MRU float, rewritten on _hop_dirs_of, has to order rows exactly as before.
+# ---------------------------------------------------------------------------
+# The first visit of a dir is its rank, ties keep input order, and an unvisited row never moves.
+# - /gone is a history entry no row names, which is the common case: 27 of 30 real entries were stale.
+typeset CO_HIST
+fixture_tmpdir rank
+CO_HIST="$REPLY/history"
+print -rl -- /r/c /gone /r/b /r/c /r/a > "$CO_HIST"
+typeset -a CO_RANK=(
+	$'A\t/r/a\t/r/a/x'
+	$'B\t/r/b\t/r/b/x'
+	$'C\t/r/c\t/r/c/x'
+	$'B2\t/r/b\t/r/b/y'
+	$'D\t/r/d\t/r/d/x'
+)
+typeset CO_RANK_IN=${(F)CO_RANK}
+
+t '_hop_rank floats visited dirs in history order, stably, and leaves the rest in input order'
+out=$(co_run "HOP_HISTFILE=${(q)CO_HIST} _hop_rank ${(q)CO_RANK_IN}"' | while IFS= read -r l; do print -r -- "${l%%$'"'\t'"'*}"; done')
+assert_eq 'C
+B
+B2
+A
+D' "$out" 'two rows sharing /r/b must both follow /r/c and keep their own order'
+
+t '_hop_rank with no history, or none naming a row, returns the rows byte for byte'
+out=$(co_run "HOP_HISTFILE=/dev/null _hop_rank ${(q)CO_RANK_IN}")
+assert_eq "$CO_RANK_IN" "$out" 'an empty history must not reorder anything'
+print -rl -- /gone /also-gone > "$CO_HIST"
+out=$(co_run "HOP_HISTFILE=${(q)CO_HIST} _hop_rank ${(q)CO_RANK_IN}")
+assert_eq "$CO_RANK_IN" "$out" 'a history of only stale dirs must not reorder anything'
+
+t '_hop_rank reads field 2 through _hop_dirs_of, not per row'
+out=$(co_run 'functions _hop_rank')
+assert_contains "$out" '_hop_dirs_of' 'the per-row extraction cost 51-56ms on 1041 rows'
 
 # ---------------------------------------------------------------------------
 # Item 2: a user's own HOP_CONFIG has to reach the children that re-source hop.zsh.
