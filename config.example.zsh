@@ -9,6 +9,15 @@
 
 hop_preset terragrunt terraform-modules helm serverless puppet backstage dir file
 
+# What a query does, opt-in: each line below is commented out at its default.
+# - HOP_ACTION is what Enter does: cd, open, reveal, cd+open or cd+reveal. `c` and alt-enter always cd.
+# - cd+reveal keeps one VS Code window per repo and expands the explorer to the unit you landed on.
+# - HOP_JUMP is when a clear match skips the picker: auto, unique (one target only) or never.
+# - HOP_CODE is a VS Code-compatible CLI that accepts -r and -n: code, cursor, codium or code-insiders.
+# typeset -g HOP_ACTION=cd
+# typeset -g HOP_JUMP=auto
+# typeset -g HOP_CODE=code
+
 # Overriding a preset: redeclaring a kind replaces it and keeps its place in the `:` menu.
 # - Here terragrunt gains --trim, so a `proj-payments` directory displays as just `payments`.
 hop_kind tg --default \
@@ -60,6 +69,9 @@ hop_kind alerts \
 
 # The escape hatch: a family too irregular to declare gets a function and is still a real kind.
 # - The function takes the repo root and prints rows with _hop_row.
+# - _hop_row <kind> <scope> <env> <region> <name> <dir> <preview> [f] prints all 4 fields, the repo-relative path included.
+# - Pass `f` when the preview file is itself the target and <dir> is only its parent, as for one app per YAML file.
+# - A function printing its own 3-field rows still works, but --doctor names it, and its rows always count as directories.
 # - Enumerate with _hop_ls, never `git ls-files`, so :(glob) and NUL handling come for free.
 _hop_provider_irregular() {
 	emulate -L zsh

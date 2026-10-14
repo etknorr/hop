@@ -8,11 +8,68 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Added
 
+- A query matches the target's path as well as its name.
+  Every row now ends in its path relative to the repo root, shown dimmed, so `hop terraform/acct-sec` and `hop acct-security-tooling-prod/env-prod` match as typed.
+  The absolute path is never searched, so your home directory or a temp-dir suffix can't match a query.
+  On fzf 0.67.0 and later the name column stays frozen while a long path scrolls.
+- A path that exists jumps straight there, before anything is enumerated.
+  `hop terraform/acct-security-tooling-prod` cds in about a millisecond rather than paying for the ~0.3s enumeration first.
+  It ignores case and lands on the on-disk spelling, so `Terraform/ACCT-x` cds to `terraform/acct-x`.
+- A query with a typo, an abbreviation or initials still finds its target, and opens the picker on it rather than jumping.
+  `securty-tooling-prod`, `routemaxter` and `kps` each open with the intended row first, and the header says what the query was read as.
+  None of these jumps, because a typo costs one Enter while a false jump costs a wrong `cd`; a rewrite that only changed separators or case, such as `security_tooling_prod`, is the one exception.
+  A word nothing in the repo explains is never turned into a match, and the suite checks that none of 50 nonsense words jumps.
+- A query can land on a directory that is not itself a row, such as an account or env dir.
+  `hop security-tooling-prod` cds to `terraform/acct-security-tooling-prod/`, because every match is under it and the query names it on whole-word boundaries, and it prints one line saying so.
+  A query that jumped before still jumps to the same place, because a match on the name line alone is checked before this rule.
+- When a query opens the picker, the best matches come first: `acct sec prod` lists the account dir, then its units.
+  The first key you type hands the order back to fzf, and with no terminal hop prints the best three paths along with the match count.
+- `HOP_ACTION` sets what Enter does: `cd` (the default), `open`, `reveal`, `cd+open` or `cd+reveal`.
+  `-o`/`--open`, `-e`/`--reveal`, `--cd` and `--action=MODE` set it for one call, and `-p`/`--pick` always opens the picker.
+  `open` on a directory is `code -n`, and `reveal` on a directory reveals its README or first file, because VS Code can't reveal a folder from the shell.
+  When VS Code is missing or unreachable, over SSH or from a stale `VSCODE_IPC_HOOK_CLI`, each verb says why and falls back to `$EDITOR` or a plain `cd`.
+- `c` in NORMAL and `alt-enter` in SEARCH always `cd`, so a plain `cd` stays one key away when Enter opens or reveals.
+  The legends name Enter's mode, and list `c` and `M-enter` only when the mode isn't `cd`, so the default legend is unchanged.
+- `HOP_JUMP` sets when a query may skip the picker: `auto` (the default), `unique` for one target only as before, or `never`.
+- `HOP_CODE` names the VS Code-compatible CLI to run, such as `cursor` or `codium`.
+- `hop --doctor` shows `HOP_ACTION`, `HOP_JUMP` and `HOP_CODE`, whether VS Code is reachable from this shell and why not, and any `--fn` kind still printing 3-field rows.
+  `--doctor=short` shows the same settings but withholds a custom launcher path.
+- Completions offer `-p`, `--cd`, `-o`, `-e` and `--action=MODE`, and leave out the combinations hop refuses.
+- Outside a repo, a query that matches no workspace is tried against your repos, so `hop configuration` from `~` lands on the repo.
+- CI runs the fzf-sensitive suites on fzf 0.60.3 and 0.67.0 as well as the latest, each from a release tarball whose checksum is verified.
 - A skip that hides lost coverage fails on CI instead, at one site per cause.
   A missing tool is honest on a developer's machine and is coverage vanishing on a CI runner, and nothing could tell you which: `tests/run` reports a skip count, so 7 becoming 8 went unnoticed.
   Counting was the wrong instrument anyway, since one skip line routinely stands in for several suppressed tests: the PyYAML branch emits one skip while suppressing five, so the count moves by 1 where coverage moves by 5.
   `skip_cap` names the vanished test rather than counting it, and exactly one site per cause uses it, because six reds for one absent `fzf` is noise and not signal.
   Five causes are covered: `fzf` absent, `perl` absent, `mkfifo` absent, `git worktree add` failing, and the nested run behind the zero-leak guard exiting non-zero.
+
+### Changed
+
+- Matching ignores case, where it was smart-case before.
+  Under smart-case one capital letter made the whole query case-sensitive, so `Vpc` and `TG vpc` matched nothing at all.
+- Ties between rows that match equally are broken by `begin,chunk` instead of `begin,length`.
+  Once paths are searched every line is a different length, so `length` decided every same-name tie and the visited-first order never got a say.
+  `begin` still puts an exact name ahead of a longer one.
+- Rows have four TAB fields, the fourth being the dimmed repo-relative path, and `_hop_row` takes an optional 8th argument `f` for a file target.
+  An `--fn` provider that prints its own 3-field rows still works: it gets a path derived from its dir, so its rows count as directories, and `--doctor` names it.
+- `ctrl-t` and `O` open the directory with `code -n`, so it always gets a window of its own.
+  A bare `code <dir>` follows `window.openFoldersInNewWindow`, and at `off` it replaced the workspace you had open.
+
+### Fixed
+
+- With no terminal, matching ran against the rows' raw colour codes.
+  The headless path did not pass `--ansi`, so `0m` matched every row there and nothing in the picker, and the two could pick different targets for the same query.
+- With no terminal, a jump such as `hop vpc security-tooling-prod` failed with `hop: not a directory: <display text>` on fzf 0.60.3 and 0.67.0.
+  `fzf --filter` ignores `--accept-nth` on those versions, though 0.73.1 honours it, so the headless path got the whole row back and read the display text as the directory.
+  It now splits whole rows itself on every version, and `--accept-nth` is passed only to the picker.
+- `ctrl-o` and `o` on a row whose preview is a directory ran `code -r <dir>`, which reloads the focused VS Code window onto that folder and replaces what it had open.
+  A directory now gets `code -n`, and `code -r` is only ever handed a file.
+- `alt-a`, `r`, `esc` out of the `:` menu and switching kinds all rebuilt the list from scratch, losing `-c`'s subtree and the visited-first order.
+  They now go through the same pipeline as the first list, so a reload under `hop -c` stays in the subtree.
+- History entries for directories that no longer exist are pruned the next time hop records a visit.
+  They could never rank a row again, and in one real history 27 of 30 entries were gone, 22 of them under a checkout that had moved.
+- Ordering rows by history is about three times faster: 43-48ms against 130-164ms on 1,041 rows.
+  It read each row's directory with a per-row substitution, and now reads them all in one pass.
 
 ## [0.1.2] - 2026-08-27
 

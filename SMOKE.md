@@ -59,6 +59,43 @@ exec zsh && cd "$REPO" && hop
 - [ ] At 80 columns the header shows three short lines and no line wraps or is clipped mid-word.
 - [ ] At 80 columns the name column is still readable, not pushed off by the scope column.
 
+## Resolving a query
+
+`tests/suite_match.zsh` covers which tier and rule every query gets, and what the picker is handed.
+What it cannot see is how the opened picker looks and behaves under real keys:
+
+- [ ] `hop acct sec prod` opens with the account dir first, then its units; the first key you type
+      re-sorts the list into fzf's own order; `esc` into NORMAL then shows every row.
+- [ ] `hop securty-tooling-prod` opens with `no exact match for: ... (showing: ...)` as the header's
+      first line, above the mode legend, and the legend is still intact after `esc` and `/`.
+- [ ] On fzf 0.67.0 or later, type `terraform/acct-sec` so the list scrolls along the path: the name
+      column stays visible. Check an 80-column terminal too.
+- [ ] The dim path column is readable on both a light and a dark theme.
+- [ ] On fzf 0.60.3 (`PATH=<dir holding 0.60.3>:$PATH`), Enter on a row from `hop vpc` cds to it:
+      the picker passes `--no-sort` and `--accept-nth=2,3,4` together there.
+- [ ] `r`, `alt-a` and `:` then a kind, from `hop -c` in a subdirectory, each keep only rows under it.
+
+## The Enter action and VS Code
+
+`tests/suite_actions.zsh` asserts every `code` command line hop runs. Where VS Code puts the result
+is VS Code's business, so these need a real window. Start with `HOP_ACTION` unset unless a line says
+otherwise:
+
+- [ ] `HOP_ACTION=open hop` shows `enter open` in the legend, with `c cd` in NORMAL and `M-enter cd`
+      in SEARCH; at 80 columns both legends re-flow to three lines without clipping.
+- [ ] Under that mode, `c` in NORMAL and `alt-enter` in SEARCH each cd without opening anything.
+- [ ] `hop -o` on a file in a repo that is open in a window other than the focused one: the file
+      lands in that repo's window and the explorer reveals it.
+- [ ] `hop -o` on a file outside every open folder opens it as a loose tab.
+- [ ] `hop -o` on a directory whose folder is already open focuses that window instead of a new one.
+- [ ] `hop -e` on a tg leaf expands the unit in the repo's window, and `hop -e security-tooling-prod`
+      reveals `terragrunt_aws_account.hcl`.
+- [ ] Over SSH with no VS Code attached, and with `VSCODE_IPC_HOOK_CLI` pointing at a dead socket,
+      `hop --cd -o vpc prod` prints one notice and still cds.
+- [ ] In a VS Code Remote-SSH terminal, `hop -o` reaches the window rather than falling back.
+- [ ] With `HOP_ACTION=cd+reveal`, hop a few times: note whether each `code -r` opens a preview
+      tab that the next one replaces, or a tab that stays.
+
 ## Escape hatches
 
 - [ ] `HOP_VIM=0 hop` opens search-first: letters type immediately and there is no mode name.
