@@ -1,10 +1,10 @@
 #!/usr/bin/env zsh
-# hop pty suite: eight things that only a real keystroke on a real terminal can prove.
+# hop pty suite: nine things that only a real keystroke on a real terminal can prove.
 # - Everything checkable from the bind strings belongs in suite_keymap.zsh, not here.
 # - What is left is the part SMOKE.md called unscriptable: a KEY reaching its action.
 # - Each test spawns its own picker, sends one key at a time, and reads fzf's own state file.
 # - Nothing asserts on rendered output: zpty cannot size the window, so the UI never paints usefully.
-# - Eight is the budget. Each test costs about a second, and the rest of the run costs nine.
+# - Nine is the budget. Each test costs about a second, and the rest of the run costs nine.
 
 source "$HOP_TESTS/lib/pty.zsh"
 
@@ -15,6 +15,7 @@ if ! pty_supported; then
 	skip 'pty: canary reaches fzf with one keystroke' 'zsh/zpty is not available'
 	skip 'pty: j moves the cursor in NORMAL' 'zsh/zpty is not available'
 	skip 'pty: o fires the open verb on the focused row' 'zsh/zpty is not available'
+	skip 'pty: o on a dir-preview row opens a new window, never code -r' 'zsh/zpty is not available'
 	skip 'pty: enter cds to the focused row' 'zsh/zpty is not available'
 	skip 'pty: / enters SEARCH and letters type' 'zsh/zpty is not available'
 	skip 'pty: esc returns to NORMAL and clears the query' 'zsh/zpty is not available'
@@ -33,6 +34,7 @@ if (( ! PTY_OK )) && [[ -z ${CI:-} ]]; then
 	skip 'pty: canary reaches fzf with one keystroke' 'no pty capability on this machine'
 	skip 'pty: j moves the cursor in NORMAL' 'no pty capability on this machine'
 	skip 'pty: o fires the open verb on the focused row' 'no pty capability on this machine'
+	skip 'pty: o on a dir-preview row opens a new window, never code -r' 'no pty capability on this machine'
 	skip 'pty: enter cds to the focused row' 'no pty capability on this machine'
 	skip 'pty: / enters SEARCH and letters type' 'no pty capability on this machine'
 	skip 'pty: esc returns to NORMAL and clears the query' 'no pty capability on this machine'
@@ -85,6 +87,23 @@ if pty_open 'hop -k tg'; then
 		assert_eq "code	-r	$(pty_row 2)/terragrunt.hcl" "$(pty_calls code)" \
 			'o did not open the row j had moved to'
 		assert_eq "$HOP_PTY_REPO" "$(pty_pwd)" 'a side-effect verb must leave the shell where it was'
+	else
+		_hop_t_bad 'o never made the picker exit' "$(pty_trace)"
+	fi
+else
+	_hop_t_bad 'pty_open: the picker never reported ready' "$(pty_err)"
+fi
+pty_close
+
+# A dir kind row with no README previews the dir itself, and `code -r <dir>` reloads the focused window onto it.
+# - Row 2 is terraform/, which holds no file at its top, so its preview is the dir.
+t 'pty: o on a dir-preview row opens a new window, never code -r'
+if pty_open 'hop -k dir'; then
+	pty_key_ev j
+	pty_key o
+	if pty_wait_exit; then
+		assert_eq "code	-n	${HOP_PTY_REPO}/terraform" "$(pty_calls code)" \
+			'a dir preview must reach code as -n'
 	else
 		_hop_t_bad 'o never made the picker exit' "$(pty_trace)"
 	fi
