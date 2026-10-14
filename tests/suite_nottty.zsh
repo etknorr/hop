@@ -180,6 +180,55 @@ assert_eq "${NT_REPO1}/terraform/solo/vpc" "$NT_PWD"
 assert_eq '' "$NT_ERR"
 
 # ---------------------------------------------------------------------------
+# --filter prints the whole row on every supported fzf, so the headless path cuts the fields itself.
+# ---------------------------------------------------------------------------
+# On 0.60.3 the cut used to be left to --accept-nth, which --filter ignores there, so the display became the dir.
+# - Both shapes are fed through the real fzf: 3 fields today, and the 4th (rel) field the path column adds.
+# - The floor CI legs run this same case against 0.60.3 and 0.67.0.
+typeset NT_ROW3=$'\e[1mthree\e[0m\t/d3\t/d3/terragrunt.hcl'
+typeset NT_ROW4=$'\e[1mfour\e[0m\t/d4\t/d4/terragrunt.hcl\t\e[2mterraform/d4/\e[0m'
+typeset NT_ROW2=$'\e[1mbare\e[0m\t/d2\t'
+typeset NT_SPLIT=''
+NT_SPLIT=$(hop_probe "
+_hop_dispatch() { print -r -- \"key=\${1:-<enter>} dir=\$2 preview=\$3\" }
+_hop_pick_headless ${(q)NT_ROW3} '' three
+_hop_pick_headless ${(q)NT_ROW4} '' four
+_hop_pick_headless ${(q)NT_ROW2} '' bare")
+
+t 'headless: a 3-field and a 4-field row both dispatch their own dir and preview'
+assert_eq 'key=<enter> dir=/d3 preview=/d3/terragrunt.hcl
+key=<enter> dir=/d4 preview=/d4/terragrunt.hcl
+key=<enter> dir=/d2 preview=/d2' "$NT_SPLIT" 'field 1 is the display, so any other answer cds into the display text'
+
+# The display field is ANSI-coloured, and without --ansi the matcher saw the raw SGR bytes.
+# - Measured on 1041 real rows: `0m` matched every row headless and none in the picker.
+# - The picker already passed --ansi, so the two disagreed on any query touching an escape's letters.
+export NT_REPO4
+typeset NT_ANSI=''
+NT_ANSI=$(hop_probe '
+builtin cd -q -- "$NT_REPO4" || exit 96
+typeset targets q
+typeset -i n
+targets=$(_hop_generate "$PWD" tg)
+for q in 0m "1;36m" "m tg" vpc; do
+	n=$(print -r -- "$targets" | fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" | grep -c .)
+	print -r -- "${q}=${n}"
+done')
+
+t 'the shared matcher never matches the colour codes, only the text the picker shows'
+assert_eq '0m=0
+1;36m=0
+m tg=0
+vpc=4' "$NT_ANSI" 'the escape bytes are invisible in the picker, so matching them made headless disagree with it'
+
+t 'no ctty, a query spelled from colour codes: nothing matched, as the picker would say'
+nt_run 'hop -k tg 0m' "$NT_REPO4"
+assert_eq 0 "$NT_HUNG"
+assert_eq 1 "$NT_ST"
+assert_contains "$NT_ERR" 'nothing matched the query: 0m' 'headless matched the SGR bytes of every row again'
+assert_eq "$NT_REPO4" "$NT_PWD"
+
+# ---------------------------------------------------------------------------
 # The second picker entry point: _hop_ws_picker reaches _hop_pick without going through _hop_run.
 # ---------------------------------------------------------------------------
 # A check covering only _hop_run would be a partial fix, so the workspace level gets its own probe.
@@ -198,7 +247,6 @@ assert_eq "$NT_REPO4" "$NT_PWD"
 # - So "exactly one line out of --filter" is the same condition, given the same matcher flags.
 # - --disabled is the one flag --filter ignores, and _hop_pick adds it ONLY for an empty query.
 # - With an empty query every row matches either way, so that discrepancy is unreachable.
-export NT_REPO4
 t '--filter and --select-1 agree on what "unique" means'
 typeset NT_AGREE
 NT_AGREE=$(hop_probe '
@@ -207,8 +255,7 @@ typeset targets q
 typeset -i n
 targets=$(_hop_generate "$PWD" tg)
 for q in alpha vpc zzzz ""; do
-	n=$(print -r -- "$targets" | fzf --filter="$q" --delimiter=$'"'"'\t'"'"' \
-		--with-nth=1 --accept-nth=2,3 --exact --tiebreak=begin,length | grep -c .)
+	n=$(print -r -- "$targets" | fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" | grep -c .)
 	print -r -- "${q:-<empty>}=${n}"
 done')
 assert_eq 'alpha=1
@@ -226,14 +273,15 @@ zzzz=0
 #   compare equal, and only the literal assertion noticed. That is exactly what happened here.
 # - And equality admitted a SIXTH flag added to one side only, since it pinned the five then present.
 # - So the value is pinned against a literal, and each caller is checked for hardcoding, separately.
-typeset -g NT_MF_PAT='--(delimiter|with-nth|accept-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|smart-case)(=[^ )]*)?'
+# - --accept-nth is absent on purpose: it shapes only the picker's output, so _hop_pick owns it outright.
+typeset -g NT_MF_PAT='--(ansi|delimiter|with-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|smart-case)(=[^ )]*)?'
 
 # The VALUES fzf receives, in the order the array declares them, not the source text that built them.
-# - So --accept-nth='2,3' appears here as its value, and --delimiter carries a REAL tab.
+# - So --delimiter carries a REAL tab.
 typeset -a NT_MF_WANT=(
+	'--ansi'
 	--delimiter=$'\t'
 	'--with-nth=1'
-	'--accept-nth=2,3'
 	'--exact'
 	'--tiebreak=begin,length'
 )
@@ -271,6 +319,18 @@ assert_eq 1 "$NT_MF_PICK_USES" 'without this the picker would run with fzf defau
 
 t 'the headless path passes the shared matcher flags'
 assert_eq 1 "$NT_MF_HEAD_USES" 'without this the headless path would match on fzf defaults instead'
+
+# --filter honours --accept-nth on fzf 0.73.1 and ignores it on 0.60.3 and 0.67.0, so it must never reach --filter.
+# - Handed to both, the floor printed the WHOLE row and the headless path cd'd to the display text.
+typeset NT_AN_ARRAY='' NT_AN_HEAD='' NT_AN_PICK=''
+NT_AN_ARRAY=$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}" | grep -c accept-nth || true')
+NT_AN_HEAD=$(hop_probe 'functions _hop_pick_headless | grep -c -- --accept-nth || true')
+NT_AN_PICK=$(hop_probe 'functions _hop_pick | grep -c -- --accept-nth= || true')
+
+t '--accept-nth is the picker'"'"'s alone, never part of what --filter is handed'
+assert_eq 0 "$NT_AN_ARRAY" 'in the shared array it reaches --filter, which reads it differently per fzf version'
+assert_eq 0 "$NT_AN_HEAD" 'the headless path must split whole rows, not trust fzf to cut them'
+assert_eq 1 "$NT_AN_PICK" 'the picker still needs it, or Enter hands the parent shell the display text'
 
 # ---------------------------------------------------------------------------
 # The predicate itself: a terminal, not stdin, is what it reads.

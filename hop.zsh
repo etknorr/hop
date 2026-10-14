@@ -213,8 +213,10 @@ _hop_tty_ok() {
 }
 
 # _hop_pick_headless <targets> <query> <label> -> resolve with no terminal, or explain and fail.
-# - --filter is the one fzf mode needing no terminal, and it honours --accept-nth.
-# - So a single match arrives in the very same dir<TAB>preview shape _hop_parse_result already reads.
+# - --filter is the one fzf mode needing no terminal, and it prints each matching row WHOLE.
+# - It used to be trusted to honour --accept-nth, which fzf 0.73.1 does and 0.60.3 and 0.67.0 do not.
+# - On those the display landed in dir, and the floor said `hop: not a directory: vpc tg ...`.
+# - So the row is split here by _hop_row_split, and fields 2 and 3 are read by position.
 # - EXACTLY ONE match is dispatched as plain Enter, which is what --select-1 does today.
 # - That keeps `hop <unique-query>` working from a script, and preserving it is why this is a separate path.
 # - A guard in FRONT of the picker runs before uniqueness is known, so it would refuse that working case.
@@ -244,8 +246,9 @@ _hop_pick_headless() {
 	_hop_dbg "headless label=${label} rows=${#rows} query=${query}"
 
 	if (( $#rows == 1 )); then
-		local dir preview
-		IFS=$'\t' read -r dir preview <<< "${rows[1]}"
+		local -a reply
+		_hop_row_split "${rows[1]}"
+		local dir=${reply[2]-} preview=${reply[3]-}
 		[[ -n $preview ]] || preview=$dir
 		# An empty key is plain Enter, the only verb allowed to cd; see _hop_dispatch.
 		_hop_dispatch '' "$dir" "$preview"

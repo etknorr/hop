@@ -339,10 +339,13 @@ _hop_fzf_ok() {
 # - Only match-affecting flags belong here. Presentation and key binds stay local to each caller.
 # - --expect is deliberately absent: repeated --expect has ambiguous merge semantics, so it stays built once.
 # - tests/suite_nottty.zsh pins this array's value AND that neither caller hardcodes a matcher flag.
+# - --ansi is match-affecting: without it fzf matches the raw SGR bytes, so `0m` hit every row headless.
+# - --accept-nth is NOT, and lives in _hop_pick: --filter honours it on fzf 0.73.1 but ignores it on 0.60.3 and 0.67.0.
+# - So --filter is never handed it, always prints whole rows, and the headless path splits them itself.
 typeset -ga _HOP_MATCHER_FLAGS=(
+	--ansi
 	--delimiter=$'\t'
 	--with-nth=1
-	--accept-nth='2,3'
 	# Substring, not subsequence, because the display line is ~90 columns wide.
 	# - Measured on a 1k-row repo: a 3-word fuzzy query hit 13 rows where exact hit exactly 1.
 	# - One service name fuzzy-matched 22 rows and exactly 3; 'eks staging' was 16 versus 6.
@@ -371,8 +374,8 @@ _hop_pick() {
 
 	local -a args
 	args=(
-		--ansi
 		"${_HOP_MATCHER_FLAGS[@]}"
+		--accept-nth='2,3'
 		--no-multi
 		--layout=reverse
 		--info=inline
