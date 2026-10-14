@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # hop's row primitives, plus the few families too irregular to declare with hop_kind.
-# - Every provider emits 3 TAB-separated fields: <display> \t <dir> \t <preview_path>.
+# - Every provider emits 4 TAB-separated fields: <display> \t <dir> \t <preview_path> \t <rel>.
 # - `display` is pre-padded and ANSI-coloured here, because fzf does not align --with-nth fields.
 # - Padding wraps the plain text first, since printf counts an escape sequence's bytes as width.
 # - Most kinds live in presets/ as hop_kind declarations; only an irregular family is code.
@@ -41,7 +41,30 @@ _hop_fit() {
 	fi
 }
 
-# _hop_row <kind> <scope> <env> <region> <name> <dir> <preview>
+# _hop_rel <dir> <preview> [f] -> REPLY is a row's rel field, undimmed.
+# - rel is the target relative to the repo root, and it is the only path the matcher ever searches.
+# - An absolute path is never searched, so a home dir or a mktemp suffix cannot match a query.
+# - The trailing / is the file-vs-dir flag: `f` makes the preview the target, and its rel has none.
+# - The root is _hop_gen_root, a local _hop_generate declares, so no provider signature changes.
+# - With no root, as in the ws and repo pickers, rel is the ~ form of the path.
+_hop_rel() {
+	emulate -L zsh
+	local p=$1 tail=/ root=${_hop_gen_root:-}
+	if [[ -n ${3:-} ]]; then
+		p=$2
+		tail=''
+	fi
+	if [[ -n $root && $p == "$root" ]]; then
+		REPLY=./
+	elif [[ -n $root && $p == "$root"/* ]]; then
+		REPLY="${p#"$root"/}${tail}"
+	else
+		REPLY="${(D)p}${tail}"
+	fi
+}
+
+# _hop_row <kind> <scope> <env> <region> <name> <dir> <preview> [f]
+# - `f` marks a file target, where the preview file is the destination and dir is only its parent.
 _hop_row() {
 	emulate -L zsh
 	local kind=${1:--} scope=${2:--} env=${3:--} region=${4:--} name=${5:--}
@@ -68,11 +91,13 @@ _hop_row() {
 	if [[ $scope == '-' ]]; then cs=$_HOP_C_DIM; else cs=$_HOP_C_SCOPE; fi
 	if [[ $region == '-' ]]; then cr=$_HOP_C_DIM; else cr=$_HOP_C_REGION; fi
 
-	print -r -- "${_HOP_C_NAME}${pn}${_HOP_OFF} ${_HOP_C_KIND}${pk}${_HOP_OFF} ${cs}${ps}${_HOP_OFF} ${ce}${pe}${_HOP_OFF} ${cr}${region}${_HOP_OFF}	${dir}	${preview}"
+	_hop_rel "$dir" "$preview" "${8:-}"
+	print -r -- "${_HOP_C_NAME}${pn}${_HOP_OFF} ${_HOP_C_KIND}${pk}${_HOP_OFF} ${cs}${ps}${_HOP_OFF} ${ce}${pe}${_HOP_OFF} ${cr}${region}${_HOP_OFF}	${dir}	${preview}	${_HOP_C_DIM}${REPLY}${_HOP_OFF}"
 }
 
 # _hop_row_split <row> -> reply is the row's TAB fields, in order.
 # - Quoted with (@) so an empty field keeps its slot, and field 3 stays the preview.
+# - A legacy row has no field 4, and a missing rel means a dir target.
 _hop_row_split() {
 	emulate -L zsh
 	reply=("${(@ps:\t:)1}")
@@ -264,7 +289,7 @@ _hop_provider_helm() {
 		for rel in "${reply[@]}"; do
 			[[ $rel == */tests/* ]] && continue   # a tests dir holds a test suite, not an app
 			name=${${rel#kubernetes/services/}%.yaml}
-			_hop_row helm kubernetes/services '-' '-' "$name" "$root/${rel:h}" "$root/$rel"
+			_hop_row helm kubernetes/services '-' '-' "$name" "$root/${rel:h}" "$root/$rel" f
 		done
 	fi
 
@@ -274,7 +299,7 @@ _hop_provider_helm() {
 	if [[ -d $root/$capps ]] && _hop_ls "$root" ":(glob)$capps/*.yaml"; then
 		for rel in "${reply[@]}"; do
 			name=${${rel:t}%.yaml}
-			_hop_row helm cluster-apps '-' '-' "$name" "$root/$capps" "$root/$rel"
+			_hop_row helm cluster-apps '-' '-' "$name" "$root/$capps" "$root/$rel" f
 		done
 	fi
 }
@@ -300,9 +325,10 @@ _hop_provider_dir() {
 }
 
 # repo — used only by the repo picker, never part of a normal kind list.
+# - No repo root applies here, so rel is the ~ form, which is what `hop -R strava/conf` matches.
 _hop_provider_repo() {
 	emulate -L zsh
-	local r REPLY
+	local r REPLY _hop_gen_root=''
 	for r in "$@"; do
 		[[ -n $r && -d $r ]] || continue
 		_hop_preview_doc "$r"
@@ -310,15 +336,48 @@ _hop_provider_repo() {
 	done
 }
 
+# _hop_rel_upgrade <rows> -> print the rows, each legacy 3-field one with a derived dir rel appended.
+# - A user --fn provider written before rel existed prints 3 fields, and must still match by path.
+# - The (M) filter is one array pass, so output holding no legacy row pays nothing per row.
+# - The rel comes from _hop_rel, so it reads the same _hop_gen_root as every other row.
+_hop_rel_upgrade() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local -a rows=("${(@f)1}")
+	rows=(${rows:#})
+	(( $#rows )) || return 0
+	local tab=$'\t'
+	local three="[^${tab}]#${tab}[^${tab}]#${tab}[^${tab}]#"
+	local -a legacy=("${(@M)rows:#${~three}}")
+	if (( ! $#legacy )); then
+		print -rl -- "${rows[@]}"
+		return 0
+	fi
+	local -a reply
+	local -i i
+	local REPLY
+	for (( i = 1; i <= $#rows; i++ )); do
+		[[ ${rows[i]} == ${~three} ]] || continue
+		_hop_row_split "${rows[i]}"
+		_hop_rel "${reply[2]}" ''
+		rows[i]+=$'\t'"${_HOP_C_DIM}${REPLY}${_HOP_OFF}"
+	done
+	print -rl -- "${rows[@]}"
+}
+
 # _hop_generate <root> <kind...>
 # - A registered kind goes through the DSL engine; a bare _hop_provider_<kind> still works.
 # - That function fallback is what lets an opt-in .hoprc add a kind without touching the registry.
+# - The three DSL shapes always build rows with _hop_row, so only a function provider can be legacy.
+# - Only those are captured for _hop_rel_upgrade, which keeps the bulk of the rows streaming.
 _hop_generate() {
 	emulate -L zsh
 	local IFS=$' \t\n\0'
 	local root=$1
 	shift
 	[[ -n $root ]] || return 1
+	# Dynamically scoped, so _hop_row sees the root without a provider having to pass it on.
+	local _hop_gen_root=$root
 
 	# A repo-root .hoprc may define extra kinds, and is OPT-IN.
 	# - Sourcing it runs arbitrary code from whatever repo you happen to be standing in.
@@ -328,13 +387,17 @@ _hop_generate() {
 		source "$root/.hoprc"
 	fi
 
-	local k
+	local k out
 	for k in "$@"; do
 		[[ -n $k ]] || continue
-		if (( ${+_HOP_K_SHAPE[$k]} )); then
+		if [[ ${_HOP_K_SHAPE[$k]:-} == (dirs|files|marker) ]]; then
 			_hop_dsl_emit "$root" "$k"
+		elif (( ${+_HOP_K_SHAPE[$k]} )); then
+			out=$(_hop_dsl_emit "$root" "$k")
+			_hop_rel_upgrade "$out"
 		elif (( ${+functions[_hop_provider_$k]} )); then
-			"_hop_provider_$k" "$root"
+			out=$("_hop_provider_$k" "$root")
+			_hop_rel_upgrade "$out"
 		else
 			print -ru2 -- "hop: unknown kind: $k"
 		fi

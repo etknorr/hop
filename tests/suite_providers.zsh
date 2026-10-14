@@ -49,11 +49,15 @@ nrows() {
 	REPLY=${#${r:#}}
 }
 
-# rf <row> <n> -> REPLY is the row's n-th TAB field: 1 display, 2 dir, 3 preview.
+# rf <row> <n> -> REPLY is the row's n-th TAB field: 1 display, 2 dir, 3 preview, 4 rel.
+# - rel comes back with its dim stripped, since every assertion about it is about the path.
 rf() {
 	emulate -L zsh
+	setopt local_options extended_glob
 	local -a f=("${(@ps:\t:)1}")
 	REPLY=${f[$2]}
+	(( $2 == 4 )) && REPLY=${REPLY//$'\e['[0-9;]##m/}
+	return 0
 }
 
 # cols_of <row> -> `reply` is the display column's five plain words: name kind scope env region.
@@ -97,7 +101,7 @@ row_for() {
 	return 1
 }
 
-# check_rows <label> <rows> [zero-ok] -> the five invariants every row of every kind must satisfy.
+# check_rows <label> <root> <rows> [zero-ok] -> the invariants every row of every kind must satisfy.
 # - Each complaint list is asserted empty, so a failure names the offending paths, not just a count.
 # - A 0-byte preview gets its own assertion: a 0-byte main.tf renders as a blank pane.
 # - zero-ok is for `file` alone, whose row IS a file, so an empty tracked file is a valid answer.
@@ -105,26 +109,40 @@ row_for() {
 # - Measured: check_rows LABEL '' reported 4 passed and 0 failed, having examined nothing at all.
 # - That mattered in the HOP_TEST_REPO block, whose own comment says row counts are never asserted.
 # - Sabotage: _hop_generate returning immediately left 6 of the 7 real-checkout tests green.
+# - rel is checked against <root> exactly, because the matcher searches it and the trailing / is the target type.
+# - A rel ending in / must name dir itself, and one without must name the preview, which must be a file.
 check_rows() {
 	emulate -L zsh
-	local label=$1
-	local -a rows=(${(f)2})
+	setopt local_options extended_glob
+	local label=$1 root=$2
+	local -a rows=(${(f)3})
 	rows=(${rows:#})
 
 	t "${label}: the row set is not empty"
 	assert_ge $#rows 1 'four invariants over zero rows all pass while examining nothing'
 
-	local r dir prev
+	local r dir prev rel
 	local -a f
-	local -a bad_fields=() bad_dir=() bad_prev=() zero_prev=()
+	local -a bad_fields=() bad_dir=() bad_prev=() zero_prev=() bad_dim=() bad_rel=()
 	for r in "${rows[@]}"; do
 		f=("${(@ps:\t:)r}")
-		if (( $#f != 3 )) || [[ -z ${f[2]} || -z ${f[3]} ]]; then
+		if (( $#f != 4 )) || [[ -z ${f[2]} || -z ${f[3]} || -z ${f[4]} ]]; then
 			bad_fields+=("${#f} fields: ${r}")
 			continue
 		fi
 		dir=${f[2]}
 		prev=${f[3]}
+		[[ ${f[4]} == $'\e[2m'[^$'\e']##$'\e[0m' ]] || bad_dim+=("${f[4]}")
+		rel=${f[4]//$'\e['[0-9;]##m/}
+		if [[ $rel == ./ ]]; then
+			[[ $dir == "$root" ]] || bad_rel+=("${rel} on a row whose dir is ${dir}")
+		elif [[ $rel == /* || $rel == '~'* ]]; then
+			bad_rel+=("${rel} is not relative")
+		elif [[ $rel == */ ]]; then
+			[[ "$root/${rel%/}" == "$dir" ]] || bad_rel+=("dir target ${rel} does not name ${dir}")
+		else
+			[[ "$root/$rel" == "$prev" && -f $prev ]] || bad_rel+=("file target ${rel} does not name ${prev}")
+		fi
 		[[ -d $dir ]] || bad_dir+=("$dir")
 		if [[ -d $prev ]]; then
 			continue
@@ -135,8 +153,14 @@ check_rows() {
 		fi
 	done
 
-	t "${label}: every row has exactly 3 non-empty tab-separated fields"
+	t "${label}: every row has exactly 4 non-empty tab-separated fields"
 	assert_empty "${(pj:\n:)bad_fields}"
+
+	t "${label}: every rel field is wrapped in dim and nothing else"
+	assert_empty "${(pj:\n:)bad_dim}"
+
+	t "${label}: every rel is root-relative and names the target, a trailing / exactly for a dir"
+	assert_empty "${(pj:\n:)bad_rel}"
 
 	t "${label}: every dir field exists on disk"
 	assert_empty "${(pj:\n:)bad_dir}"
@@ -144,7 +168,7 @@ check_rows() {
 	t "${label}: every preview field is an existing file or directory"
 	assert_empty "${(pj:\n:)bad_prev}"
 
-	if [[ ${3:-} == 'zero-ok' ]]; then
+	if [[ ${4:-} == 'zero-ok' ]]; then
 		skip "${label}: no preview resolves to a zero-byte file" 'an empty tracked file is a valid file target'
 	else
 		t "${label}: no preview resolves to a zero-byte file"
@@ -315,9 +339,9 @@ for k in "${SHIPPED[@]}"; do
 	t "${k}: emits the expected number of rows from the fixture"
 	assert_eq ${WANT_ROWS[$k]} $REPLY
 	if [[ $k == file ]]; then
-		check_rows "$k" "${ROWS[$k]}" zero-ok
+		check_rows "$k" "$REPO" "${ROWS[$k]}" zero-ok
 	else
-		check_rows "$k" "${ROWS[$k]}"
+		check_rows "$k" "$REPO" "${ROWS[$k]}"
 	fi
 	gen_err "$REPO" "$k"
 	t "${k}: emits zero stderr bytes from the fixture"
@@ -348,6 +372,11 @@ t 'tg: the row still carries the FULL path, so clipping is display-only'
 row_for "$tg" network
 rf "$REPLY" 2
 assert_eq "$REPO/terraform/platform/production/us-west-2/network" "$REPLY"
+
+t 'tg: a unit is a dir target, so its rel is the repo-relative dir with a trailing /'
+row_for "$tg" network
+rf "$REPLY" 4
+assert_eq 'terraform/platform/production/us-west-2/network/' "$REPLY"
 
 t 'tg: the two-segment layout renders env and region as -'
 row_for "$tg" dns
@@ -423,6 +452,16 @@ row_for "$helm" 'group/app'
 rf "$REPLY" 3
 assert_eq "$REPO/kubernetes/services/group/app.yaml" "$REPLY"
 
+t 'helm: an app file is a file target, so its rel is the file with no trailing /'
+row_for "$helm" 'group/app'
+rf "$REPLY" 4
+assert_eq 'kubernetes/services/group/app.yaml' "$REPLY" 'the cd target is the group dir, but the app is the file'
+
+t 'helm: a Chart.yaml chart stays a dir target'
+row_for "$helm" mychart
+rf "$REPLY" 4
+assert_eq 'kubernetes/charts/mychart/' "$REPLY"
+
 t 'helm: a tests/ dir under the app family is not an app'
 assert_not_contains "$helm" 'group/tests'
 
@@ -438,6 +477,11 @@ row_for "$helm" frontdoor
 assert_nonempty "$REPLY" 'no row named frontdoor'
 rf "$REPLY" 3
 assert_eq "$REPO/cluster-apps/charts/cluster-apps/templates/frontdoor.yaml" "$REPLY"
+
+t 'helm: a cluster-apps template is a file target'
+row_for "$helm" frontdoor
+rf "$REPLY" 4
+assert_eq 'cluster-apps/charts/cluster-apps/templates/frontdoor.yaml' "$REPLY"
 
 # ---------------------------------------------------------------------------
 # serverless and puppet, both plain --dirs kinds with their own preview chains.
@@ -485,6 +529,11 @@ row_for "$backstage" real-name
 rf "$REPLY" 3
 assert_eq "$REPO/backstage/comp-a.yaml" "$REPLY"
 
+t 'backstage: a --files row is a file target, so rel is the file itself'
+row_for "$backstage" real-name
+rf "$REPLY" 4
+assert_eq 'backstage/comp-a.yaml' "$REPLY"
+
 t 'backstage: --scope-literal puts the same scope on every row'
 row_for "$backstage" real-name
 cols_of "$REPLY"
@@ -503,6 +552,10 @@ rf "$firstrow" 2
 assert_eq "$REPO" "$REPLY"
 rf "$firstrow" 3
 assert_eq "$REPO/README.md" "$REPLY"
+
+t 'dir: the root row has rel ./, so it is reachable and still a dir target'
+rf "$firstrow" 4
+assert_eq './' "$REPLY"
 
 t 'dir: build output and scratch space are not destinations'
 names_of "$dirrows"
@@ -535,6 +588,9 @@ t 'file: a root-level file has the repo root as its dir'
 row_for "$filerows" 'README.md'
 rf "$REPLY" 2
 assert_eq "$REPO" "$REPLY"
+row_for "$filerows" 'README.md'
+rf "$REPLY" 4
+assert_eq 'README.md' "$REPLY" 'a root-level file rel has no ./ and no trailing /'
 
 t 'file: even a 0-byte tracked file is offered, because the question is "which file"'
 assert_contains "$filerows" "$REPO/kubernetes/values/blankvals/values.yaml"
@@ -656,27 +712,94 @@ typeset RF_EMPTY=$'disp\t\t/p\t'
 out=$(hop_probe "_hop_row_split ${(q)RF_EMPTY}"'; print -r -- "${#reply}|${(j:|:)reply}"')
 assert_eq '4|disp||/p|' "$out" 'a dropped empty field shifts the preview into the dir slot'
 
-t '_hop_row_split reads a real _hop_row as display, dir, preview'
+t '_hop_row_split reads a real _hop_row as display, dir, preview, rel'
 out=$(hop_probe '_hop_row_split "$(_hop_row tg acct prod us-east-1 vpc /r/vpc /r/vpc/main.tf)"; print -r -- "${#reply}|${reply[2]}|${reply[3]}"')
-assert_eq '3|/r/vpc|/r/vpc/main.tf' "$out"
+assert_eq '4|/r/vpc|/r/vpc/main.tf' "$out"
 
 # Index-aligned is the contract, because _hop_rank and _hop_filter_under read rows[i] beside dirs[i].
 t '_hop_dirs_of returns field 2 of every row, one per row, even where a row is empty'
 out=$(hop_probe "_hop_dirs_of ${(j: :)${(@qq)RF_ROWS}}"'; print -r -- "${#reply}|${(j:|:)reply}"')
 assert_eq '5|/a||/c|/d|/e' "$out" 'a dropped empty result misaligns every row after it'
 
-t '_hop_dirs_of agrees with the per-row extraction it replaced'
+t '_hop_dirs_of agrees with _hop_row_split on real 4-field rows'
 out=$(hop_probe '
 typeset -a rows want reply
 typeset r
 rows=("${(@f)$(_hop_row tg a prod - one "/r/a b/one" /r/one/x.tf; _hop_row tg b - - two /r/two; _hop_row dir - - - three "/r/we\ird")}")
 for r in "${rows[@]}"; do
-	r=${r#*$'"'\t'"'}
-	want+=("${r%%$'"'\t'"'*}")
+	_hop_row_split "$r"
+	want+=("${reply[2]}")
 done
 _hop_dirs_of "${rows[@]}"
 [[ "${(j:|:)reply}" == "${(j:|:)want}" ]] && print -r -- "same ${#reply}: ${(j:|:)reply}"')
 assert_eq 'same 3: /r/a b/one|/r/two|/r/we\ird' "$out"
+
+# ---------------------------------------------------------------------------
+# rel, the 4th field: the repo-relative target that the path column searches.
+# ---------------------------------------------------------------------------
+# _hop_gen_root is how a row learns its root, so these set it exactly as _hop_generate would.
+t '_hop_row: rel is the dir relative to the root, dimmed, with a trailing / for a dir target'
+out=$(hop_probe 'setopt extended_glob
+typeset _hop_gen_root=/r
+_hop_row_split "$(_hop_row tg a prod - vpc /r/t/vpc /r/t/vpc/main.tf)"
+print -rn -- "${reply[4]}"')
+assert_eq $'\e[2mt/vpc/\e[0m' "$out"
+
+t '_hop_row: f makes the preview the target, so rel is that file with no trailing /'
+out=$(hop_probe 'setopt extended_glob
+typeset _hop_gen_root=/r
+_hop_row_split "$(_hop_row helm k - - grafana /r/k/mon /r/k/mon/grafana.yaml f)"
+print -r -- "${reply[2]}|${reply[3]}|${reply[4]//$'"'\e['"'[0-9;]#m/}"')
+assert_eq '/r/k/mon|/r/k/mon/grafana.yaml|k/mon/grafana.yaml' "$out" 'the cd target stays the parent dir'
+
+t '_hop_row: the root itself is ./, and a dir that merely shares the prefix is not under it'
+out=$(hop_probe 'setopt extended_glob
+typeset _hop_gen_root=/r
+typeset -a rels
+_hop_row_split "$(_hop_row dir - - - "<root>" /r /r/README.md)"; rels+=("${reply[4]//$'"'\e['"'[0-9;]#m/}")
+_hop_row_split "$(_hop_row dir - - - rx /rx /rx)"; rels+=("${reply[4]//$'"'\e['"'[0-9;]#m/}")
+print -r -- "${(j:|:)rels}"')
+assert_eq './|/rx/' "$out" '/rx is not inside /r, so it has no root-relative form'
+
+t '_hop_row: with no root, rel is the ~ form, as the ws and repo pickers need'
+out=$(hop_probe 'setopt extended_glob
+HOME=/h
+_hop_row_split "$(_hop_row repo - - - conf /h/strava/conf /h/strava/conf/README.md)"
+print -r -- "${reply[4]//$'"'\e['"'[0-9;]#m/}"')
+assert_eq '~/strava/conf/' "$out" 'an absolute rel would let a home dir component match every query'
+
+t '_hop_provider_repo: rel is the ~ form even inside a generate, so -R matches by it'
+typeset RP_DIR=$REPO
+out=$(hop_probe "setopt extended_glob
+HOME=${(q)RP_DIR:h}"'
+typeset _hop_gen_root='"${(q)RP_DIR}"'
+_hop_row_split "$(_hop_provider_repo '"${(q)RP_DIR}"')"
+print -r -- "${reply[4]//$'"'\e['"'[0-9;]#m/}"')
+assert_eq "~/${RP_DIR:t}/" "$out" 'a repo row is never relative to some other root'
+
+# A user --fn provider written before rel existed still prints 3 fields, and must keep working.
+typeset LEGACY_FN='_hop_provider_old() {
+	print -r -- $'"'"'old\t'"'"'"$1/a/b"$'"'"'\t'"'"'"$1/a/b/README.md"
+	print -r -- $'"'"'oldroot\t'"'"'"$1"$'"'"'\t'"'"'"$1"
+	_hop_row new - - - fresh "$1/c" "$1/c/x.yaml" f
+}'
+
+t '_hop_generate appends a derived dir rel to a legacy 3-field row, and leaves a 4-field one alone'
+out=$(hop_probe "setopt extended_glob
+${LEGACY_FN}
+_hop_generate ${(q)REPO} old"' | while IFS= read -r r; do _hop_row_split "$r"; print -r -- "${#reply}|${reply[4]//$'"'\e['"'[0-9;]#m/}"; done')
+assert_eq '4|a/b/
+4|./
+4|c/x.yaml' "$out" 'a 3-field row has no path column, so a path query could never reach it'
+
+t 'a registered --fn kind gets the same legacy upgrade as a bare provider'
+fixture_config "${LEGACY_FN}" 'hop_kind oldfn --fn _hop_provider_old --desc "legacy rows"'
+out=$(hop_probe "setopt extended_glob
+_hop_generate ${(q)REPO} oldfn"' | while IFS= read -r r; do _hop_row_split "$r"; print -r -- "${#reply}|${reply[4]//$'"'\e['"'[0-9;]#m/}"; done')
+fixture_config_reset
+assert_eq '4|a/b/
+4|./
+4|c/x.yaml' "$out"
 
 # ---------------------------------------------------------------------------
 # A real checkout, only when one is named. No path here may be hardcoded.
@@ -699,7 +822,7 @@ if [[ -n $TESTREPO && -d $TESTREPO/.git ]]; then
 
 	# The row contract on real data, which is where the 0-byte preview turned up in the first place.
 	# - file is left out on purpose: tens of thousands of stat calls buys nothing the others miss.
-	check_rows 'real checkout' "$(gen "$TESTREPO" tg mod helm serverless puppet backstage dir)"
+	check_rows 'real checkout' "$TESTREPO" "$(gen "$TESTREPO" tg mod helm serverless puppet backstage dir)"
 
 	t 'real checkout: every row points inside the repo it was asked about'
 	rows=$(gen "$TESTREPO" tg mod helm serverless puppet backstage dir)
@@ -708,7 +831,8 @@ if [[ -n $TESTREPO && -d $TESTREPO/.git ]]; then
 	typeset bad='' rowdir r
 	for r in ${(f)rows}; do
 		[[ -n $r ]] || continue
-		rowdir=${${r#*$'\t'}%$'\t'*}
+		rf "$r" 2
+		rowdir=$REPLY
 		[[ $rowdir == $TESTREPO || $rowdir == $TESTREPO/* ]] || bad=$rowdir
 	done
 	assert_empty "$bad" 'a row escaped the repo root it was generated from'

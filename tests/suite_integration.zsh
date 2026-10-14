@@ -46,14 +46,15 @@ it_count() {
 	print -r -- $#l
 }
 
-# it_dirs <rows> -> the dir field of every row, which is field 2 of the three.
+# it_dirs <rows> -> the dir field of every row, which is field 2 of the four.
 it_dirs() {
 	emulate -L zsh
-	local -a out
+	local -a out f
 	local row
 	for row in "${(@f)1}"; do
 		[[ -n $row ]] || continue
-		out+=("${${row#*$'\t'}%$'\t'*}")
+		f=("${(@ps:\t:)row}")
+		out+=("${f[2]-}")
 	done
 	print -rl -- "${out[@]}"
 }

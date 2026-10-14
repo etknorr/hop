@@ -78,11 +78,12 @@ ws_entry() {
 # ws_dirs <rows> -> the second TAB field of every row, which is the directory hop would cd to.
 ws_dirs() {
 	emulate -L zsh
-	local -a out=()
+	local -a out=() f
 	local row
 	for row in "${(@f)1}"; do
 		[[ -n $row ]] || continue
-		out+=("${${row#*$'\t'}%$'\t'*}")
+		f=("${(@ps:\t:)row}")
+		out+=("${f[2]-}")
 	done
 	print -rl -- "${out[@]}"
 }
@@ -598,6 +599,11 @@ ws_cfg homerow "inh = ~/inhome"$'\n'
 ws_run "HOP_WORKSPACES_FILE=${REPLY}" "HOME=${WS_HOME}" -- '_hop_provider_ws'
 assert_contains "$(ws_plain "$WS_OUT")" '~/inhome'
 assert_eq "$WS_HOME/inhome" "$(ws_dirs "$WS_OUT")" 'the cd target stays absolute'
+
+t 'a workspace row has the ~ form as its rel, so the path column never searches $HOME itself'
+typeset -a WS_F=("${(@ps:\t:)WS_OUT}")
+assert_eq 4 ${#WS_F} 'a workspace row is a 4-field row like every other'
+assert_eq '~/inhome/' "$(ws_plain "${WS_F[4]-}")" 'no repo root applies, so rel is the ~ path with a trailing /'
 
 t 'no workspaces means no rows, and still exits 0'
 ws_cfg emptyprovider ''
