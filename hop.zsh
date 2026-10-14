@@ -209,7 +209,7 @@ _hop_filter_under() {
 # - The only place fzf's exit status is interpreted, and EVERY picker has to route through it.
 # - 130 is a user cancel and must stay silent, so "stop" and "failed" are not the same answer.
 # - _hop_st is the status the CALLER returns when this says stop, since cancel stops but succeeds.
-# - The caller declares it `local`, exactly as _hop_run does for _hop_parse_result's three fields.
+# - The caller declares it `local`, exactly as _hop_run does for _hop_parse_result's fields.
 # - _hop_ws_picker used to skip this ladder, so a too-old fzf there looked like pressing esc.
 # - Also the one HOP_DEBUG line EVERY pick passes through, whether or not a dispatch follows.
 # - _hop_dispatch's line was the only one, so a no-match logged nothing and --doctor showed nothing.
@@ -301,12 +301,12 @@ _hop_pick_headless() {
 
 # _hop_run <label> <query> <reload> <targets> [root] [restore]
 # - fzf's status is read by _hop_fzf_status, which this shares with _hop_ws_picker.
-# - _hop_key/_hop_dir/_hop_preview are local here so nothing leaks into the interactive shell.
+# - _hop_key/_hop_dir/_hop_preview/_hop_rel are local here so nothing leaks into the interactive shell.
 # - root is passed through only so the modal `:` kind picker can re-enumerate; '' disables it.
 _hop_run() {
 	emulate -L zsh
 	local label=$1 query=$2 reload=$3 targets=$4 root=${5:-} restore=${6:-} up=${7:-}
-	local _hop_key _hop_dir _hop_preview _hop_st
+	local _hop_key _hop_dir _hop_preview _hop_rel _hop_st
 	local header out st
 	local -a trows=("${(f)targets}")
 	header=$(_hop_header "$reload")
@@ -334,7 +334,7 @@ _hop_run() {
 _hop_ws_picker() {
 	emulate -L zsh
 	local query=${1:-} targets out st
-	local _hop_key _hop_dir _hop_preview _hop_st
+	local _hop_key _hop_dir _hop_preview _hop_rel _hop_st
 	targets=$(_hop_provider_ws)
 	if [[ -z $targets ]]; then
 		print -ru2 -- "hop: no workspaces configured (edit ${HOP_WORKSPACES_FILE})"

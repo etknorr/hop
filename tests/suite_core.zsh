@@ -119,10 +119,27 @@ assert_eq 0 "$out" 'a picker with its own copy of the message has forked the lad
 out=$(co_run 'whence -w _hop_fzf_status')
 assert_contains "$out" 'function' 'the shared helper has to exist for either picker to use it'
 
-t '_hop_ws_picker leaves no _hop_key or _hop_st behind in the calling shell'
-out=$(co_run 'hop -w >/dev/null 2>&1; print -r -- "key=${_hop_key-unset} st=${_hop_st-unset}"' \
+t '_hop_ws_picker leaves no _hop_key, _hop_rel or _hop_st behind in the calling shell'
+out=$(co_run 'hop -w >/dev/null 2>&1; print -r -- "key=${_hop_key-unset} rel=${_hop_rel-unset} st=${_hop_st-unset}"' \
 	"HOP_WORKSPACES=${CO_WS}" 'HOP_FZF_EXIT=130')
-assert_eq 'key=unset st=unset' "$out" 'the picker must not leak state into the interactive shell'
+assert_eq 'key=unset rel=unset st=unset' "$out" 'the picker must not leak state into the interactive shell'
+
+# The picker's last line is --accept-nth=2,3,4: dir, preview and rel, rel still dimmed.
+typeset CO_PR_PROBE='typeset _hop_key _hop_dir _hop_preview _hop_rel
+_hop_parse_result "$1"
+print -r -- "key=${_hop_key:-<enter>} dir=${_hop_dir} preview=${_hop_preview} rel=${_hop_rel}"'
+typeset CO_PR_OUT=$'\n/r/t/vpc\t/r/t/vpc/main.tf\t\e[2mt/vpc/\e[0m'
+t '_hop_parse_result reads dir, preview and rel, and strips the dim from rel'
+out=$(hop_probe "set -- ${(q)CO_PR_OUT}
+${CO_PR_PROBE}")
+assert_eq 'key=<enter> dir=/r/t/vpc preview=/r/t/vpc/main.tf rel=t/vpc/' "$out"
+
+# `IFS=$'\t' read` merges consecutive tabs, so an empty preview would have taken the rel's value.
+typeset CO_PR_EMPTY=$'\nctrl-o\n/r/t/vpc\t\tt/vpc/'
+t '_hop_parse_result keeps an empty preview empty, so it falls back to dir and rel stays rel'
+out=$(hop_probe "set -- ${(q)CO_PR_EMPTY}
+${CO_PR_PROBE}")
+assert_eq 'key=ctrl-o dir=/r/t/vpc preview=/r/t/vpc rel=t/vpc/' "$out" 'the rel landed in the preview slot'
 
 # ---------------------------------------------------------------------------
 # Item 7: HOP_DEBUG=1 has to log the failures people actually file bugs about.

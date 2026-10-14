@@ -345,17 +345,25 @@ _hop_fzf_ok() {
 typeset -ga _HOP_MATCHER_FLAGS=(
 	--ansi
 	--delimiter=$'\t'
-	--with-nth=1
+	# Field 4 is the repo-relative path, so `terraform/acct-sec` matches as typed.
+	# - It has to be shown to be searched: --nth indexes the --with-nth output, on 0.60.3 and 0.73.1 alike.
+	# - The absolute dir in field 2 stays out, so a home dir or a mktemp suffix never matches.
+	--with-nth=1,4
 	# Substring, not subsequence, because the display line is ~90 columns wide.
 	# - Measured on a 1k-row repo: a 3-word fuzzy query hit 13 rows where exact hit exactly 1.
 	# - One service name fuzzy-matched 22 rows and exactly 3; 'eks staging' was 16 versus 6.
 	# - fzf's ' prefix still opts one term back into fuzzy, so nothing is actually lost.
 	--exact
-	--tiebreak=begin,length
+	# Case-insensitive rather than smart-case: under smart-case `Vpc` and `TG vpc` matched nothing.
+	-i
+	# begin keeps the exact-name preference, and chunk replaces length.
+	# - The path column makes line length vary, so length was deciding same-name ties the MRU order should.
+	# - chunk dates from fzf 0.32, so the 0.60.3 floor accepts it.
+	--tiebreak=begin,chunk
 )
 
 # _hop_pick <label> <header> [query] [reload] [root] [drill] [restore] [up]  <targets on stdin
-# - Emits the key line (empty for plain Enter) and then dir<TAB>preview.
+# - Emits the key line (empty for plain Enter) and then dir<TAB>preview<TAB>rel.
 # - Every verb rides --expect or print(), never become(), since only the parent shell can cd.
 # - --preview must name a real executable: fzf spawns it in a fresh $SHELL -c with no functions.
 # - No --exit-0: a typo'd query should open fzf so it can be fixed, not exit 1 with an error.
@@ -375,7 +383,7 @@ _hop_pick() {
 	local -a args
 	args=(
 		"${_HOP_MATCHER_FLAGS[@]}"
-		--accept-nth='2,3'
+		--accept-nth='2,3,4'
 		--no-multi
 		--layout=reverse
 		--info=inline
@@ -481,16 +489,19 @@ _hop_reload_cmd() {
 	print -r -- "$cmd"
 }
 
-# _hop_parse_result <fzf-output> -> fills _hop_key, _hop_dir, _hop_preview.
-# - Those three are `local` in _hop_run; zsh's dynamic scoping makes them writable here.
+# _hop_parse_result <fzf-output> -> fills _hop_key, _hop_dir, _hop_preview, _hop_rel.
+# - Those four are `local` in _hop_run; zsh's dynamic scoping makes them writable here.
 # - Assigning rather than `typeset -g` keeps hop from leaving state in the interactive shell.
 # - The LAST line is always the --accept-nth fields; the lines before it are key lines.
 # - A NORMAL-mode letter verb produces two of those, because --expect emits its own empty line.
 # - So the real key is the first non-empty line, which also covers the plain two-line case.
+# - The fields are split by _hop_row_split, because `IFS=$'\t' read` merges an empty preview into the rel.
+# - rel arrives dimmed in the row, so its SGR is stripped whether or not fzf already did.
 _hop_parse_result() {
 	emulate -L zsh
+	setopt local_options extended_glob
 	local out=$1
-	_hop_key='' _hop_dir='' _hop_preview=''
+	_hop_key='' _hop_dir='' _hop_preview='' _hop_rel=''
 	local -a lines=("${(@f)out}")
 	(( $#lines )) || return 1
 	local l
@@ -500,7 +511,10 @@ _hop_parse_result() {
 			break
 		fi
 	done
-	IFS=$'\t' read -r _hop_dir _hop_preview <<< "${lines[-1]}"
+	local -a reply
+	_hop_row_split "${lines[-1]}"
+	_hop_dir=${reply[1]-} _hop_preview=${reply[2]-} _hop_rel=${reply[3]-}
+	_hop_rel=${_hop_rel//$'\e['[0-9;]#m/}
 	[[ -n $_hop_preview ]] || _hop_preview=$_hop_dir
 	[[ -n $_hop_dir ]]
 }

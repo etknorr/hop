@@ -203,6 +203,8 @@ key=<enter> dir=/d2 preview=/d2' "$NT_SPLIT" 'field 1 is the display, so any oth
 # The display field is ANSI-coloured, and without --ansi the matcher saw the raw SGR bytes.
 # - Measured on 1041 real rows: `0m` matched every row headless and none in the picker.
 # - The picker already passed --ansi, so the two disagreed on any query touching an escape's letters.
+# - The rel field is wrapped in dim, so `2mterraform` exists only in the raw bytes before every rel.
+# - `m tg` is no longer a colour-code query: the path column holds `terraform/`, which contains an m.
 export NT_REPO4
 typeset NT_ANSI=''
 NT_ANSI=$(hop_probe '
@@ -210,7 +212,7 @@ builtin cd -q -- "$NT_REPO4" || exit 96
 typeset targets q
 typeset -i n
 targets=$(_hop_generate "$PWD" tg)
-for q in 0m "1;36m" "m tg" vpc; do
+for q in 0m "1;36m" 2mterraform vpc; do
 	n=$(print -r -- "$targets" | fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" | grep -c .)
 	print -r -- "${q}=${n}"
 done')
@@ -218,7 +220,7 @@ done')
 t 'the shared matcher never matches the colour codes, only the text the picker shows'
 assert_eq '0m=0
 1;36m=0
-m tg=0
+2mterraform=0
 vpc=4' "$NT_ANSI" 'the escape bytes are invisible in the picker, so matching them made headless disagree with it'
 
 t 'no ctty, a query spelled from colour codes: nothing matched, as the picker would say'
@@ -274,16 +276,20 @@ zzzz=0
 # - And equality admitted a SIXTH flag added to one side only, since it pinned the five then present.
 # - So the value is pinned against a literal, and each caller is checked for hardcoding, separately.
 # - --accept-nth is absent on purpose: it shapes only the picker's output, so _hop_pick owns it outright.
-typeset -g NT_MF_PAT='--(ansi|delimiter|with-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|smart-case)(=[^ )]*)?'
+# - -i and +i are single-dash, so they are matched as whole words.
+# - `local -i` is the same word, so NT_MF_DECL drops declaration lines before a function body is counted.
+typeset -g NT_MF_DECL='^[[:space:]]*(local|typeset|integer|declare|readonly)[[:space:]]'
+typeset -g NT_MF_PAT='--(ansi|delimiter|with-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|smart-case|ignore-case|no-ignore-case)(=[^ )]*)?|(^|[[:space:](])[-+]i([[:space:])]|$)'
 
 # The VALUES fzf receives, in the order the array declares them, not the source text that built them.
 # - So --delimiter carries a REAL tab.
 typeset -a NT_MF_WANT=(
 	'--ansi'
 	--delimiter=$'\t'
-	'--with-nth=1'
+	'--with-nth=1,4'
 	'--exact'
-	'--tiebreak=begin,length'
+	'-i'
+	'--tiebreak=begin,chunk'
 )
 typeset NT_MF_ACTUAL=''
 NT_MF_ACTUAL=$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}"')
@@ -296,12 +302,12 @@ assert_eq "${(F)NT_MF_WANT}" "$NT_MF_ACTUAL" 'the matcher changed, so every clai
 # - Counted, not matched: a count of 0 cannot be satisfied by a pattern that matches nothing anywhere,
 #   because the assertions below prove the same pattern still finds the flags in the array itself.
 typeset NT_MF_PICK_HARD='' NT_MF_HEAD_HARD='' NT_MF_PAT_ALIVE=''
-NT_MF_PICK_HARD=$(hop_probe "functions _hop_pick | grep -cE -- ${(q)NT_MF_PAT} || true")
-NT_MF_HEAD_HARD=$(hop_probe "functions _hop_pick_headless | grep -cE -- ${(q)NT_MF_PAT} || true")
+NT_MF_PICK_HARD=$(hop_probe "functions _hop_pick | grep -vE -- ${(q)NT_MF_DECL} | grep -cE -- ${(q)NT_MF_PAT} || true")
+NT_MF_HEAD_HARD=$(hop_probe "functions _hop_pick_headless | grep -vE -- ${(q)NT_MF_DECL} | grep -cE -- ${(q)NT_MF_PAT} || true")
 NT_MF_PAT_ALIVE=$(hop_probe "print -rl -- \"\${_HOP_MATCHER_FLAGS[@]}\" | grep -cE -- ${(q)NT_MF_PAT} || true")
 
 t 'the flag pattern still matches something, so the two zero counts below mean absence'
-assert_eq 5 "$NT_MF_PAT_ALIVE" 'the pattern matches nothing at all, so it cannot prove either caller is clean'
+assert_eq 6 "$NT_MF_PAT_ALIVE" 'the pattern matches nothing at all, so it cannot prove either caller is clean'
 
 t 'the picker hardcodes no matcher flag of its own'
 assert_eq 0 "$NT_MF_PICK_HARD" 'a hardcoded flag here can drift from the headless path again'
@@ -331,6 +337,17 @@ t '--accept-nth is the picker'"'"'s alone, never part of what --filter is handed
 assert_eq 0 "$NT_AN_ARRAY" 'in the shared array it reaches --filter, which reads it differently per fzf version'
 assert_eq 0 "$NT_AN_HEAD" 'the headless path must split whole rows, not trust fzf to cut them'
 assert_eq 1 "$NT_AN_PICK" 'the picker still needs it, or Enter hands the parent shell the display text'
+
+t 'the picker asks for dir, preview and rel, in that order'
+assert_eq 1 "$(hop_probe 'functions _hop_pick | grep -cF -- "--accept-nth='"'"'2,3,4'"'"'" || true')" \
+	'_hop_parse_result reads exactly these three fields by position'
+
+# Two picker-only flags break --filter outright, so the headless path must never carry either.
+# - --no-sort with --with-nth=1,4 makes 0.60.3 print the TRANSFORMED line, so the dir field is lost.
+# - --freeze-left is an unknown option on 0.60.3, which exits 2 on it.
+t 'the headless path passes neither --no-sort nor --freeze-left'
+assert_eq 0 "$(hop_probe 'functions _hop_pick_headless | grep -cE -- "--(no-sort|freeze-left)" || true')" \
+	'either flag in the --filter call loses the row or kills fzf on the floor version'
 
 # ---------------------------------------------------------------------------
 # The predicate itself: a terminal, not stdin, is what it reads.

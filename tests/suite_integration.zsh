@@ -120,22 +120,22 @@ ${code}" 2>"$IT_ERRFILE"
 }
 
 # it_filter <query> <rows-file> -> the rows fzf's exact matcher keeps, one per line.
-# - The flags mirror _hop_pick, so a count here is the count the picker would see.
+# - The flags are _hop_pick's own _HOP_MATCHER_FLAGS, so a count here is the count the picker would see.
+# - A hand-kept copy of them went stale once already, still matching on the display column alone.
 # - --filter never opens a terminal, which is the only reason fzf may be run at all.
 typeset -g IT_FZF=${commands[fzf]:-}
+typeset -ga IT_MF=("${(@f)$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}"')}")
 it_filter() {
 	emulate -L zsh
 	[[ -n $IT_FZF ]] || return 127
-	"$IT_FZF" --filter="$1" --exact --ansi --delimiter=$'\t' --with-nth=1 \
-		--tiebreak=begin,length < "$2"
+	"$IT_FZF" --filter="$1" "${IT_MF[@]}" < "$2"
 }
 
-# it_filter_fuzzy <query> <rows-file> -> the same call with --exact dropped, to price the flag.
+# it_filter_fuzzy <query> <rows-file> -> the same call with --exact turned off, to price the flag.
 it_filter_fuzzy() {
 	emulate -L zsh
 	[[ -n $IT_FZF ]] || return 127
-	"$IT_FZF" --filter="$1" --ansi --delimiter=$'\t' --with-nth=1 \
-		--tiebreak=begin,length < "$2"
+	"$IT_FZF" --filter="$1" "${IT_MF[@]}" --no-exact < "$2"
 }
 
 # it_stub_fzf -> a directory holding a recording fzf, put first on PATH only for the runs that ask.

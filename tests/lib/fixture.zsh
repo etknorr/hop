@@ -383,11 +383,12 @@ ${code}"
 
 # fzf_filter <query> -> fzf's non-interactive matcher, fed rows on stdin.
 # - --filter is the only fzf mode a test may use, because it never opens a terminal.
-# - The flags mirror the real _hop_pick call, so a match here means a match in the picker.
+# - The flags are read from _HOP_MATCHER_FLAGS, so a match here means a match in the picker.
 fzf_filter() {
 	emulate -L zsh
 	(( ${+commands[fzf]} )) || return 127
-	fzf --filter="$1" --delimiter=$'\t' --with-nth=1 --tiebreak=begin,index
+	local -a mf=("${(@f)$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}"' </dev/null)}")
+	fzf --filter="$1" "${mf[@]}"
 }
 
 # Last, because the scrub needs every definition above it, HOP_FIX_HOME and _hop_fix_config included.
