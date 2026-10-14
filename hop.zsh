@@ -46,6 +46,9 @@ fi
 
 _hop_usage() {
 	emulate -L zsh
+	local REPLY
+	_hop_enter_mode
+	local enter=$REPLY
 	print -r -- 'usage: hop [-a|--all] [-k KIND[,KIND...]] [-R] [-p] [--cd] [-o|-e|--action=MODE] [--no-vim] [-h] [/|-] [words...]'
 	print -r -- ''
 	print -r -- '  hop                 pick from the default kinds, starting in NORMAL mode'
@@ -86,14 +89,14 @@ _hop_usage() {
 	print -r -- ''
 	print -r -- "  declare your own in ${HOP_CONFIG}; see config.example.zsh"
 	print -r -- ''
-	print -r -- '  NORMAL: j/k move | g/G first/last | ^d/^u half page | enter cd'
+	print -r -- "  NORMAL: j/k move | g/G first/last | ^d/^u half page | enter ${enter} | c cd"
 	print -r -- '          o code file | O code dir | e $EDITOR file | y/Y copy dir/file'
 	print -r -- '          b gh browse | p preview | r refresh | ? help | q or esc quit'
 	print -r -- '          l drill in | h back out | / SEARCH | : switch view'
 	print -r -- ''
 	print -r -- '  : opens the view menu in place; enter switches, esc goes back.'
 	print -r -- ''
-	print -r -- '  SEARCH: every key types | esc back to NORMAL | enter cd'
+	print -r -- "  SEARCH: every key types | esc back to NORMAL | enter ${enter} | alt-enter cd"
 	print -r -- '          ctrl-o code -r file | ctrl-t code -n dir'
 	print -r -- '          ctrl-y copy dir | alt-y copy file | alt-o $EDITOR file'
 	print -r -- '          ctrl-g gh browse | alt-a all kinds | ctrl-r refresh preview'

@@ -8,12 +8,23 @@
 # - M-a is omitted when nothing is bound to it, so the picker cannot advertise a dead key.
 # - This is the non-modal legend, used when HOP_VIM=0 or --no-vim turns the modal layer off.
 # - Browse is M-B, not ^G: a bare BEL byte in the terminal's output IS ctrl-g, so ^G ran the verb.
+# - Enter is named by the call's mode, and M-enter appears only when Enter does not already cd.
+# - So the default legend is unchanged, and a longer mode moves ^O and ^T down a line rather than widen one.
 _hop_header() {
 	emulate -L zsh
+	local REPLY
+	_hop_enter_mode
 	local -a lines=(
 		'enter cd · ^O file · ^T folder'
 		'^Y copy · M-y copy file · M-o edit'
 	)
+	if [[ $REPLY != cd ]]; then
+		lines=(
+			"enter ${REPLY} · M-enter cd"
+			'^O file · ^T folder · ^Y copy'
+			'M-y copy file · M-o edit'
+		)
+	fi
 	if [[ -n ${1:-} ]]; then
 		lines+=('M-B github · M-a +conf · M-p preview')
 	else
@@ -58,32 +69,36 @@ _hop_vim_on() {
 # - `: view` is omitted without a root to enumerate kinds from, which is _hop_header's own rule.
 # - The repo and workspace pickers pass no root, so `:` falls through to ignore in both of them.
 # - Those two are the pickers a newcomer meets first, and a legend naming a dead key is worse than none.
+# - Enter is named by the call's mode; the always-cd key (M-enter, c) is named only when that is not cd.
 _hop_vim_header() {
 	emulate -L zsh
-	local mode=$1 menu=${2:-}
+	local mode=$1 menu=${2:-} REPLY
 	local -i cols=${COLUMNS:-80}
 	local -i avail=$cols
 	(( cols >= 120 )) && avail=$(( cols * 45 / 100 ))
 	(( avail = avail - 4 ))
+	_hop_enter_mode
+	local enter="enter ${REPLY}" alt='' c=''
+	[[ $REPLY != cd ]] && alt='  M-enter cd' c='  c cd'
 	local -a lines
 	if [[ $mode == SEARCH ]]; then
-		lines=('SEARCH  type to filter  esc normal  enter cd  ^o code  ^y yank  M-B browse')
+		lines=("SEARCH  type to filter  esc normal  ${enter}${alt}  ^o code  ^y yank  M-B browse")
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'SEARCH  type to filter'
-				'esc normal  enter cd'
+				"esc normal  ${enter}${alt}"
 				'^o code  ^y yank  M-B browse'
 			)
 		fi
 	else
 		local view=''
 		[[ -n $menu ]] && view='  : view'
-		lines=("NORMAL  j/k move  g/G top/bot  / search${view}  ? help  enter cd  q quit")
+		lines=("NORMAL  j/k move  g/G top/bot  / search${view}  ? help  ${enter}${c}  q quit")
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'NORMAL  j/k move  g/G top/bot'
 				"/ search${view}  ? help"
-				'enter cd  q quit'
+				"${enter}${c}  q quit"
 			)
 		fi
 	fi
@@ -113,10 +128,13 @@ _hop_vim_binds() {
 	[[ -n $drill ]] && live+=(l)
 	[[ -n $up ]] && live+=(h)
 	[[ -n $reload ]] && live+=(M-a)
-	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys ${${(j:,:)live}:--}"
+	# The mode rides along so the overlay names what Enter does in this call, as the legend does.
+	local REPLY
+	_hop_enter_mode
+	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys ${${(j:,:)live}:--} ${(q)REPLY}"
 
-	# The nine keys whose action leaves the picker, and so the nine the guard has to cover.
-	local -a guard_keys=(o O e y Y b l h q)
+	# The ten keys whose action leaves the picker, and so the ten the guard has to cover.
+	local -a guard_keys=(o O e y Y b c l h q)
 
 	# The alt- keys hop or fzf already owns, which must therefore not become mark binds.
 	# - alt-a reload, alt-p toggle-preview, alt-B browse, and alt-o/alt-y are hop's own --expect verbs.
@@ -188,7 +206,7 @@ _hop_vim_binds() {
 	# Letter verbs ride print()+accept rather than --expect, which unbind cannot touch.
 	# - An --expect key stays live after unbind, so it would accept in SEARCH instead of typing.
 	# - That was probed on this machine, not assumed; see README.
-	# - The name printed is the existing ctrl-/alt- key, so _hop_dispatch needs no new arms.
+	# - The name printed is the ctrl-/alt- key the other mode uses, so one _hop_dispatch arm serves both.
 	local k act
 	for k in "${_HOP_VIM_KEYS[@]}"; do
 		act=''
@@ -205,6 +223,8 @@ _hop_vim_binds() {
 			y) act='print(ctrl-y)+accept' ;;
 			Y) act='print(alt-y)+accept' ;;
 			b) act='print(ctrl-g)+accept' ;;
+			# c always cds, whatever Enter does, and prints the key SEARCH's alt-enter does.
+			c) act='print(alt-enter)+accept' ;;
 			p) act='toggle-preview' ;;
 			q) act='abort' ;;
 			# r re-runs the current view, for when the repo changed under you.
@@ -218,7 +238,7 @@ _hop_vim_binds() {
 			':') act=$kind_act ;;
 		esac
 		# Every action that LEAVES the picker rides the escape guard; nav keys must stay fork-free.
-		# - The fork is free on these nine: each is followed by accept or abort, which spawns anyway.
+		# - The fork is free on these ten: each is followed by accept or abort, which spawns anyway.
 		# - `r` is deliberately NOT here: its action embeds a shell command holding $HOP_HOME and "$@".
 		# - Re-quoting that through a transform body is a real hazard for a verb that only redraws a list.
 		# - An empty act means the key was gated off above, so it stays a plain `ignore` and unguarded.
@@ -421,6 +441,9 @@ _hop_pick() {
 		# - The payoff is that a bind can be guarded, where an --expect key structurally cannot be.
 		--bind='ctrl-g:ignore'
 		--bind='alt-B:print(ctrl-g)+accept'
+		# Always a cd, whatever HOP_ACTION makes Enter do; NORMAL's c prints the same key.
+		# - Bound in both modes, since alt-enter is not one of the keys SEARCH unbinds.
+		--bind='alt-enter:print(alt-enter)+accept'
 	)
 	# HOP_FZF_HEIGHT is a real knob: set it EMPTY and fzf takes the whole screen.
 	# - Default-if-unset, not :-, because empty has to stay a distinguishable answer.

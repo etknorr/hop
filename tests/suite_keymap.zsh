@@ -164,6 +164,10 @@ assert_eq 'print(alt-y)+accept' "$(_km_bind_action "$KM_FULL" Y)"
 t 'b prints ctrl-g and accepts (browse/github)'
 assert_eq 'print(ctrl-g)+accept' "$(_km_bind_action "$KM_FULL" b)"
 
+# c is the always-cd verb, so it prints the key SEARCH's alt-enter prints and shares its dispatch arm.
+t 'c prints alt-enter and accepts (cd, whatever Enter does)'
+assert_eq 'print(alt-enter)+accept' "$(_km_bind_action "$KM_FULL" c)"
+
 t 'p toggles the preview'
 assert_eq 'toggle-preview' "$(_km_bind_action "$KM_FULL" p)"
 
@@ -210,7 +214,7 @@ assert_contains "$colon" '/some/root'
 
 # --- unmapped printable keys default to ignore ---
 t 'unmapped letters, digits and symbols default to ignore'
-typeset -a plain=(a c d f i m n s t u v w x z A C D F H I J K L M N P Q R S T U V W X Z 0 1 5 9 space '!' '@' '#' '_' '~' '`' ',' '+')
+typeset -a plain=(a d f i m n s t u v w x z A C D F H I J K L M N P Q R S T U V W X Z 0 1 5 9 space '!' '@' '#' '_' '~' '`' ',' '+')
 typeset pk
 for pk in "${plain[@]}"; do
 	assert_eq 'ignore' "$(_km_bind_action "$KM_FULL" "$pk")" "key '${pk}' should default to ignore"
@@ -354,6 +358,13 @@ if (( ${+commands[fzf]} )); then
 	typeset -a ordereditems=("${(@ps:\x1e:)ordered}")
 	assert_eq 0 "${ordereditems[1]}" "fzf rejected the ordered-mode args: ${ordereditems[2]:-}"
 
+	# A mode other than cd changes the legends and the `?` overlay command, and both ride the argv.
+	t "the picker argv at a non-cd mode parses against this machine's installed fzf"
+	typeset moded
+	moded=$(_km_pick_filter '' '_hop_mode=cd+reveal')
+	typeset -a modeditems=("${(@ps:\x1e:)moded}")
+	assert_eq 0 "${modeditems[1]}" "fzf rejected the cd+reveal args: ${modeditems[2]:-}"
+
 	# - Sanity #1, mirroring a real bug this check caught.
 	# - A leading comma makes ",:ignore" not a valid action name.
 	t 'sanity: a bind action with a stray leading comma is rejected, not silently accepted'
@@ -407,8 +418,9 @@ _km_guarded() {
 t 'the guarded probe produced a bind set at all'
 assert_nonempty "$(_km_bind_action "$KM_GUARDED" j)" 'the guarded probe captured no j bind, so it captured nothing'
 
-# Nine keys, not six: every action that LEAVES the picker, so a stray letter cannot exit it either.
+# Ten keys, not six: every action that LEAVES the picker, so a stray letter cannot exit it either.
 t 'every action that leaves the picker is wrapped in the guard'
+assert_eq "$(_km_guarded 'print(alt-enter)+accept')" "$(_km_bind_action "$KM_GUARDED" c)"
 assert_eq "$(_km_guarded 'print(ctrl-o)+accept')" "$(_km_bind_action "$KM_GUARDED" o)"
 assert_eq "$(_km_guarded 'print(ctrl-t)+accept')" "$(_km_bind_action "$KM_GUARDED" O)"
 assert_eq "$(_km_guarded 'print(alt-o)+accept')" "$(_km_bind_action "$KM_GUARDED" e)"
@@ -487,7 +499,7 @@ done
 typeset -a km_owned=("${(f)$(_km_key_tokens "$(_km_dump_get "$KM_GUARDED" 'KM_KEYS=')")}")
 assert_eq $(( $#km_owned - 12 )) "$km_marks" 'the mark set is not the owned key list minus the twelve taken keys'
 assert_eq 83 "$km_marks" 'the mark count changed, so either the key list or the taken list moved'
-assert_eq 9 "$km_checks" 'exactly nine actions leave the picker and so exactly nine must be guarded'
+assert_eq 10 "$km_checks" 'exactly ten actions leave the picker and so exactly ten must be guarded'
 
 # ---------------------------------------------------------------------------
 # Tier 1c: the picker's OWN flags, one call frame further out than _hop_vim_binds.
@@ -544,6 +556,11 @@ t 'browse did not land on alt-g or alt-b, which are both already taken'
 assert_empty "$(_km_bind_action "$KM_PICK" alt-g)" 'alt-g inside the picker would shadow the launcher key'
 assert_empty "$(_km_bind_action "$KM_PICK" alt-b)" 'alt-b is fzf backward-word and SEARCH needs it'
 
+# alt-enter is SEARCH's always-cd key, and a bind rather than --expect, so the modal layer is not what carries it.
+t 'alt-enter prints alt-enter and accepts, in both modes'
+assert_eq 'print(alt-enter)+accept' "$(_km_bind_action "$KM_PICK" alt-enter)"
+assert_eq 'print(alt-enter)+accept' "$(_km_bind_action "$KM_PICK_NOVIM" alt-enter)"
+
 # ---------------------------------------------------------------------------
 # Tier 1e: the picker must not advertise a key it left bound to `ignore`.
 # ---------------------------------------------------------------------------
@@ -572,6 +589,8 @@ _km_overlay_probe() {
 			KM_HELP_ON=$HOP_VIM_HELP_ON
 			return 0
 		}
+		# KM_MODE stands in for the mode hop() resolves, which every legend reads through dynamic scope.
+		local _hop_mode=${KM_MODE:-}
 		# NO pipeline: the last element of one runs in a subshell, so the captures would not survive.
 		_hop_pick "label" "header" "" "$KM_RELOAD" "$KM_ROOT" "$KM_DRILL" "$KM_RESTORE" "$KM_UP"
 
@@ -625,7 +644,9 @@ _km_overlay_probe() {
 			[[ $a == --bind=alt-a:* ]] && bnd+=(M-a)
 		done
 
-		local -a out2=("ADV=${(j:,:)adv5}" "BOUND=${(j:,:)bnd}" "HDR=${KM_HEAD}")
+		# The Enter line and the always-cd lines: the half of the computed legend the overlay renders.
+		local -a says=(${(M)${(f)out}:#  (enter|c|M-enter) *})
+		local -a out2=("ADV=${(j:,:)adv5}" "BOUND=${(j:,:)bnd}" "HDR=${KM_HEAD}" "SAYS=${(pj:\n:)says}")
 		print -rn -- "${(pj:\x1e:)out2}"
 	'
 }
@@ -634,10 +655,11 @@ _km_overlay_probe() {
 # - _hop_run:        _hop_pick label header query reload root ''    restore up
 # - _hop_ws_picker:  _hop_pick label header query ''     ''   drill ''      ''
 # - _hop_repo_picker goes through _hop_run with reload, root and restore all empty, and up set.
-typeset KM_OV_MAIN KM_OV_REPO KM_OV_WS
+typeset KM_OV_MAIN KM_OV_REPO KM_OV_WS KM_OV_OPEN
 KM_OV_MAIN=$(_km_overlay_probe RELOADCMD /some/root '' RESTORECMD _hop_ws_picker)
 KM_OV_REPO=$(_km_overlay_probe '' '' '' '' _hop_ws_picker)
 KM_OV_WS=$(_km_overlay_probe '' '' drill '' '')
+KM_OV_OPEN=$(KM_MODE=open _km_overlay_probe RELOADCMD /some/root '' RESTORECMD _hop_ws_picker)
 
 # Asserted first: an overlay that rendered nothing would make every comparison below vacuous.
 t 'the overlay probe actually rendered the keys overlay'
@@ -667,6 +689,40 @@ assert_eq 'NORMAL  j/k move  g/G top/bot  / search  : view  ? help  enter cd  q 
 	"$(_km_dump_get "$KM_OV_MAIN" 'HDR=')"
 assert_eq 'NORMAL  j/k move  g/G top/bot  / search  ? help  enter cd  q quit' \
 	"$(_km_dump_get "$KM_OV_REPO" 'HDR=')"
+
+# The legend names what Enter does, so at the default cd it is unchanged and names no second cd key.
+t 'the legends at HOP_ACTION=cd say enter cd and name no c or M-enter'
+assert_eq $'  enter          cd to the dir\n  enter          cd to the dir' "$(_km_dump_get "$KM_OV_MAIN" 'SAYS=')"
+assert_eq $'enter cd · ^O file · ^T folder\n^Y copy · M-y copy file · M-o edit\nM-B github · M-a +conf · M-p preview' \
+	"$(hop_probe '_hop_header reloadcmd')"
+
+# A mode other than cd is named, and so is the key that still cds, in the list-pane legend and the overlay alike.
+t 'the legends at HOP_ACTION=open say enter open, and c and M-enter cd'
+assert_eq 'NORMAL  j/k move  g/G top/bot  / search  : view  ? help  enter open  c cd  q quit' \
+	"$(_km_dump_get "$KM_OV_OPEN" 'HDR=')"
+assert_eq $'  enter          open in VS Code\n  c              cd to the dir\n  enter          open in VS Code\n  M-enter        cd to the dir' \
+	"$(_km_dump_get "$KM_OV_OPEN" 'SAYS=')"
+assert_eq "$(_km_dump_get "$KM_OV_MAIN" 'ADV=')" "$(_km_dump_get "$KM_OV_OPEN" 'ADV=')" 'the mode must not change which gated keys are advertised'
+assert_eq 'SEARCH  type to filter  esc normal  enter open  M-enter cd  ^o code  ^y yank  M-B browse' \
+	"$(hop_probe 'COLUMNS=100 _hop_mode=open; _hop_vim_header SEARCH')"
+assert_eq $'enter open · M-enter cd\n^O file · ^T folder · ^Y copy\nM-y copy file · M-o edit\nM-B github · M-a +conf · M-p preview' \
+	"$(hop_probe '_hop_mode=open; _hop_header reloadcmd')"
+
+# The longest mode re-flows the non-modal legend rather than widening it past the default's widest line.
+t 'the non-modal legend is no wider at the longest mode than at cd'
+typeset -a km_hl=("${(@f)$(hop_probe '_hop_mode=cd+reveal; _hop_header reloadcmd')}")
+typeset -a km_hd=("${(@f)$(hop_probe '_hop_header reloadcmd')}")
+typeset -i km_max=0
+typeset km_l km_wide=''
+for km_l in "${km_hd[@]}"; do
+	(( ${#km_l} > km_max )) && km_max=${#km_l}
+done
+for km_l in "${km_hl[@]}"; do
+	(( ${#km_l} <= km_max )) || km_wide+="${km_l}"$'\n'
+done
+assert_ne 0 "$km_max" 'the default legend came back empty, so the bound below proves nothing'
+assert_contains "${km_hl[1]}" 'enter cd+reveal'
+assert_empty "$km_wide" 'a legend line wider than the pane is clipped, not wrapped'
 
 # ---------------------------------------------------------------------------
 # Tier 2: the transform: action bodies, extracted and run directly as sh.
