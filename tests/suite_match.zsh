@@ -334,6 +334,13 @@ mt_get infrastructure terraform/acct-infrastructure/env-prod
 MT_C=("${(@s:,:)reply[14]}")
 assert_ne 0 ${MT_C[(Ie)terraform/acct-infrastructure/]} "the control: without -c the account dir above \$PWD is offered: ${(j:, :)MT_C}"
 
+t '_hop_ancestors walks every strict ancestor, drops dirs already matched, and honours the -c subtree'
+assert_eq 'k t/a|t/a' "$(hop_probe '
+_hop_ancestors "" t/a/x/ t/a/y/ t/ k/f.yaml "~/elsewhere/"
+print -rn -- "${(j: :)${(@o)reply}}|"
+_hop_ancestors t t/a/x/ t/a/y/ t/ k/f.yaml
+print -rn -- "${(j: :)reply}"')" 't/ is itself a match, a file contributes its parent, and a ~ rel names nothing in the repo'
+
 # The kind-word guard decides only when every match sits under one dir, so it gets rows where that holds.
 # - In the full fixture `mesos` also matches a terraform unit, which would keep it a pick with no guard at all.
 typeset MT_KIND

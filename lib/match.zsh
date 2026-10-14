@@ -262,6 +262,28 @@ _hop_minimal() {
 	reply=("${(@o)reply}")
 }
 
+# _hop_ancestors <under-rel> <rel...> -> reply is every strict ancestor dir of the rels, minus dirs already among them.
+# - The rels are repo-relative, so the walk stops at `.`; a `~` or absolute rel names no ancestor inside the repo.
+# - under-rel is the -c subtree relative to the root, or empty; only ancestors strictly beneath it survive.
+_hop_ancestors() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local under=$1
+	shift
+	local -a have cur anc
+	have=(${${(M)argv:#*/}%/})
+	cur=(${(u)${${argv:#[/~]*}%/}:h})
+	while (( $#cur )); do
+		cur=(${cur:#(.|/)})
+		anc+=("${cur[@]}")
+		cur=(${(u)cur:h})
+	done
+	anc=(${(u)anc})
+	anc=(${anc:|have})
+	[[ -n $under ]] && anc=(${(M)anc:#${(b)under}/*})
+	reply=("${anc[@]}")
+}
+
 # _hop_aligned <dir-rel> <term...> -> 0 when every term names a whole token run of the dir, one of them its last segment.
 # - This is J2's test: `kub` inside kubernetes/ and `curity-tooling-prod/env-pr` must not jump.
 # - `security-tooling-prod` inside acct-security-tooling-prod/ and `infrastructure dev` may.
@@ -349,21 +371,13 @@ _hop_decide() {
 	local tier=$1 eq=$2
 	local -i approx=$3
 	shift 3
-	local -a M=("$@") R S srels anc have cur inj X cand
+	local -a M=("$@") R S srels anc inj X cand
 	_hop_rels_of "${M[@]}"
 	R=("${reply[@]}")
 
 	if (( ! opq )) && [[ -n $root ]]; then
-		have=(${${(M)R:#*/}%/})
-		cur=(${(u)${${R:#[/~]*}%/}:h})
-		while (( $#cur )); do
-			cur=(${cur:#(.|/)})
-			anc+=("${cur[@]}")
-			cur=(${(u)cur:h})
-		done
-		anc=(${(u)anc})
-		anc=(${anc:|have})
-		[[ -n $under ]] && anc=(${(M)anc:#${(b)${under#"$root"/}}/*})
+		_hop_ancestors "${under:+${under#"$root"/}}" "${R[@]}"
+		anc=("${reply[@]}")
 	fi
 	local -A synby
 	if (( $#anc )); then
