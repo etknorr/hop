@@ -340,6 +340,7 @@ _hop_provider_repo() {
 # - A user --fn provider written before rel existed prints 3 fields, and must still match by path.
 # - The (M) filter is one array pass, so output holding no legacy row pays nothing per row.
 # - The rel comes from _hop_rel, so it reads the same _hop_gen_root as every other row.
+# - A caller that declares _hop_gen_legacy gets the legacy count added to it, which is how --doctor names the kind.
 _hop_rel_upgrade() {
 	emulate -L zsh
 	setopt local_options extended_glob
@@ -349,6 +350,7 @@ _hop_rel_upgrade() {
 	local tab=$'\t'
 	local three="[^${tab}]#${tab}[^${tab}]#${tab}[^${tab}]#"
 	local -a legacy=("${(@M)rows:#${~three}}")
+	(( ${+_hop_gen_legacy} )) && (( _hop_gen_legacy += $#legacy ))
 	if (( ! $#legacy )); then
 		print -rl -- "${rows[@]}"
 		return 0

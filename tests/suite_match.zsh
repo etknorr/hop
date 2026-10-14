@@ -433,6 +433,24 @@ print -r -- \"\$_hop_res_verdict \$_hop_res_rule \${_hop_res_target##*\$'\\t'}\"
 t 'resolve: a legacy 3-field --fn provider still resolves, by its derived rel'
 assert_eq 'jump single legacy/vpc/' "$MT_LEG"
 
+# helm and dir are --fn kinds too, and they print 4 fields, so naming legacy alone is the claim.
+MT_LEG=$(hop_probe "
+builtin cd -q -- ${(q)MT_REPO} || exit 96
+_hop_provider_legacy() {
+	print -r -- vpc\$'\\t'\$1/legacy/vpc\$'\\t'\$1/legacy/vpc
+	print -r -- eks\$'\\t'\$1/legacy/eks\$'\\t'\$1/legacy/eks
+}
+hop_kind legacy --fn _hop_provider_legacy --desc 'a 3-field provider'
+hop --doctor")
+
+typeset -a MT_DOC=("${(@f)MT_LEG}")
+typeset MT_LEGROW="${(F)${(@M)MT_DOC:#*legacy*a 3-field provider}}"
+
+t 'hop --doctor names the kind that printed legacy 3-field rows, and no other'
+assert_eq '  3-field rows, given a derived rel: legacy (2 rows)' "${(F)${(@M)MT_DOC:#*3-field rows*}}"
+assert_nonempty "$MT_LEGROW" 'control: the legacy kind has to be in the doctor kinds table at all'
+assert_eq '2' "${${(z)MT_LEGROW}[2]}" 'the upgraded rows still count as rows'
+
 # ---------------------------------------------------------------------------
 # The picker's argv and stdin, with a stub that selects instead of drawing.
 # ---------------------------------------------------------------------------

@@ -162,6 +162,55 @@ assert_not_contains "$sentshort" 'zzsentinel'
 assert_not_contains "$sentshort" 'zzsentinelws'
 assert_not_contains "$sentshort" "$sentwstarget"
 
+# The Enter-action settings, and whether a code verb would reach VS Code or fall back to the editor.
+# - Each probe runs from the temp root, outside any repo, so no kind is counted and the probe stays fast.
+# - /bin/sh stands in for a launcher that exists, so reachability turns on the session alone.
+# - sm_docline <output> <label> -> REPLY is the one aligned line for that label, exactly as printed.
+sm_docline() {
+	emulate -L zsh
+	REPLY=${(M)${(f)1}:#  ${2}[[:space:]]*}
+}
+typeset smdoc smshort
+smdoc=$(HOP_CODE=/bin/sh hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor")
+
+t 'hop --doctor shows HOP_ACTION, HOP_JUMP and HOP_CODE, and that VS Code is reachable'
+sm_docline "$smdoc" HOP_ACTION
+assert_eq "$(printf '  %-22s %s' HOP_ACTION cd)" "$REPLY"
+sm_docline "$smdoc" HOP_JUMP
+assert_eq "$(printf '  %-22s %s' HOP_JUMP auto)" "$REPLY"
+sm_docline "$smdoc" HOP_CODE
+assert_eq "$(printf '  %-22s %s' HOP_CODE /bin/sh)" "$REPLY"
+sm_docline "$smdoc" 'VS Code reachable'
+assert_eq "$(printf '  %-22s %s' 'VS Code reachable' yes)" "$REPLY" 'a usable launcher with no SSH and no stale socket is reachable'
+
+t 'hop --doctor names an invalid mode together with what hop does instead'
+smdoc=$(HOP_ACTION=bogus HOP_JUMP=sometimes HOP_CODE=/bin/sh hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor")
+sm_docline "$smdoc" HOP_ACTION
+assert_eq "$(printf '  %-22s %s' HOP_ACTION 'bogus, so Enter cds')" "$REPLY" 'the warning prints only inside a hop call, so the doctor is where it shows'
+sm_docline "$smdoc" HOP_JUMP
+assert_eq "$(printf '  %-22s %s' HOP_JUMP 'sometimes, so hop uses auto')" "$REPLY"
+
+t 'hop --doctor says why VS Code is not reachable, with the reason the code verbs use'
+smdoc=$(SSH_CONNECTION='10.0.0.1 22 10.0.0.2 22' HOP_CODE=/bin/sh hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor")
+sm_docline "$smdoc" 'VS Code reachable'
+assert_eq "$(printf '  %-22s %s' 'VS Code reachable' 'no, this is an SSH session with no VS Code window attached')" "$REPLY"
+
+# A custom launcher is free text, and free text is exactly what --doctor=short exists to keep out.
+t 'hop --doctor=short withholds a custom launcher path and any reason naming it, and keeps a known name'
+smdoc=$(HOP_CODE="$HOP_FIX_HOME/zzlauncher" hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor")
+smshort=$(HOP_CODE="$HOP_FIX_HOME/zzlauncher" HOP_ACTION=zzmode hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor=short")
+assert_contains "$smdoc" 'zzlauncher' 'control: the full doctor has to show the launcher it would run'
+assert_contains "$smdoc" 'does not exist, cannot open VS Code' 'control: the full doctor names the missing launcher'
+assert_not_contains "$smshort" 'zzlauncher'
+assert_not_contains "$smshort" 'zzmode' 'an invalid mode is free text too'
+sm_docline "$smshort" HOP_CODE
+assert_eq "$(printf '  %-22s %s' HOP_CODE '(customised, withheld)')" "$REPLY"
+sm_docline "$smshort" 'VS Code reachable'
+assert_eq "$(printf '  %-22s %s' 'VS Code reachable' 'no, the HOP_CODE launcher is not runnable (withheld)')" "$REPLY"
+smshort=$(HOP_CODE=cursor hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop --doctor=short")
+sm_docline "$smshort" HOP_CODE
+assert_eq "$(printf '  %-22s %s' HOP_CODE cursor)" "$REPLY" 'one of the four documented launchers names nothing personal'
+
 # A bare `typeset REPLY` further down would otherwise echo whatever REPLY still holds here.
 unset REPLY
 
