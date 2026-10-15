@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # suite_match: the resolver in lib/match.zsh, driven over match_fixture with the real fzf in --filter mode only.
-# - The table runs inside ONE probe child, which prints one TSV line per case, so 60 cases cost one shell.
+# - The table runs inside ONE probe child, which prints one TSV line per case, so the whole table costs one shell.
 # - A picker is never drawn: the picker cases use stub_fzf_select, and every --filter goes to the real fzf.
 # - The floor CI legs run this whole file on fzf 0.60.3 and 0.67.0, with the same expectations.
 
@@ -29,8 +29,7 @@ MT_WORK=$REPLY
 # The table runner, sourced inside the probe child.
 # ---------------------------------------------------------------------------
 # A case is five TAB fields: query, cwd relative to the repo, action, jump mode, and `c` for -c or `-`.
-# - Each output line is the case followed by verdict, tier, rule, target dir, preview and rel, the count,
-#   the injected count, the first four candidate rels, the picker query, the note, and parity.
+# - Each output line is the case, then: verdict, tier, rule, dir, preview, rel, count, injected count, first four rels, picker query, note, parity.
 # - T0 runs first exactly as hop() runs it: one word, and never under jump=never.
 # - Parity is the claim that a pick's matches are exactly what `fzf --filter <picker query>` keeps, as sets.
 cat > "$MT_WORK/runner.zsh" <<'EOF'

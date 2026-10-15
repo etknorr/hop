@@ -125,7 +125,7 @@ jobs:
             *) echo "expected fzf ${FZF_VER}, got: ${got}" >&2; exit 1 ;;
           esac
 
-      # tests/run takes ONE pattern, so the suites are one glob alternation, and a suite not written yet matches nothing.
+      # tests/run takes ONE pattern, so the suites are one glob alternation.
       - name: Run the fzf-sensitive suites
         env:
           HOP_T_TIMEOUT: '180'
