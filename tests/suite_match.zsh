@@ -111,6 +111,7 @@ for q in \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
 	'acct sec prd' stg prod_vpc 'trust prod' 'security vpc' 'infrastructure dev' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
 	'kps zzqx' 'routemaxter kps zzqx' 'routemaster dev' \
+	"'security-tooling-prod" 'securty-tooling-prod$' '^terraform/acct-securty' secutiry-tooling-prod \
 	"${MT_NONSENSE[@]}"; do
 	mt_case "$q"
 done
@@ -278,6 +279,8 @@ for w in securty-tooling-prod secuirty-tooling-prod; do
 	mt_get "$w"
 	assert_eq 'security tooling prod' "${reply[15]}"
 done
+# Eight letters or more allow two edits, and secutiry is two transpositions from security.
+mt_pick T2 4 "$SP/" secutiry-tooling-prod
 for w in routemaxter rotuemaster routemastr; do
 	mt_pick T2 2 - "$w"
 	mt_get "$w"
@@ -322,6 +325,15 @@ mt_jump 'jump T1 single' "$SP/env-prod/us-east-1/vpc/" 'vpc security !staging'
 mt_pick T1 5 - '^vpc'
 mt_get '^vpc'
 assert_eq 0 "${reply[13]}" 'an operator query is the user'"'"'s own fzf syntax, so nothing is synthesised'
+# The control for that: without the guard, an ancestor matching the quoted term would be injected here.
+mt_pick T1 3 - "'security-tooling-prod"
+mt_get "'security-tooling-prod"
+assert_eq 0 "${reply[13]}" 'a quoted term is fzf syntax, so the account dir it names is not added'
+for w in 'securty-tooling-prod$' '^terraform/acct-securty'; do
+	t "resolve: ${w} is fzf syntax, so its typo is left for the user to fix"
+	mt_get "$w"
+	assert_eq 'none T4' "${reply[6]} ${reply[7]}" 'an operator query is never rewritten'
+done
 mt_jump 'jump T1 display' terraform/acct-infrastructure/env-dev/us-east-1/vpc/ 'infrastructure dev'
 # One display hit is not one target when another match's display column is clipped: there the words were only hidden.
 mt_pick T1 2 - 'security vpc'
@@ -738,6 +750,57 @@ assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
 t 'repos: hop -R matches by the ~ rel'
 MT_RUN=$(mt_headless "$MT_REPO" 'hop -R strava/conf' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"
+
+# ---------------------------------------------------------------------------
+# hop()'s own T0 gate, which the table runner restates and so cannot test.
+# ---------------------------------------------------------------------------
+t 'T0 through hop: a path followed by more words is a query, not a path'
+MT_RUN=$(mt_headless "$MT_REPO" "hop $SP vpc")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/$SP/env-prod/us-east-1/vpc" 'T0 only ever takes a one-word query'
+
+t 'T0 through hop: -p and HOP_JUMP=never open the picker on a path instead of jumping'
+MT_RUN=$(mt_headless "$MT_REPO" "hop -p $SP")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO"
+MT_RUN=$(mt_headless "$MT_REPO" "hop $SP" HOP_JUMP=never)
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO"
+stub_fzf_select '' 1
+MT_STUB=$REPLY
+mt_pickrun "$MT_STUB" "hop -p $SP" >/dev/null
+mt_argv "$MT_STUB"
+assert_eq 1 ${#${(M)reply:#--query=$SP}} 'the picker opens on the path as typed'
+
+t 'T0 through hop: -R names the repo level, so a path in this repo is a repo query'
+MT_RUN=$(mt_headless "$MT_REPO" "hop -R $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO"
+assert_contains "$MT_RUN" "nothing matched the query: $SP"
+
+# Built under the probe's $HOME, which is outside any repo, so the ~ forms and the outside case are real.
+mkdir -p -- "$MT_WSH/lit/deep"
+t 'T0 through hop: ~/x, ~name/x, an absolute path off the root, and a path outside any repo'
+MT_RUN=$(mt_headless "$MT_REPO" "hop '~/lit/deep'")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/lit/deep" '~/x is $HOME-relative'
+MT_RUN=$(mt_headless "$MT_REPO" "hash -d mtfix=${(q)MT_REPO}/kubernetes; hop '~mtfix/values'")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/kubernetes/values" '~name/x reads the named directory'
+MT_RUN=$(mt_headless "$MT_REPO/terraform" "hop ${(q)MT_WSH}/lit/deep")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/lit/deep" 'an absolute path that is not under the root falls back to /'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop lit/deep' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/lit/deep" 'outside a repo a path is $PWD-relative'
+
+t 'resolve: an injected dir previews its top-level README, and a dir with none previews itself'
+typeset MT_PREV
+MT_PREV=$(hop_probe "
+builtin cd -q -- ${(q)MT_REPO} || exit 96
+typeset _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
+typeset -i _hop_res_n _hop_res_m _hop_res_inj
+typeset -a _hop_res_rows reply
+_hop_resolve terraform/account-security \"\$(_hop_generate \$PWD \${=HOP_DEFAULT_KINDS//,/ })\" \$PWD cd auto
+typeset r
+for r in \"\${(@)_hop_res_rows[1,_hop_res_inj]}\"; do
+	_hop_res_fields \"\$r\"
+	print -r -- \"\${reply[3]} \${reply[2]#\$PWD/}\"
+done")
+assert_contains "$MT_PREV" 'terraform/acct-security-tooling-staging/ terraform/acct-security-tooling-staging/README.md'
+assert_contains "$MT_PREV" "$SP/ $SP"
 
 # ---------------------------------------------------------------------------
 # A user's own fzf defaults, which every other run here pins empty.

@@ -437,6 +437,7 @@ stub_fzf_select() {
 # - cross_account_iam/roles is a real unit, and it is what puts `account` in the T2 vocabulary.
 # - The depth-1 cross_account_iam/terragrunt.hcl beside it is a shared include, which neither layout matches.
 # - raster-catalogue is a word `routemaster` abbreviates, letters in order, so it tempts T2 into an alternative.
+# - The staging account has a README and the prod one has none, so an injected row's preview has both shapes.
 # - acct-l[a]b*# holds pattern characters, which a zsh pattern built from a typed term once failed to match.
 match_fixture() {
 	emulate -L zsh
@@ -455,6 +456,7 @@ match_fixture() {
 	for u in vpc upwind; do
 		fixture_write "$ss/$u/terragrunt.hcl" 'include {}' || return 1
 	done
+	fixture_write 'terraform/acct-security-tooling-staging/README.md' '# security tooling staging' || return 1
 	for u in secor secrets vpc routemaster trust active mesos; do
 		fixture_write "$ip/$u/terragrunt.hcl" 'include {}' || return 1
 	done
