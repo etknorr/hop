@@ -229,7 +229,26 @@ _hop_elsewhere() {
 			homes+=("$a")
 		fi
 	done
-	(( $#hits )) || return 1
+	if (( ! $#hits )); then
+		# Only the repo a misspelt path lives in can correct it, so a repo holding its first dir is named.
+		local seg=''
+		local -a near
+		local -A nseen
+		for (( i = 1; i <= $#anchors; i++ )); do
+			[[ ${akinds[i]} == repo && ${rests[i]} == */* ]] || continue
+			a=${anchors[i]:A}
+			[[ $a != "$root" ]] && (( ! ${+nseen[$a]} )) || continue
+			_hop_path_under "$a" "${rests[i]%%/*}" && [[ -d $REPLY ]] || continue
+			nseen[$a]=1 near+=("${names[i]}")
+			[[ -n $seg ]] || seg=${rests[i]%%/*}
+		done
+		if (( $#near )); then
+			local more=''
+			(( $#near > 3 )) && more=" and $(( $#near - 3 )) more"
+			print -ru2 -- "hop: no repo has ${w}, but ${seg}/ is in ${(j:, :)near[1,3]}${more}; hop corrects a misspelt path from inside its repo."
+		fi
+		return 1
+	fi
 
 	local _hop_gen_root='' why='' jump=${_hop_jump:-${HOP_JUMP:-auto}}
 	local -i j=0

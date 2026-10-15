@@ -649,7 +649,9 @@ stops at the first one that finds something:
    after it, so `hop configuration/` is still matched like any other query. It skips paths
    starting with `./`, `../`, `/` or `~` and paths with a `.` or `..` segment, and it's off under
    `-c`, which keeps the search under `$PWD`. Under `-p` or `HOP_JUMP=never` it still runs, and
-   even one match opens the picker. It only checks whether the path exists in each repo,
+   even one match opens the picker. A misspelt path isn't corrected here, but when no repo has the
+   path and some repo has its first directory, hop names that repo, because the typo is fixed from
+   inside it. It only checks whether the path exists in each repo,
    so it lists no repo's targets and costs a few milliseconds.
 2. **Exact**: fzf matches the words against the row's name line (name, kind, scope, env and
    region) and its `rel` path, with `--exact`, `-i` and `--tiebreak=begin,chunk`. The picker gets

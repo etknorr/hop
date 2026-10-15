@@ -863,6 +863,13 @@ MT_RUN=$(mt_headless "$MT_WSH" 'hop zzqx/nothing' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" 'nothing matched the query: zzqx/nothing'
 assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
 
+t 'elsewhere: a misspelt path no repo has names the repo that holds its first dir'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop terraform/acct-securty-tooling-prd' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'hop: no repo has terraform/acct-securty-tooling-prd, but terraform/ is in configuration; hop corrects a misspelt path from inside its repo.'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop zzqx/nothing' "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'no repo has' 'no repo holds zzqx/, so there is no repo to name'
+
 t 'elsewhere: a path two repos have never jumps, and the report names both'
 MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
