@@ -374,3 +374,156 @@ Phase 2's last commit was at 11:22. This phase's code commits landed between 12:
 - `run-all.sh` builds everything it needs, including the linux test binary for G6, and needs the `hopx-b3-fish` and `hopx-b3-pwsh` images: `docker build -f spike/docker/Dockerfile.fish -t hopx-b3-fish spike/docker`, and the same for pwsh. `NO_DOCKER=1` runs the host shells only.
 - Per jump, fzf forks are still the cost: the bare binary takes 67 ms on the host for a T1 jump, and the shell function adds almost nothing. The `fzfembed` measurement is the next lever.
 - pwsh on Windows remains unverified past cross-compile, as the spec says.
+
+## Phase B4: parity and performance against the hop Eric runs
+
+Status: done. hopx now agrees with the installed hop on every query the harness runs. The writing-style advisor pass on this file is still left for phase 5.
+
+### The reference moved
+
+The phases before this one held hopx to the worktree's `hop.zsh`, which is 0.2.0. Eric's install at `~/.local/share/hop` is 0.3.1, released on 2026-10-15 while the spike ran. 0.3.0 changed 702 lines of `hop.zsh`, `lib/` and `bin/`:
+
+- Columns fit each list: a column is as wide as its longest value up to a cap, the name column fits 95% of names past 28 characters, and an all-`-` column drops out. Names are now clipped, keeping both ends around `…`.
+- J3 matches a clipped name whole when the rel spells it out, so a narrow column costs no jump.
+- A first word naming a non-default kind is read as `-k`: `hop file aeraki.yaml`.
+- A path typed outside its repo is looked for in every repo and workspace, and a checkout on its default branch wins among clones of one origin.
+- Smaller text changes: the T4 hint, the headless report's T0 and kind-word lines, and `-v`.
+
+hopx was ported from 0.2.0, so the first run against 0.3.1 measured version drift, not port quality. This phase ported the whole 0.3.1 delta, except the modal layer's esc change, since hopx has no modal layer. `HOPX_LAYOUT=fixed` keeps the 0.2 layout so the 0.2.0-pinned goldens and harnesses still hold. The parity scripts pick the layout from the reference's `VERSION`.
+
+### What exists
+
+- `spike/parity/e2e.sh`: each query through each implementation's own shell function, headless.
+  - zsh hop is `hop()` from `$HOP_PARITY_HOME` (default `~/.local/share/hop`) with Eric's `config.zsh` and `_hop_tty_ok` stubbed to fail.
+  - hopx is the function `hopx init zsh` prints, with `testdata/eric.toml`. Every shard runs in a new session, so neither side can open `/dev/tty`.
+  - The history file is a temp file, emptied before each query. Eric's history is never read or written.
+  - Per query it records rc, the landing dir, the remembered dir, wall time and all of stderr, and compares verdict (jump, pick, none) and target (the landing dir, or the "best matches" line for a pick). `text` counts agreeing queries whose rc, history or any byte of stderr still differ.
+  - The sets are eval_real's five, built by the reference hop from its own rows (`sets.zsh`), plus two hand-written ones: `v03` (kind words, paths, clipped names; 31 queries) and `away` (paths into other repos typed from `~`; 14 queries).
+- `spike/parity/perf.sh` and `perf_zsh.zsh`: enumeration, resolve per tier and end to end, below. `__resolve-dump --ms` adds per-query resolve time.
+- `rows.sh` and `resolve.sh` take `HOP_PARITY_HOME` too, and `sets.zsh stress` writes resolve_dump's three stress sets.
+- `spike/hopx/build.sh`: the six cross-compile targets, with sizes.
+- The 0.3.1 port: `internal/rows/layout.go` (`_hop_layout`, `_hop_lay_parse`), `unclip` in J3, `resolve.WordUnread` and the kind-word reading in `cmdHop`, and `internal/resolve/elsewhere.go` (`_hop_elsewhere`, `_hop_main_checkout`, `_hop_git_facts`), plus the report and hint text.
+
+### Agreement per set, end to end
+
+`e2e.sh` on `~/strava/configuration`, 2,044 queries per jump mode. Every query that agrees also matches on rc, history and stderr byte for byte (`text` 0 everywhere).
+
+| jump | set | queries | agree | disagree |
+|---|---|---|---|---|
+| auto | names | 582 | 582 | 0 |
+| auto | pref3 | 324 | 324 | 0 |
+| auto | scope+env | 27 | 27 | 0 |
+| auto | name+env | 566 | 566 | 0 |
+| auto | nonsense | 500 | 500 | 0 |
+| auto | v03 | 31 | 31 | 0 |
+| auto | away | 14 | 14 | 0 |
+| unique | all seven sets | 2,044 | 2,044 | 0 |
+| never | all seven sets | 2,044 | 2,044 | 0 |
+
+Against 0.3.1: 6,132 of 6,132 agree. Under auto, 280 names, 51 pref3, 20 scope+env, 468 name+env, 17 v03 and 10 away queries jump on both sides, and no nonsense word jumps.
+
+Against the worktree's 0.2.0 (`HOP_PARITY_HOME=<worktree>`, before the 0.3.1 port, eval_real's five sets only): 6,000 of 6,000 agree, with `text` 0. The port from phases 1 to 3 is exact end to end.
+
+### Every disagreement, and its cause
+
+Before the 0.3.1 port, against 0.3.1, 88 queries disagreed: 30 under auto, 30 under unique, 28 under never. All were caused by 0.3.0's fitted layout:
+
+- 28 names-set queries (25 under never) and one name+env query (`api-server-dem…safe-to-delete prod`) are names 0.3.1 clips, such as `github-actions…rka-runner-dev`. eval_real builds the names set from the display column, so these queries hold the `…`. hop matched them on its clipped display and jumped, or picked them under never. hopx never clipped names, so it found nothing or picked other rows.
+- `ext` (pref3) and `ml dev` (name+env, never only) picked the same rows in a different order: fzf's tiebreak reads the padded display, whose widths differ.
+
+Porting `_hop_layout` and `_hop_unclip` fixed all 88. The hand-written sets then found three more, all `_hop_elsewhere`: `configuration/terraform/acct-security-tooling-prod`, `configuration/kubernetes` and `terraform/acct-nope` from inside the repo. Porting it fixed those too. Nothing is left documented as a known disagreement.
+
+### Lower-level parity after the port
+
+- `rows.sh` against 0.3.1: all 14 lists byte-identical, 16,461 rows (11 kinds, the default set of 1,042, 4 workspace and 30 repo rows). Against 0.2.0 with `HOPX_LAYOUT=fixed`, also all identical.
+- `resolve.sh` against 0.3.1, auto: 0 core and 0 full differences on all eight sets, 4,599 queries, with zsh run as `HOP_VIM=0` since hopx has no modal layer. Before the T4 hint was reworded, the only full differences were 525 lines of that hint (`(esc twice clears)` against `(esc clears)`).
+- `resolve.sh` against 0.2.0, auto, after the port: 0 core and 0 full differences on all eight sets, 4,602 queries. The script reads 0.2.0's `(esc clears)` hint as hopx's `(ctrl-u clears)`; nothing else needed rewording.
+
+### Speed
+
+`perf.sh`, `~/strava/configuration`, Eric's config. The host load average was 7 to 17 throughout, from other agents, so read the ratios.
+
+Enumeration, median of 15. hopx is a whole `hopx rows` process. hop is `_hop_rows` in an already-sourced shell, which is what `hop()` pays, and "fresh" adds a new zsh sourcing `hop.zsh`.
+
+| list | rows | hopx ms | hop ms | hop fresh ms |
+|---|---|---|---|---|
+| default kinds | 1,042 | 43.4 | 282.7 | 301.4 |
+| file | 12,046 | 57.8 | 1,491.5 | 1,412.0 |
+
+That is 6.5 and 26 times faster. Phase 1 measured 24.6 ms for hopx's default list on a quieter host. The fitted layout adds nothing measurable: 43.6 ms with `HOPX_LAYOUT=fixed` and 43.0 ms without, back to back.
+
+Resolve per tier, auto, per query with enumeration excluded, over the eight resolve.sh sets (4,599 queries). Both sides put every query in the same tier.
+
+| tier | queries | hopx median | hopx p90 | hop median | hop p90 | hop / hopx |
+|---|---|---|---|---|---|---|
+| T1 | 3,012 | 29.9 | 73.7 | 32.7 | 45.1 | 1.1x |
+| T2 | 474 | 33.2 | 48.2 | 77.5 | 113.6 | 2.3x |
+| T3 | 6 | 67.5 | 113.6 | 51.2 | 161.1 | 0.8x |
+| relaxed | 582 | 34.6 | 51.5 | 108.5 | 170.2 | 3.1x |
+| T4 | 525 | 25.3 | 86.1 | 33.8 | 47.0 | 1.3x |
+| all | 4,599 | 31.9 | 68.8 | 35.5 | 105.2 | 1.1x |
+
+- The resolver itself is not where hopx wins. Both sides fork the same external fzf about 2.5 times per query, at about 10 ms each, and that is most of a T1 resolve on either side.
+- hopx wins where hop does work in zsh: the T2 rewrites and the relaxed tier run 2 to 3 times faster.
+- T3 has only 6 queries, so its row is noise. hopx's p90 is higher at T1 and T4, which is fork jitter under the load.
+- Embedding fzf (phase 5) is the lever for this table.
+
+End to end through each shell function, auto, serial: every 10th query of the eight sets, plus all of v03 and away, 509 calls per side. Two runs, the second under heavier load:
+
+| group | calls | hopx median, run 1 | hop median, run 1 | hopx median, run 2 | hop median, run 2 | hop / hopx |
+|---|---|---|---|---|---|---|
+| eight sets, jumps | 169 | 55.4 | 341.3 | 78.2 | 498.1 | 6.2 to 6.4x |
+| eight sets, no jump | 340 | 60.8 | 358.5 | 85.4 | 518.8 | 5.9 to 6.1x |
+| v03 (kind words, including `file`) | 31 | 62.0 | 390.3 | 92.7 | 644.7 | 6.3 to 7.0x |
+| away (paths from `~`, no enumeration) | 14 | 29.0 | 34.2 | 33.9 | 43.3 | 1.2 to 1.3x |
+| all | 509 | 57.4 | 350.5 | 83.7 | 510.7 | 6.1x |
+
+- hop's v03 p90 was 3.1 s and 4.4 s, which is `hop file x` listing 12,046 files in zsh. hopx's p90 was 147 and 168 ms.
+- `away` is the one group where the two are close, because neither enumerates anything. In the parallel `e2e.sh` run hopx's median was higher there (42.6 against 30.0 ms), which is contention: serially, and in a 25-run check (hopx 21.0 ms, hop 44.0 ms with `source hop.zsh` included and 13.6 ms of that being the source), hopx is the faster.
+- G7 still passes: hopx is faster than hop for every probe query and every group here.
+
+### Cross-compile
+
+`build.sh` (`CGO_ENABLED=0 go build -trimpath -ldflags='-s -w'`):
+
+| target | bytes | MiB | `file` |
+|---|---|---|---|
+| darwin/arm64 | 3,476,354 | 3.32 | Mach-O 64-bit executable arm64 |
+| darwin/amd64 | 3,715,584 | 3.54 | Mach-O 64-bit executable x86_64 |
+| linux/amd64 | 3,727,522 | 3.55 | ELF 64-bit LSB executable, x86-64, statically linked |
+| linux/arm64 | 3,539,106 | 3.38 | ELF 64-bit LSB executable, ARM aarch64, statically linked |
+| windows/amd64 | 4,057,600 | 3.87 | PE32+ executable (console) x86-64 |
+| windows/arm64 | 3,723,264 | 3.55 | PE32+ executable (console) Aarch64 |
+
+The linux/amd64 binary ran `-V` and `init bash` in an `ubuntu:24.04` container under `--platform linux/amd64` emulation. The darwin/arm64 binary is the one every test here ran. The Windows binaries were not run, because there is no Windows host or VM available.
+
+### Tests
+
+`go vet ./...` is clean and `go test ./...` passes: 99 top-level tests, 338 counting subtests, across 17 packages. With `HOPX_PARITY_REPO=~/strava/configuration`, `TestParityRows`, `TestParityResolve` (against the worktree's 0.2.0), `TestRealRepoPicker`, `TestEricConfig` and `TestEricConfigLoads` pass as well.
+
+New in this phase:
+
+- `testfix.RefHome("v0.3.1")` unpacks hop at a tag from the worktree's own git objects into the temp dir, so tests can compare against 0.3.1 without depending on Eric's install. Tests skip when the tag or git is missing.
+- `TestListLiveZsh03`: six lists, including the 95% fit, the 56 cap, dropped columns, a separator inside a value, accented names and `like` widths, byte-identical to 0.3.1's `_hop_layout`. Also `TestListWidths`, `TestListFixed` and `TestParseWidthsRejects`.
+- `TestUnclip` and `TestUnclipLiveZsh03`, against 0.3.1's `_hop_unclip`.
+- `TestHeadlessAgainstHop03`: the 37 headless command lines from phase 2, plus 31 for 0.3.0, run through 0.3.1's `hop()` and the hopx binary. They cover kind words with narrowed defaults, `-k`/`-a`/`-c` overriding them, a kind word outside a repo, the main-checkout jump, the never and unique picks, two origins, the repo-name prefix, the misspelt-path hint, and `-c` and `HOP_REPOS` from inside a repo. stderr, rc, landing dir and history all match. Breaking `mainCheckout` fails 3 of them, and disabling the kind-word reading fails 10.
+- `TestGitFacts` (a clone, a linked worktree, scp-style and ssh URLs, a reftable repo, no origin) and `TestElsewhereWordShape`.
+
+### I2: lines
+
+| area | zsh lines | Go lines |
+|---|---|---|
+| 0.2.0 to 0.3.1 delta (`hop.zsh`, `lib/`, `bin/`) | +702 −157 | about 440 new (layout 157, elsewhere 282 non-blank, non-comment) plus about 330 net in modified files |
+| its tests | 0.3.0's own tests, not ported | 337 new lines of Go test, plus the 0.3 cases in `hop_test.go` |
+| parity and perf harness | not ported | 463 lines of shell and zsh |
+
+### I3: pace
+
+The phase started at about 13:39, after B3's docs commit at 13:36. The first runs against 0.3.1 measured the drift by about 13:55, the fitted layout was byte-identical on all 14 lists by about 14:06, and kind words and `_hop_elsewhere` agreed by about 14:35. The rest went on the harness, the timings and the docs. Porting a real upstream release took about 45 minutes of agent time. The code commits landed at 15:23.
+
+This is the measurement the cost question most needed: a second implementation has to track every hop release. For a release of this size that is under an hour of agent time, provided the parity harness exists to say when the port is done.
+
+### Found in hop
+
+- Since 0.3.0, eval_real's names set includes clipped names. The 28 names 0.3.1 clips arrive as queries holding `…`, such as `github-actions…rka-runner-dev`, which nobody types. Those queries jump only because the display is clipped exactly that way, so the set now partly measures the clip rather than names. `tests/eval_real.zsh` could build names from the raw name, or skip names holding `…`.
+- From inside a repo, `_hop_elsewhere` runs only for a one-word query, so `hop configuration/terraform/x vpc` never looks in other repos. That matches the CHANGELOG ("a path"), and it is worth knowing.
