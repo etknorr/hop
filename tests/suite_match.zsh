@@ -133,6 +133,8 @@ mt_case infrastructure terraform/acct-infrastructure/env-prod
 mt_case 'acct-l[a]b*#/env-prod'
 mt_case env-prod 'terraform/acct-l[a]b*#' cd auto c
 mt_case terrafrom/acct-securty-tooling-prd
+mt_case wvlomp/qarnix
+mt_case fixrepo/zqvelt/morpan
 
 print -rl -- "${MT_CASES[@]}" > "$MT_WORK/cases"
 export MT_REPO MT_WORK
@@ -244,6 +246,12 @@ mt_pick T2 - "$SP/" terrafrom/acct-securty-tooling-prd
 mt_get terrafrom/acct-securty-tooling-prd
 assert_eq 'terraform acct security tooling prod' "${reply[15]}"
 assert_eq 'no exact match for: terrafrom/acct-securty-tooling-prd (showing: terraform acct security tooling prod)' "${reply[16]}"
+
+t 'resolve: a path no row is close to is NONE, which is the only verdict that looks in other repos'
+mt_get wvlomp/qarnix
+assert_eq 'none T4' "${reply[6]} ${reply[7]}" 'the cross-repo tests below lean on this being NONE inside the fixture'
+mt_get fixrepo/zqvelt/morpan
+assert_eq 'none T4' "${reply[6]} ${reply[7]}" 'and on this one too'
 
 t 'resolve: a literal path under HOP_JUMP=never opens the picker instead'
 mt_get terraform/acct-security-tooling-prod . cd never
@@ -797,6 +805,154 @@ MT_RUN=$(mt_headless "$MT_REPO" 'hop terrafrom/acct-securty-tooling-prd')
 assert_contains "$MT_RUN" 'hop: no exact match for: terrafrom/acct-securty-tooling-prd (read as: terraform acct security tooling prod)'
 assert_contains "$MT_RUN" "hop: best matches: $SP/," 'the account dir is the first candidate'
 assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" 'a typo never jumps'
+
+# ---------------------------------------------------------------------------
+# T0 in other repos: a path typed outside the repo that holds it.
+# ---------------------------------------------------------------------------
+# The workspace repos above are empty, so each path here is made in exactly the repos a case needs.
+typeset MT_CF=$MT_WSH/strava/configuration
+mkdir -p -- "$MT_CF/$SP" "$MT_CF/acct-security-tooling-prod/env-prod" "$MT_CF/terraform/acount-security" "$MT_CF/wvlomp/qarnix" \
+	"$MT_WSH/strava/hop/shared/dir" "$MT_WSH/personal/hop/shared/dir" "$MT_WSH/strava/notes-dir/sub"
+print -r -- 'locals {}' > "$MT_CF/$SP/terragrunt_aws_account.hcl"
+
+t 'elsewhere: outside any repo, a repo-relative path jumps into the one repo that has it, and says where'
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP"
+assert_contains "$MT_RUN" "hop: $SP -> ~/strava/configuration/$SP/ (found in configuration)"
+
+t 'elsewhere: from a workspace root, the same path jumps the same way'
+MT_RUN=$(mt_headless "$MT_WSH/strava" "hop $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP"
+
+t 'elsewhere: a path that starts with its repo name jumps from outside any repo'
+MT_RUN=$(mt_headless "$MT_WSH" "hop configuration/$SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP"
+assert_contains "$MT_RUN" "hop: configuration/$SP -> ~/strava/configuration/$SP/ (found in configuration)"
+MT_RUN=$(mt_headless "$MT_WSH" "hop configuration/$SP" "HOP_REPOS=$MT_CF")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'the repo name works with no workspace holding the repo'
+
+t 'elsewhere: a workspace-relative path that names no repo jumps too, and says which workspace'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop notes-dir/sub' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/notes-dir/sub"
+assert_contains "$MT_RUN" '(found in workspace strava-ws)'
+
+t 'elsewhere: one repo reached by two spellings is one target, so it still jumps'
+ln -s -- "$MT_CF" "$MT_WSH/cflink"
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_REPOS=$MT_CF:$MT_WSH/cflink")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'a symlinked copy of the same repo made a pick of one dir'
+
+t 'elsewhere: the wrong case lands on the on-disk spelling'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop Terraform/ACCT-Security-Tooling-Prod' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'the cd target must be spelled the way the disk spells it'
+
+t 'elsewhere: a path in no repo still says nothing matched'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop zzqx/nothing' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'nothing matched the query: zzqx/nothing'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+
+t 'elsewhere: a path two repos have never jumps, and the report names both'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+assert_contains "$MT_RUN" 'hop: 2 targets matched the query: shared/dir, and picking one needs a terminal.'
+assert_contains "$MT_RUN" 'hop: best matches: ~/personal/hop/shared/dir/, ~/strava/hop/shared/dir/' 'with no history, by path'
+assert_contains "$MT_RUN" 'put the repo name in front of the path'
+assert_not_contains "$MT_RUN" 'no exact match' 'both paths are exact, so nothing was read as anything'
+
+t 'elsewhere: of two, the repo visited most recently comes first'
+fixture_histfile "$MT_WSH/strava/hop/somewhere" "$MT_WSH/personal/notes"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
+export HOP_HISTFILE=/dev/null
+assert_contains "$MT_RUN" 'hop: best matches: ~/strava/hop/shared/dir/, ~/personal/hop/shared/dir/'
+
+t 'elsewhere: with a terminal, the two open in the picker on the path, and Enter cds to the one picked'
+stub_fzf_select '' 2
+MT_STUB=$REPLY
+MT_RUN=$(mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_WSH}; hop shared/dir" "HOP_WORKSPACES=$MT_WS")
+mt_argv "$MT_STUB"
+MT_IN=("${(@f)$(mt_slurp "$MT_STUB/stdin")}")
+assert_eq 1 ${#${(M)reply:#--query=shared/dir}} 'the picker opens on the path as typed'
+assert_contains "${(F)reply}" 'found in 2 places: ~/personal/hop, ~/strava/hop' 'the header names each repo by its path, since two can share a name'
+assert_eq 2 ${#MT_IN} 'the picker holds just the two candidates'
+assert_contains "$MT_RUN" "PWD=$MT_WSH/strava/hop/shared/dir" 'row 2 is the strava copy'
+
+t 'elsewhere: a visit inside hop.old ranks hop.old, never the hop whose name it starts with'
+mkdir -p -- "$MT_WSH/strava/hop.old/shared/dir"
+_hop_fix_git -C "$MT_WSH/strava/hop.old" init -q -b main
+fixture_histfile "$MT_WSH/strava/hop.old/shared"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
+export HOP_HISTFILE=/dev/null
+assert_contains "$MT_RUN" 'hop: best matches: ~/strava/hop.old/shared/dir/, ~/personal/hop/shared/dir/, ~/strava/hop/shared/dir/'
+
+typeset MT_SORT MT_SORT_T='elsewhere: candidates sort in byte order, so a name comes before every name it prefixes'
+MT_SORT=$(hop_probe 'export LC_ALL=en_US.UTF-8
+typeset tab
+printf -v tab "\t"
+typeset -a reply k=("a.b${tab}x" "a${tab}x")
+print -rn -- "${${(@o)k}[1]%%${tab}*} "
+_hop_sort_bytes "${k[@]}"
+print -r -- "${reply[1]%%${tab}*}"')
+if [[ $MT_SORT == 'a a' ]]; then
+	# Byte order is already this locale's collation, so the claim cannot be told apart from (o) here.
+	if [[ $OSTYPE == linux* ]]; then
+		skip_cap "$MT_SORT_T" 'en_US.UTF-8 sorts like bytes here, so it is probably not installed'
+	else
+		skip "$MT_SORT_T" "${OSTYPE} collates en_US.UTF-8 in byte order, so (o) and byte order agree"
+	fi
+else
+	t "$MT_SORT_T"
+	assert_eq 'a.b a' "$MT_SORT" 'the control is (o) putting a.b first; then _hop_sort_bytes must put a first'
+fi
+
+t 'elsewhere: inside a repo, a path only another repo has jumps there, because this repo has nothing close'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/wvlomp/qarnix"
+assert_contains "$MT_RUN" 'hop: wvlomp/qarnix -> ~/strava/configuration/wvlomp/qarnix/ (found in configuration)'
+
+t 'elsewhere: inside a repo, a path that starts with that repo'"'"'s own name finds it, with no workspace holding it'
+mkdir -p -- "$MT_REPO/zqvelt/morpan"
+ln -s -- "$MT_REPO" "$MT_WORK/fixrepo"
+MT_RUN=$(mt_headless "$MT_REPO" 'hop fixrepo/zqvelt/morpan' "HOP_REPOS=$MT_WORK/fixrepo")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/zqvelt/morpan" 'T0 never tried the path with the repo name taken off, so the current repo must not be skipped for it'
+
+t 'elsewhere: inside a repo, its own match wins: a T0 path, a J2 jump, and a typo pick all stay here'
+MT_RUN=$(mt_headless "$MT_REPO" "hop $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/$SP"
+MT_RUN=$(mt_headless "$MT_REPO" 'hop acct-security-tooling-prod/env-prod' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/$SP/env-prod"
+MT_RUN=$(mt_headless "$MT_REPO" 'hop terraform/acount-security' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" 'configuration has terraform/acount-security, but this repo reads it as a typo first'
+assert_contains "$MT_RUN" 'no exact match for: terraform/acount-security'
+
+t 'elsewhere: -c, -p, HOP_JUMP=never and -R never look in other repos'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop -c wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" '-c means under $PWD'
+MT_RUN=$(mt_headless "$MT_WSH" "hop -p $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS" HOP_JUMP=never)
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+MT_RUN=$(mt_headless "$MT_WSH" "hop -R $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+MT_RUN=$(mt_headless "$MT_WSH" "hop -w $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+
+t 'elsewhere: the lookup logs as T0 with its own timing'
+fixture_tmpdir mtxdbg
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS" HOP_DEBUG=1 "HOP_DEBUG_LOG=$REPLY/log")
+assert_contains "$(mt_slurp "$REPLY/log")" "resolve tier=T0 rule=elsewhere verdict=jump n=1 inj=0 q=$SP target=~/strava/configuration/$SP/ ms="
+
+# mt_xcode <hop-args> -> run hop from outside any repo on the account path, then print its code calls and the result.
+mt_xcode() {
+	emulate -L zsh
+	stub_reset
+	local out
+	out=$(mt_headless "$MT_WSH" "hop $1 $SP" "HOP_WORKSPACES=$MT_WS")
+	print -r -- "${(j:|:)${(@f)$(stub_calls code)}//$'\t'/ } ${(@M)${(@f)out}:#st=*}"
+}
+
+t 'elsewhere: every action flag applies to a cross-repo jump'
+assert_eq "code -n $MT_CF/$SP st=0 PWD=$MT_WSH" "$(mt_xcode -o)"
+assert_eq "code -r $MT_CF/$SP/terragrunt_aws_account.hcl st=0 PWD=$MT_WSH" "$(mt_xcode -e)"
+assert_eq "code -r $MT_CF/$SP/terragrunt_aws_account.hcl st=0 PWD=$MT_CF/$SP" "$(mt_xcode '--cd -e')"
 
 t 'resolve: an injected dir previews its top-level README, and a dir with none previews itself'
 typeset MT_PREV

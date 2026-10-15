@@ -54,6 +54,7 @@ _hop_usage() {
 	print -r -- '  hop                 pick from the default kinds, starting in NORMAL mode'
 	print -r -- '  hop vpc prod        a clear match jumps with no UI; otherwise the picker opens best-first'
 	print -r -- '  hop terraform/x     a path that exists jumps straight there, before any matching'
+	print -r -- '                      and from outside its repo, hop looks in your repos and workspaces'
 	print -r -- '  hop -p, --pick      always open the picker, even for a clear match (HOP_JUMP=never)'
 	print -r -- '  hop -o, --open      Enter opens the target in VS Code instead of cd-ing'
 	print -r -- '  hop -e, --reveal    Enter shows the target in the VS Code explorer instead of cd-ing'
@@ -318,6 +319,10 @@ _hop_run() {
 		local -a _hop_res_rows
 		_hop_resolve "$query" "$targets" "$root" "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}" "${_hop_under:-}"
 	fi
+	# A path this repo has nothing close to may be another repo's, and only then is anything outside it tried.
+	if [[ $_hop_res_verdict == none && -n $root ]] && (( ${_hop_xrepo:-0} )) && _hop_elsewhere "$query" "$root"; then
+		return $_hop_st
+	fi
 	_hop_res_pick "$label" "$(_hop_header "$reload")" "$query" "$targets" "$reload" "$root" '' "$restore" "$up" \
 		|| return $_hop_st
 
@@ -448,7 +453,8 @@ hop() {
 	local act_flag=''
 	# Read by the resolver, the pickers, the legends and _hop_act_enter through dynamic scope.
 	# - So no signature has to carry them, and none of them outlives this call.
-	local _hop_jump='' _hop_under='' _hop_mode=''
+	local _hop_jump='' _hop_under='' _hop_mode='' _hop_st
+	local -i _hop_xrepo=0
 	kinds=(${=${HOP_DEFAULT_KINDS//,/ }})
 
 	# --no-vim shadows the global for this call only, which is what _hop_vim_on reads.
@@ -662,6 +668,9 @@ hop() {
 			_hop_dispatch '' "${reply[1]}" "${reply[2]}" "${reply[3]}"
 			return $?
 		fi
+		# _hop_xrepo arms _hop_elsewhere, which runs below outside a repo and from _hop_run inside one.
+		# - Never under -c, which keeps every search under $PWD.
+		(( here )) || _hop_xrepo=1
 	fi
 
 	if (( ! ${+commands[fzf]} )); then
@@ -680,6 +689,9 @@ hop() {
 
 	# Outside a repo the workspace level is strictly more useful, but only if one is configured.
 	if (( repopick )) || [[ -z $root ]]; then
+		if [[ -z $root ]] && (( _hop_xrepo )) && _hop_elsewhere "$query" ''; then
+			return $_hop_st
+		fi
 		if [[ -z $root ]] && (( ! repopick )) && _hop_ws_parse; then
 			_hop_ws_picker "$query" fallback
 			return $?

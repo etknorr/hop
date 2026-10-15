@@ -176,6 +176,115 @@ _hop_literal_fields() {
 	return 0
 }
 
+# _hop_elsewhere <word> <root> -> 1 when no other repo or workspace holds the path; else 0, with _hop_st the call's status.
+# - T0 again, for a path typed outside the repo it lives in: `terraform/x` from ~, or `configuration/terraform/x`.
+# - Every repo _hop_repos knows and every workspace root is an anchor, minus $PWD and root for the path as typed, which T0 already tried.
+# - A path may start with a repo's own name, which works whether or not a workspace holds that repo.
+# - Each anchor costs one case-insensitive glob, and no other repo's rows are ever enumerated.
+# - One distinct target jumps, saying where it was found.
+# - Several never jump: the same path in a repo and its retired copy is exactly when a guess is wrong.
+# - They open a picker over just those, the one in the repo visited most recently first, then by path.
+_hop_elsewhere() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local w=$1 root=${2:+${2:A}}
+	w=${w%%/##}
+	[[ $w == */* && $w != (/|'~'|./|../)* && /$w/ != */(.|..)/* ]] || return 1
+	local -F t0=0
+	[[ -n ${HOP_DEBUG:-} ]] && zmodload -F zsh/datetime p:EPOCHREALTIME 2>/dev/null && t0=$EPOCHREALTIME
+
+	# akinds says which anchors are workspace roots, whose repo is the path's first segment.
+	local -a anchors rests names akinds reply
+	local out a e first=${(L)w%%/*}
+	if out=$(_hop_repos); then
+		for a in "${(@f)out}"; do
+			anchors+=("$a") rests+=("$w") names+=("${a:t}") akinds+=(repo)
+			[[ ${(L)a:t} == "$first" ]] && anchors+=("$a") rests+=("${w#*/}") names+=("${a:t}") akinds+=(repo)
+		done
+	fi
+	if _hop_ws_parse; then
+		for e in "${reply[@]}"; do
+			anchors+=("${e#*$'\t'}") rests+=("$w") names+=("${e%%$'\t'*}") akinds+=(workspace)
+		done
+	fi
+
+	local -A seen
+	local -a hits homes where hkinds
+	local cwd=${PWD:A} k rest REPLY
+	local -i i
+	for (( i = 1; i <= $#anchors; i++ )); do
+		a=${anchors[i]:A}
+		[[ ${rests[i]} == "$w" && ( $a == "$cwd" || $a == "$root" ) ]] && continue
+		_hop_path_under "$a" "${rests[i]}" || continue
+		k=${REPLY:A}
+		(( ${+seen[$k]} )) && continue
+		seen[$k]=1
+		hits+=("$REPLY") where+=("${names[i]}") hkinds+=("${akinds[i]}")
+		if [[ ${akinds[i]} == workspace ]]; then
+			rest=${REPLY#"$a"/}
+			homes+=("$a/${rest%%/*}")
+		else
+			homes+=("$a")
+		fi
+	done
+	(( $#hits )) || return 1
+
+	local _hop_gen_root=''
+	if (( $#hits == 1 )); then
+		_hop_literal_fields "${hits[1]}" ''
+		_hop_elsewhere_log jump 1 "${reply[3]}"
+		[[ ${hkinds[1]} == workspace ]] && where[1]="workspace ${where[1]}"
+		print -ru2 -- "hop: ${1} -> ${reply[3]} (found in ${where[1]})"
+		_hop_dispatch '' "${reply[@]}"
+		_hop_st=$?
+		return 0
+	fi
+
+	# A repo ranks by its first appearance in the history, as the repo or anything inside it, then by path.
+	local -a hist keys rows places
+	[[ -r ${HOP_HISTFILE:-} ]] && hist=("${(@f)$(<"$HOP_HISTFILE")}")
+	for (( i = 1; i <= $#hits; i++ )); do
+		keys+=("${(l:6::0:)${hist[(i)${(b)homes[i]}(|/*)]}}${homes[i]}"$'\t'"${hits[i]}"$'\t'"$i")
+	done
+	_hop_sort_bytes "${keys[@]}"
+	for k in "${reply[@]}"; do
+		i=${k##*$'\t'}
+		places+=("${(D)homes[i]}")
+		_hop_literal_fields "${hits[i]}" ''
+		if [[ -d ${hits[i]} ]]; then
+			rows+=("$(_hop_row dir "${homes[i]:t}" - - "${hits[i]:t}" "${reply[1]}" "${reply[2]}")")
+		else
+			rows+=("$(_hop_row file "${homes[i]:t}" - - "${hits[i]:t}" "${reply[1]}" "${reply[2]}" f)")
+		fi
+	done
+	_hop_elsewhere_log pick "$#rows"
+
+	local _hop_res_verdict=pick _hop_res_tier=T0 _hop_res_rule=elsewhere _hop_res_query=$1 _hop_res_target=''
+	local _hop_res_note="found in ${#rows} places: ${(j:, :)places}"
+	local -i _hop_res_n=$#rows _hop_res_m=$#rows _hop_res_inj=0 _hop_res_ready=1
+	local -a _hop_res_rows=("${(@)rows//$'\e'\[[0-9;]#m/}")
+	_hop_run "paths  ${#rows} found" "$1" '' "${(F)rows}"
+	_hop_st=$?
+	return 0
+}
+
+# _hop_sort_bytes <string...> -> reply is the strings in byte order, so `configuration` sorts before `configuration.old`.
+# - (o) collates by locale, and a glibc locale that skips punctuation puts the longer name first.
+_hop_sort_bytes() {
+	emulate -L zsh
+	local LC_ALL=C
+	reply=("${(@o)argv}")
+}
+
+# _hop_elsewhere_log <verdict> <n> [target] -> _hop_elsewhere's HOP_DEBUG line, timed from its own t0.
+_hop_elsewhere_log() {
+	emulate -L zsh
+	[[ -n ${HOP_DEBUG:-} ]] || return 0
+	local ms=-
+	(( t0 > 0 )) && printf -v ms '%.1f' $(( (EPOCHREALTIME - t0) * 1000 ))
+	_hop_dbg "resolve tier=T0 rule=elsewhere verdict=${1} n=${2} inj=0 q=${w} target=${3:--} ms=${ms}"
+}
+
 # _hop_vocab_build <rel...> -> _hop_vocab, _hop_vocab_set and _hop_segs, the words T2 and T3 may rewrite a query into.
 # - All three are declared by _hop_resolve, so building them once serves every tier and every relaxed term.
 # - _hop_vocab is every rel token split on / - _ . with 2-char tokens dropped, plus the kind names.
@@ -924,7 +1033,7 @@ _hop_headless_report() {
 		_hop_res_jump
 		return $?
 	fi
-	if [[ $_hop_res_verdict == pick && $_hop_res_tier != T1 ]]; then
+	if [[ $_hop_res_verdict == pick && $_hop_res_tier != (T0|T1) ]]; then
 		if [[ $_hop_res_tier == relaxed ]]; then
 			print -ru2 -- "hop: no exact match for: ${query} (${_hop_res_note})"
 		else
@@ -953,6 +1062,8 @@ _hop_headless_report() {
 		print -ru2 -- "hop: drop or fix: ${_hop_res_note#ignored: }"
 	elif [[ $_hop_res_tier == (T2|T3) ]]; then
 		print -ru2 -- 'hop: fix the spelling, since hop never jumps on a corrected query.'
+	elif [[ $_hop_res_tier == T0 ]]; then
+		print -ru2 -- 'hop: put the repo name in front of the path, or give the whole path from ~/, so it names one of them.'
 	else
 		print -ru2 -- 'hop: narrow the query until exactly one target matches and hop will jump straight to it.'
 	fi
