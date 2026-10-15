@@ -144,8 +144,12 @@ assert_eq '-p --pick' "${reply[*]}"
 t 'the header names every flag the specs define'
 typeset CT_HEAD
 CT_HEAD=$(sed -n '1,/^$/p' "$HOP_HOME/completions/_hop")
+# Whole words, because a substring test let -p pass inside --pick and -c inside --cwd.
+# - Split on whitespace, , and /, then cut at = or [, so --action=MODE and --doctor[=short] still name their flag.
+typeset -a CT_HWORDS=(${=${CT_HEAD//[,\/]/ }})
+CT_HWORDS=(${CT_HWORDS%%[=\[]*})
 CT_MISSING=()
 for CT_W in "${CT_OPTS[@]}"; do
-	[[ $CT_HEAD == *"$CT_W"* ]] || CT_MISSING+=("$CT_W")
+	(( ${CT_HWORDS[(Ie)$CT_W]} )) || CT_MISSING+=("$CT_W")
 done
 assert_empty "${(j:, :)CT_MISSING}" 'the header comment is the only map of the flags, and it went stale before'
