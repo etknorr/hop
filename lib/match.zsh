@@ -224,6 +224,21 @@ _hop_compound() {
 	return 1
 }
 
+# _hop_prune <alt...> -> reply is the alternatives that hold no other one, so an fzf OR group matches the same rows.
+# - Under --exact a row holding github-actions-deploy-auth already holds github-actions, so the longer one only adds noise.
+# - Unpruned, `githubactions` opened on a ten-way OR group that was the picker query and the header both.
+_hop_prune() {
+	emulate -L zsh
+	local a b
+	reply=()
+	for a in "$@"; do
+		for b in "$@"; do
+			[[ $a != "$b" && $a == *"$b"* ]] && continue 2
+		done
+		reply+=("$a")
+	done
+}
+
 # _hop_rewrite <query> [wide] -> 0 with reply=(approx effq), the query rewritten into fzf OR groups (T2).
 # - Every token is split out on whitespace and / - _ . and kept as-is when some vocabulary word contains it.
 # - A token no word contains gets typo fixes: zsh's approximate glob, 1 error, or 2 from 8 chars, transposition counted once.
@@ -278,7 +293,8 @@ _hop_rewrite() {
 				_hop_abbrevs "$w" && alts+=("${reply[@]}")
 			done
 		fi
-		alts=("${(@u)alts}")
+		_hop_prune "${(@u)alts}"
+		alts=("${reply[@]}")
 		(( $#alts )) || return 1
 		[[ ${(j: :)alts} == "$tok" ]] || approx=1
 		groups+=("${(j: | :)alts}")
@@ -317,7 +333,8 @@ _hop_loose() {
 			done
 		fi
 		(( $#hit )) || return 1
-		groups+=("${(j: | :)hit}")
+		_hop_prune "${hit[@]}"
+		groups+=("${(j: | :)reply}")
 	done
 	(( $#groups )) || return 1
 	REPLY="${(j: :)groups}"

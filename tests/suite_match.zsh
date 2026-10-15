@@ -369,6 +369,12 @@ print -rn -- "${(j: :)${(@o)reply}}|"
 _hop_ancestors t t/a/x/ t/a/y/ t/ k/f.yaml
 print -rn -- "${(j: :)reply}"')" 't/ is itself a match, a file contributes its parent, and a ~ rel names nothing in the repo'
 
+t 'resolve: an OR group drops every alternative that holds a shorter one, which matches no extra row'
+assert_eq 'github_actions | github-actions' "$(hop_probe '
+typeset -a _hop_segs=(github_actions github_actions_self_hosted github-actions-deploy-auth github-actions github-actions-runners)
+_hop_loose gthbactions
+print -r -- "$REPLY"')" 'githubactions had opened on a ten-way OR group'
+
 # The kind-word guard decides only when every match sits under one dir, so it gets rows where that holds.
 # - In the full fixture `mesos` also matches a terraform unit, which would keep it a pick with no guard at all.
 typeset MT_KIND
