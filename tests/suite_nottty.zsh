@@ -258,6 +258,7 @@ assert_eq 0 "$NT_HUNG"
 assert_eq 1 "$NT_ST"
 assert_contains "$NT_ERR" '5 targets matched the query: vpc'
 assert_contains "$NT_ERR" 'hop: best matches: terraform/' 'the rels are what tell a user how to narrow it'
+assert_contains "$NT_ERR" 'hop: narrow the query until exactly one target matches' 'an exact pick is the one case narrowing fixes'
 assert_eq "$NT_MREPO" "$NT_PWD"
 
 t 'no ctty, a typo says what it was read as and leaves the shell where it was'
@@ -266,6 +267,27 @@ assert_eq 0 "$NT_HUNG"
 assert_eq 1 "$NT_ST" 'an approximate match never jumps, so with no terminal it has to fail'
 assert_contains "$NT_ERR" 'hop: no exact match for: securty-tooling-prod (read as: security tooling prod)'
 assert_eq "$NT_MREPO" "$NT_PWD"
+assert_contains "$NT_ERR" 'hop: fix the spelling, since hop never jumps on a corrected query.'
+assert_not_contains "$NT_ERR" 'narrow the query' 'no narrower query can jump on a corrected one'
+
+t 'no ctty, a relaxed pick names the words to drop or fix'
+nt_run 'hop vpc zzqx' "$NT_MREPO" "$NT_MPIN"
+assert_eq 1 "$NT_ST"
+assert_contains "$NT_ERR" 'hop: drop or fix: zzqx'
+assert_not_contains "$NT_ERR" 'narrow the query'
+
+t 'no ctty, -p on one match says -p always picks, instead of advising a narrower query'
+nt_run 'hop -p eks security' "$NT_MREPO" "$NT_MPIN"
+assert_eq 1 "$NT_ST"
+assert_contains "$NT_ERR" '1 target matched the query: eks security'
+assert_contains "$NT_ERR" 'hop: -p and HOP_JUMP=never always open the picker, and the picker needs a terminal.'
+assert_not_contains "$NT_ERR" 'narrow the query'
+
+t 'no ctty, over the row cap a typo says it was not corrected, and why'
+nt_run '_HOP_APPROX_MAX=3; hop securty-tooling-prod' "$NT_MREPO" "$NT_MPIN"
+assert_eq 1 "$NT_ST"
+assert_contains "$NT_ERR" 'nothing matched the query: securty-tooling-prod'
+assert_contains "$NT_ERR" 'hop: typo matching skipped above 3 rows, so a misspelt word is not corrected; -k narrows the kinds.'
 
 t 'no ctty, a query every match sits under jumps to that dir and says so'
 nt_run 'hop security-tooling-prod' "$NT_MREPO" "$NT_MPIN"

@@ -877,6 +877,8 @@ _hop_headless_report() {
 	print -ru2 -- 'hop: no terminal available, so the picker cannot run (/dev/tty could not be opened).'
 	if [[ $_hop_res_verdict == none ]]; then
 		print -ru2 -- "hop: nothing matched${query:+ the query: $query}, so there was nothing to jump to."
+		# The row cap is the one reason a typo goes uncorrected, and the picker header is not there to say so.
+		[[ -n $_hop_res_note && $_hop_res_note != 'nothing close to: '* ]] && print -ru2 -- "hop: ${_hop_res_note}, so a misspelt word is not corrected; -k narrows the kinds."
 		return 1
 	fi
 	local unit=targets
@@ -887,6 +889,15 @@ _hop_headless_report() {
 		_hop_rels_of "${(@)_hop_res_rows[1,3]}"
 		print -ru2 -- "hop: best matches: ${(j:, :)reply}"
 	fi
-	print -ru2 -- 'hop: narrow the query until exactly one target matches and hop will jump straight to it.'
+	# Narrowing is the advice only where a narrower query can jump.
+	if [[ ${_hop_jump:-${HOP_JUMP:-auto}} == never ]]; then
+		print -ru2 -- 'hop: -p and HOP_JUMP=never always open the picker, and the picker needs a terminal.'
+	elif [[ $_hop_res_tier == relaxed ]]; then
+		print -ru2 -- "hop: drop or fix: ${_hop_res_note#ignored: }"
+	elif [[ $_hop_res_tier == (T2|T3) ]]; then
+		print -ru2 -- 'hop: fix the spelling, since hop never jumps on a corrected query.'
+	else
+		print -ru2 -- 'hop: narrow the query until exactly one target matches and hop will jump straight to it.'
+	fi
 	return 1
 }
