@@ -36,8 +36,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - The columns in a list line up: kind, scope, env, region and the path start at the same column on every row.
   A name longer than the 28-column name field pushed the rest of its row to the right, as `platform-configuration.retired-2026-09-14` did in the repo picker and long helm service names did in the main picker.
   The region column wasn't padded at all, so the path moved with the region's length.
-  Each column is now as wide as its longest value in the list, up to a cap, and the name column is between 20 and 56 characters wide.
+  Each column is now as wide as its longest value in the list, up to a cap.
+  The name column is at least 20 characters wide, and past 28 it fits 95% of the list's names, up to 56, so configuration's four 53-character helm names no longer push env and the path off all 1,041 rows.
   A longer name keeps its start and its end around a `…`, and the path column still holds the whole path, so when a name comes from the path, a query still matches the part that's cut.
+  A clipped name that its path spells out whole is matched whole when hop decides whether a query's one name-line match may jump, so the narrower column costs no jump.
   This holds for the main picker and every reload of it, the directory rows a query adds to it, such as an account or env dir, and the repo and workspace pickers.
 
 

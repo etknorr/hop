@@ -539,15 +539,17 @@ Every provider emits four TAB-separated fields:
 
 `display` is padded and ANSI-coloured by hop, because fzf does not align `--with-nth` fields. Each
 list is laid out as a whole, so the kind, scope, env, region and path columns start at the same
-column on every row. A column is as wide as the longest value in that list, up to a cap, and the
-name column is between 20 and 56 characters wide. A scope, env or region column that's `-` on every
-row is left out, so a repo row shows only its name and kind before the path. `dir` is the `cd`
-target; `preview_path` is what the preview pane and the file verbs act on.
+column on every row. A column is as wide as the longest value in that list, up to a cap. The name
+column is at least 20 characters wide. Past 28 it's only as wide as 95% of the list's names, so a
+few long names don't push the other columns and the path off every row, and it's never wider than
+56. A scope, env or region column that's `-` on every row is left out, so a repo row shows only its
+name and kind before the path. `dir` is the `cd` target; `preview_path` is what the preview pane and
+the file verbs act on.
 
-A name longer than 56 keeps its start and its end around a `…`. Most names come from the path, and
-`rel` holds the whole path, so a query still matches the part that's cut. A name that isn't in the
-path, such as a workspace name set with `name = path` or one that `--name-fn` reads from a file,
-can't be matched on its cut part.
+A name longer than its column keeps its start and its end around a `…`. Most names come from the
+path, and `rel` holds the whole path, so a query still matches the part that's cut. A name that
+isn't in the path, such as a workspace name set with `name = path` or one that `--name-fn` reads
+from a file, can't be matched on its cut part.
 
 `rel` is the target's path relative to the repo root, dimmed, and it's the only path fzf searches.
 The absolute `dir` is never searched, so your home directory or a temp-dir suffix can't match a
@@ -695,7 +697,7 @@ window. An exact match jumps when one of these holds, checked in this order:
 |---|---|---|
 | J1 | exactly one target matches | `eks security` |
 | J1b | every match is in one directory, and Enter is plain `cd` | `monitoring/grafana`, whose files all sit in `kubernetes/services/monitoring/` |
-| J3 | exactly one row matches on its name line alone, and no other match's name line is clipped with `…` | `disaster-recovery prod` |
+| J3 | exactly one row matches on its name line alone, and no other match's name line is clipped with `…`, except a name its path spells out whole, which is matched whole | `disaster-recovery prod` |
 | J0 | at the workspace and repo levels only: one word, and exactly one target's name is that word | `configuration` from `~`, past `configuration.retired-2026-09-14` |
 | J2 | every match is under one directory, the words name that directory on whole-word boundaries, and none of them is a kind name | `security-tooling-prod` jumps to `terraform/acct-security-tooling-prod/` |
 

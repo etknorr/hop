@@ -23,9 +23,12 @@ typeset -g _HOP_C_ENV=$'\e[35m'
 # - It also makes --tiebreak=begin reward a name-prefix match instead of a kind-prefix match.
 # - Each width below is a cap: a list's column is as wide as its longest value, up to that cap.
 # - The name also has a floor, so a list of short names is not crammed against the kind column.
+# - Past _HOP_W_NAME_FIT, the name column fits 95% of the list's names, and the longest few are clipped.
+# - Sized for its longest, configuration's four 53-character helm names pushed env and the path off 1041 rows at 120 columns.
 # - The kind floor fits dir, file and helm, so a dir row the resolver adds to a tg-only list is not cut to `d…`.
 typeset -g _HOP_W_NAME=56
 typeset -g _HOP_W_NAME_MIN=20
+typeset -g _HOP_W_NAME_FIT=28
 typeset -g _HOP_W_KIND=5
 typeset -g _HOP_W_KIND_MIN=4
 typeset -g _HOP_W_SCOPE=22
@@ -115,6 +118,16 @@ _hop_layout() {
 			n=${w[c]}
 		elif (( c > 2 )) && [[ ${(j:,:)k} == - ]]; then
 			n=0
+		elif (( c == 1 )); then
+			# Reverse-sorted as runs of x, the values run longest first, so one index is a percentile.
+			v=("${(@O)${(@)k//?/x}}")
+			n=${#v[1]}
+			if (( n > _HOP_W_NAME_FIT )); then
+				h=${#v[$#v / 20 + 1]}
+				(( n = h > _HOP_W_NAME_FIT ? h : _HOP_W_NAME_FIT ))
+			fi
+			(( n > caps[c] )) && n=caps[c]
+			(( n < _HOP_W_NAME_MIN )) && n=_HOP_W_NAME_MIN
 		else
 			# Below the cap, the longest value is the first of them reverse-sorted as runs of x.
 			n=caps[c]
@@ -123,7 +136,6 @@ _hop_layout() {
 				v=("${(@O)${(@)k//?/x}}")
 				n=${#v[1]}
 			fi
-			(( c == 1 && n < _HOP_W_NAME_MIN )) && n=_HOP_W_NAME_MIN
 			(( c == 2 && n < _HOP_W_KIND_MIN )) && n=_HOP_W_KIND_MIN
 		fi
 		(( n )) || continue

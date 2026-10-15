@@ -779,12 +779,24 @@ _hop_decide_jump() {
 	# J3: whatever the display-only matcher hop shipped with jumped to, it still jumps to.
 	# - Unless another match has a clipped column: its display only hid the words, so one display hit is not one target.
 	# - `security vpc` had jumped into the prod vpc, because the staging scope showed as …urity-tooling-staging.
+	# - A clipped name its rel spells out whole is matched whole instead, so `ml dev` still jumps with a narrow name column.
 	if _hop_match "$eq" "${(F)M}" --nth=1 && (( $#reply == 1 )); then
 		local hit=${reply[1]} m
-		local -i clipped=0
+		local -i clipped=0 unclipped=0
+		local -a whole=()
 		for m in "${M[@]}"; do
-			[[ $m != "$hit" && ${m%%$'\t'*} == *…* ]] && clipped=1
+			if [[ $m != "$hit" && ${m%%$'\t'*} == *…* ]]; then
+				if _hop_unclip "$m"; then
+					m=$REPLY unclipped=1
+				else
+					clipped=1
+				fi
+			fi
+			whole+=("$m")
 		done
+		if (( ! clipped && unclipped )); then
+			_hop_match "$eq" "${(F)whole}" --nth=1 && (( $#reply == 1 )) || clipped=1
+		fi
 		if (( ! clipped )); then
 			_hop_res_fields "$hit"
 			_hop_res_verdict=jump _hop_res_rule=display _hop_res_target=${(pj:\t:)reply}
@@ -838,6 +850,28 @@ _hop_decide_jump() {
 	_hop_res_note="hop: ${q} -> ${X[1]} (all ${#M} matches are under it)"
 	[[ $tier == T2a ]] && _hop_res_note+=" (read as: ${eq})"
 	return 0
+}
+
+# _hop_unclip <row> -> 0 with REPLY the row, its clipped name restored from rel; 1 when rel cannot say what was cut.
+# - Only the name: a clipped scope or env keeps no trace in rel, and neither does a name --name-fn read from a file.
+# - The rows are fzf's output, uncoloured, so the name is the display's first word.
+_hop_unclip() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local d=${${1%%$'\t'*}//$'\e'\[[0-9;]#m/} name rest rel a b r
+	name=${d%% *}
+	rest=${d#"$name"}
+	[[ $name == ?*…?* && $rest != *…* ]] || return 1
+	a=${name%%…*} b=${name#*…}
+	rel=${${1##*$'\t'}//$'\e'\[[0-9;]#m/}
+	rel=${rel%/}
+	for r in "$rel" "${rel%.*}"; do
+		if [[ $r == (#b)(|*/)(${a}?*${b}) ]]; then
+			REPLY="${match[2]}${rest}"$'\t'"${1#*$'\t'}"
+			return 0
+		fi
+	done
+	return 1
 }
 
 # _hop_resolve <query> <rows-text> <root> <action> <jump> [under] -> sets the caller's _hop_res_* fields.

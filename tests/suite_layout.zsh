@@ -288,3 +288,31 @@ assert_eq 'three dir a - -' "${(j: :)${=REPLY}}"
 lay_shapes 5 "$LY_OUT"
 rows=(${(f)REPLY})
 assert_eq 1 $#rows "the added row is out of line with the list: ${(j:; :)rows}"
+
+t 'layout: a few long names are clipped to 28, so they do not widen the name column of every row'
+LY_OUT=$(hop_probe "typeset _hop_gen_raw=1 rows REPLY n
+rows=\$(for n in a{01..30}; do _hop_row tg sc - - \$n /r/\$n /r/\$n; done
+_hop_row tg sc - - a-long-name-that-only-one-row-of-thirty-has /r/long /r/long)
+_hop_layout \"\$rows\"
+print -r -- \"\$REPLY\"")
+lay_row "$LY_OUT" a01
+lay_shape "$REPLY" 2
+assert_eq '30' "${REPLY%%|*}" 'the kind column starts after a 28-column name and one space'
+lay_row "$LY_OUT" 'a-long-name-th…of-thirty-has'
+assert_nonempty "$REPLY" "the long name is not clipped at both ends: ${LY_OUT}"
+
+t 'resolve: a match whose name is clipped, but whose rel spells it whole, does not block a display jump'
+if [[ -n $IT_REAL_FZF ]]; then
+	LY_OUT=$(hop_probe "typeset _hop_gen_raw=1 rows REPLY _hop_gen_root=/r
+rows=\$(_hop_row tg acct dev - ml /r/terraform/ml /r/terraform/ml
+_hop_row helm k8s - - github-actions-strava-orka-runner-dev-with-a-name-long-enough-to-clip /r/k8s/github-actions-strava-orka-runner-dev-with-a-name-long-enough-to-clip /r/k8s/github-actions-strava-orka-runner-dev-with-a-name-long-enough-to-clip.yaml f)
+_hop_layout \"\$rows\"
+typeset _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
+typeset -i _hop_res_n _hop_res_m _hop_res_inj
+typeset -a _hop_res_rows
+_hop_resolve 'ml dev' \"\$REPLY\" /r cd auto
+print -r -- \"\$_hop_res_verdict \$_hop_res_rule \$_hop_res_n \${_hop_res_target##*\$'\\t'}\"")
+	assert_eq 'jump display 2 terraform/ml/' "$LY_OUT" 'the .yaml rel matches ml, but the whole name does not, so the display hit is the only one'
+else
+	skip 'resolve: a clipped name restored from rel does not block a display jump' 'fzf is not installed'
+fi
