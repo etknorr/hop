@@ -2,11 +2,17 @@
 # resolve.sh [ROOT]: hopx's resolver against zsh hop's on eval_real's five query sets, for HOP_JUMP auto, unique and never.
 # - The last three sets are stress sets for the approximate tiers; the go/no-go bar reads only the first five.
 # - core compares verdict, tier, rule and target rel; full compares the whole line: n, m, inj, every candidate, query, note, report.
+# - The hop is the worktree's unless HOP_PARITY_HOME names another, such as ~/.local/share/hop; hopx's layout follows its VERSION.
 # - Exit status is the number of core diffs on names, scope+env and name+env under auto, plus nonsense jumps, capped at 99.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 spike=$(dirname "$here")
-hopdir=$(dirname "$spike")
+hopdir=${HOP_PARITY_HOME:-$(dirname "$spike")}
+# hop 0.3.0 fitted the columns to each list; against an older hop, hopx lays rows out the old way.
+case $(cat "$hopdir/VERSION" 2>/dev/null) in
+	0.1.* | 0.2.*) layout=fixed ;;
+	*) layout=fit ;;
+esac
 root=${1:-${HOPX_PARITY_REPO:-$HOME/strava/configuration}}
 hopcfg=${HOP_PARITY_CONFIG:-$HOME/.config/hop/config.zsh}
 hopxcfg=${HOPX_PARITY_CONFIG:-$spike/hopx/testdata/eric.toml}
@@ -21,7 +27,7 @@ if [ -z "$bin" ]; then
 fi
 
 clean() {
-	env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" \
+	env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOPX_LAYOUT="$layout" \
 		HOP_HISTFILE=/dev/null HOPX_HISTFILE="$out/hist" XDG_CACHE_HOME="$out/cache" "$@"
 }
 
@@ -33,7 +39,10 @@ for jump in $jumps; do
 	d=$out/$jump
 	mkdir -p "$d"
 	t0=$(now)
-	clean HOP_CONFIG="$hopcfg" zsh -f "$here/resolve_dump.zsh" "$hopdir" "$root" "$d" "$jump" || exit 98
+	# hopx has no modal layer, so the hop it is held to is HOP_VIM=0; only the T4 hint reads it.
+	clean HOP_CONFIG="$hopcfg" HOP_VIM=0 zsh -f "$here/resolve_dump.zsh" "$hopdir" "$root" "$d" "$jump" "$spike" || exit 98
+	# hop 0.2's hint names esc whatever HOP_VIM says; hopx words it as hop 0.3 does with no modal layer.
+	[ "$layout" = fixed ] && perl -pi -e 's/ \(esc clears\)\t/ (ctrl-u clears)\t/' "$d"/*.zsh
 	tz=$(echo "$(now) - $t0" | bc)
 	for set in names pref3 scope+env name+env nonsense corpus typo relaxed; do
 		t1=$(now)

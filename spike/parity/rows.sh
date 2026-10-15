@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 # rows.sh [ROOT]: hopx rows against zsh hop's _hop_generate, per kind, for the default set, and for -w and -R.
 # - Prints `kind rows-zsh rows-hopx IDENTICAL|DIFF first-diff-line set-diff`; set-diff counts ANSI-stripped rows in only one side.
+# - The hop is the worktree's unless HOP_PARITY_HOME names another, such as ~/.local/share/hop; hopx's layout follows its VERSION.
 # - Exit status is the number of DIFF lines, capped at 99.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 spike=$(dirname "$here")
-hopdir=$(dirname "$spike")
+hopdir=${HOP_PARITY_HOME:-$(dirname "$spike")}
+# hop 0.3.0 fitted the columns to each list; against an older hop, hopx lays rows out the old way.
+case $(cat "$hopdir/VERSION" 2>/dev/null) in
+	0.1.* | 0.2.*) layout=fixed ;;
+	*) layout=fit ;;
+esac
 root=${1:-${HOPX_PARITY_REPO:-$HOME/strava/configuration}}
 hopcfg=${HOP_PARITY_CONFIG:-$HOME/.config/hop/config.zsh}
 hopxcfg=${HOPX_PARITY_CONFIG:-$spike/hopx/testdata/eric.toml}
@@ -19,7 +25,7 @@ if [ -z "$bin" ]; then
 fi
 
 clean() {
-	env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" \
+	env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOPX_LAYOUT="$layout" \
 		HOP_HISTFILE=/dev/null HOPX_HISTFILE="$out/hist" XDG_CACHE_HOME="$out/cache" "$@"
 }
 

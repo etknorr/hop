@@ -1,14 +1,14 @@
 #!/usr/bin/env zsh
-# resolve_dump.zsh <hop-dir> <root> <out-dir> <jump>: eval_real.zsh's five query sets, resolved by zsh hop.
+# resolve_dump.zsh <hop-dir> <root> <out-dir> <jump> [spike-dir]: eval_real.zsh's five query sets, resolved by zsh hop.
 # - Writes <set>.q, one query per line, so hopx reads the identical list, and <set>.zsh, hx_runner's line per query.
 # - The five sets are built exactly as tests/eval_real.zsh builds them; that file is copied from, never edited.
 # - Three more stress the approximate tiers: corpus, typo (letters 2 and 3 of each name swapped), and relaxed (name plus nonsense).
 emulate -L zsh
 setopt extended_glob
-local hopdir=$1 root=$2 out=$3 jump=$4
+local hopdir=$1 root=$2 out=$3 jump=$4 spike=${5:-$1/spike}
 export HOP_HISTFILE=/dev/null
 source "$hopdir/hop.zsh" || exit 3
-source "$hopdir/spike/hopx/testdata/resolve_runner.zsh" || exit 3
+source "$spike/hopx/testdata/resolve_runner.zsh" || exit 3
 builtin cd -q -- "$root" || exit 2
 
 local -a kinds=(${=${HOP_DEFAULT_KINDS//,/ }}) all names pref3 scopeenv nameenv words w reply
@@ -37,7 +37,7 @@ for n in "${(@f)$(<"$hopdir/tests/fixtures/dictionary.txt")}"; do
 done
 
 local -a corpus typo relaxed
-corpus=("${(@f)$(<"$hopdir/spike/parity/corpus/queries.txt")}")
+corpus=("${(@f)$(<"$spike/parity/corpus/queries.txt")}")
 corpus=(${corpus:#})
 local -i i=0
 for n in "${names[@]}"; do
