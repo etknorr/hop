@@ -65,7 +65,7 @@ launch from muscle memory.
 zinit light etknorr/hop
 
 # pinned to a release
-zinit ice ver'v0.2.1'
+zinit ice ver'v0.2.0'
 zinit light etknorr/hop
 ```
 
@@ -78,7 +78,7 @@ In your plugin file, usually `~/.zsh_plugins.txt`:
 etknorr/hop
 
 # pinned to a release
-etknorr/hop branch:v0.2.1
+etknorr/hop branch:v0.2.0
 ```
 
 The annotation is called `branch:`, but it is handed straight to `git clone`, so a tag pins fine.
@@ -95,7 +95,7 @@ github = "etknorr/hop"
 # pinned to a release
 [plugins.hop]
 github = "etknorr/hop"
-tag = "v0.2.1"
+tag = "v0.2.0"
 ```
 
 Then `sheldon lock --update`.
@@ -110,7 +110,7 @@ git clone https://github.com/etknorr/hop.git \
   "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
 
 # pinned to a release
-git clone --branch v0.2.1 https://github.com/etknorr/hop.git \
+git clone --branch v0.2.0 https://github.com/etknorr/hop.git \
   "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
 ```
 
@@ -129,7 +129,7 @@ No manager, one line of `.zshrc`, and nothing between you and the checkout:
 git clone https://github.com/etknorr/hop.git ~/.local/share/hop
 
 # pinned to a release
-git clone --branch v0.2.1 https://github.com/etknorr/hop.git ~/.local/share/hop
+git clone --branch v0.2.0 https://github.com/etknorr/hop.git ~/.local/share/hop
 ```
 
 ```zsh
@@ -658,7 +658,7 @@ stops at the first one that finds something:
    `-c`, which keeps the search under `$PWD`. Under `-p` or `HOP_JUMP=never` it still runs, and
    even one match opens the picker. A misspelt path isn't corrected here. When no repo has the path
    but some repo has its first directory, hop names the repos that have it, the first three and a
-   count of the rest. A typo is only corrected from inside its repo, so cd into one and run the
+   count of the rest. A typo is only corrected from inside its repo, so `cd` into one and run the
    query again. It only checks whether the path exists in each repo, so it lists no repo's targets
    and costs a few milliseconds.
 2. **Exact**: fzf matches the words against the row's name line (name, kind, scope, env and
