@@ -953,6 +953,21 @@ t 'elsewhere: a linked worktree on main beats its primary on a branch, with main
 MT_RUN=$(mt_headless "$MT_WSH" 'hop p6/x' "HOP_WORKSPACES=$MT_CO")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/f1wt/p6/x"
 
+# Two checkouts with no origin/HEAD and no main, one on master with every ref packed, so master is the default.
+typeset g
+for g in g1 g2; do
+	mkdir -p -- "$MT_WSH/co/$g/p7/x"
+	_hop_fix_git -C "$MT_WSH/co/$g" init -q -b master
+	_hop_fix_git -c user.name=hop -c user.email=hop@example.invalid -C "$MT_WSH/co/$g" commit -q --allow-empty -m co
+	_hop_fix_git -C "$MT_WSH/co/$g" remote add origin https://github.com/acme/g
+done
+_hop_fix_git -C "$MT_WSH/co/g1" pack-refs --all
+_hop_fix_git -C "$MT_WSH/co/g2" checkout -q -b feat
+t 'elsewhere: with no origin/HEAD and no main, a packed master is the default branch'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p7/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/g1/p7/x"
+assert_contains "$MT_RUN" '(found in g1, the master checkout of 2)'
+
 t 'elsewhere: two on main, different origins, a checkout with no origin, and a detached HEAD all still pick'
 typeset w
 for w in p2/x p3/x p4/x p5/x; do
