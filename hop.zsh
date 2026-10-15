@@ -309,6 +309,8 @@ _hop_run() {
 	emulate -L zsh
 	local label=$1 query=$2 reload=$3 targets=$4 root=${5:-} restore=${6:-} up=${7:-}
 	local _hop_key _hop_dir _hop_preview _hop_rel _hop_st
+	# Read by _hop_row, so the ancestor rows the resolver injects line up with these.
+	local _hop_row_like=${targets%%$'\n'*}
 	local -i pre=${_hop_res_ready:-0}
 	# Shadowed, so a picker reached from this one through ctrl-h resolves for itself.
 	local -i _hop_res_ready=0
