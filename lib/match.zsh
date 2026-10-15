@@ -650,7 +650,8 @@ _hop_resolve() {
 	local -a _hop_vocab _hop_segs
 	local -A _hop_vocab_set
 	_hop_rels_of "${all[@]}"
-	_hop_vocab_build "${reply[@]}"
+	local -a rels=("${reply[@]}")
+	_hop_vocab_build "${rels[@]}"
 
 	local eq tried=''
 	local -i approx wide
@@ -679,36 +680,53 @@ _hop_resolve() {
 		fi
 	fi
 
-	# Relaxed: drop the words that resolve to nothing, but only when some word survives.
+	# Relaxed: each word resolves alone, through whichever tier reads it, and the words nothing reads are dropped.
 	if (( $#terms >= 2 )); then
-		local -a keep drop
+		local -a keep drop eqs
 		local t
 		for t in "${terms[@]}"; do
-			if _hop_match "$t" "$rows" \
-				|| { _hop_rewrite "$t" && _hop_match "${reply[2]}" "$rows" } \
-				|| { _hop_rewrite "$t" 1 && _hop_match "${reply[2]}" "$rows" } \
-				|| { _hop_loose "$t" && _hop_match "$REPLY" "$rows" }; then
-				keep+=("$t")
+			if _hop_term_eq "$t" "$rows"; then
+				keep+=("$t") eqs+=("$REPLY")
 			else
 				drop+=("$t")
 			fi
 		done
-		if (( $#keep && $#drop )); then
-			eq="${(j: :)keep}"
-			if _hop_match "$eq" "$rows" \
-				|| { _hop_rewrite "$eq" && eq=${reply[2]} && _hop_match "$eq" "$rows" } \
-				|| { _hop_rewrite "${(j: :)keep}" 1 && eq=${reply[2]} && _hop_match "$eq" "$rows" }; then
+		# The readings join whatever tier each came from, so `kps zzqx` keeps kps, which only T3 reads.
+		eq=${(j: :)eqs}
+		if (( $#keep )) && [[ $eq != "$q" && $eq != "$tried" ]] && _hop_match "$eq" "$rows"; then
+			if (( $#drop )); then
 				_hop_decide relaxed "$eq" 1 "${reply[@]}"
 				_hop_res_note="ignored: ${(j: :)drop}"
-				_hop_resolve_log "$q" "$t0"
-				return 0
+			else
+				_hop_decide T3 "$eq" 1 "${reply[@]}"
+				_hop_res_note="no exact match for: ${q} (showing: ${eq})"
 			fi
+			_hop_resolve_log "$q" "$t0"
+			return 0
 		fi
 	fi
 
 	_hop_resolve_none
 	_hop_resolve_log "$q" "$t0"
 	return 0
+}
+
+# _hop_term_eq <term> <rows-text> -> 0 with REPLY the term as the first tier that reads it does: T1, T2 narrow, T2 wide, T3.
+_hop_term_eq() {
+	emulate -L zsh
+	local t=$1 rows=$2
+	local -a reply
+	local -i wide
+	REPLY=$t
+	_hop_match "$t" "$rows" && return 0
+	for wide in 0 1; do
+		_hop_rewrite "$t" "$wide" || continue
+		REPLY=${reply[2]}
+		_hop_match "$REPLY" "$rows" && return 0
+	done
+	_hop_loose "$t" && _hop_match "$REPLY" "$rows" && return 0
+	REPLY=''
+	return 1
 }
 
 # _hop_resolve_none -> T4: nothing close, so the picker opens on the query as typed, editable, with zero rows.

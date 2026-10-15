@@ -110,6 +110,7 @@ for q in \
 	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod externaldns securitytoolingprod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
 	'acct sec prd' stg 'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
+	'kps zzqx' \
 	"${MT_NONSENSE[@]}"; do
 	mt_case "$q"
 done
@@ -331,6 +332,12 @@ done
 mt_pick relaxed 5 - 'vpc zzqx'
 mt_get 'vpc zzqx'
 assert_eq 'ignored: zzqx' "${reply[16]}"
+# A kept word is read by whichever tier reads it alone, so a T3-only word survives the relaxed rerun.
+mt_pick relaxed 2 kubernetes/values/kube-prometheus-stack/ 'kps zzqx'
+mt_get 'kps zzqx'
+assert_eq 'ignored: zzqx' "${reply[16]}"
+assert_eq kube-prometheus-stack "${reply[15]}"
+
 
 # ---------------------------------------------------------------------------
 # HOP_JUMP, and -c.
