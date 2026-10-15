@@ -534,14 +534,14 @@ Every provider emits four TAB-separated fields:
 `display` is padded and ANSI-coloured by hop, because fzf does not align `--with-nth` fields. Each
 list is laid out as a whole, so the kind, scope, env, region and path columns start at the same
 column on every row. A column is as wide as the longest value in that list, up to a cap, and the
-name column is between 20 and 40 characters wide. A scope, env or region column that's `-` on every
+name column is between 20 and 56 characters wide. A scope, env or region column that's `-` on every
 row is left out, so a repo row shows only its name and kind before the path. `dir` is the `cd`
 target; `preview_path` is what the preview pane and the file verbs act on.
 
-A name longer than 40 keeps its start and its end, as in `platform-configurati….retired-2026-09-14`.
-Most names come from the path, and `rel` holds the whole path, so a query still matches the part
-that's cut. A name that isn't in the path, such as a workspace name set with `name = path` or one
-that `--name-fn` reads from a file, can't be matched on its cut part.
+A name longer than 56 keeps its start and its end around a `…`. Most names come from the path, and
+`rel` holds the whole path, so a query still matches the part that's cut. A name that isn't in the
+path, such as a workspace name set with `name = path` or one that `--name-fn` reads from a file,
+can't be matched on its cut part.
 
 `rel` is the target's path relative to the repo root, dimmed, and it's the only path fzf searches.
 The absolute `dir` is never searched, so your home directory or a temp-dir suffix can't match a

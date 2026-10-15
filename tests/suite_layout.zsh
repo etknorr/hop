@@ -58,10 +58,10 @@ lay_row() {
 	return 1
 }
 
-# lay_clip <name> -> REPLY is the name as a 40-column cap clips it: its first 20 characters, …, its last 19.
+# lay_clip <name> -> REPLY is the name as the 56-column cap clips it: its first 28 characters, …, its last 27.
 lay_clip() {
 	emulate -L zsh
-	REPLY="${1[1,20]}…${1[-19,-1]}"
+	REPLY="${1[1,28]}…${1[-27,-1]}"
 }
 
 typeset -A LAY_ROWS LAY_WORDS LAY_DESC
@@ -110,10 +110,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# A list holding one 45-character name, which the 40-column cap has to clip.
+# A list holding one 73-character name, which the 56-column cap has to clip.
 # ---------------------------------------------------------------------------
-typeset LY_LONG=service-with-a-very-long-name-ending-in-prod
-typeset LY_LONG_MID=long-name-ending
+typeset LY_LONG=service-with-a-very-long-name-that-keeps-going-right-past-the-cap-in-prod
+typeset LY_LONG_MID=that-keeps-going
 fixture_repo layoutlong || return 1
 typeset LY_LREPO=$REPLY
 typeset n
@@ -124,7 +124,7 @@ fixture_commit 'long names' || return 1
 fixture_config "hop_kind sbx --default --dirs sandbox --desc 'sandbox dirs'" || return 1
 
 LAY_CASES+=(long)
-LAY_DESC[long]='list with one 45-character name, a'
+LAY_DESC[long]='list with one 73-character name, a'
 LAY_WORDS[long]=3
 LAY_ROWS[long]=$(hop_probe "builtin cd -q ${(q)LY_LREPO} && _hop_rows ${(q)LY_LREPO} '' sbx")
 fixture_config_reset
@@ -187,13 +187,13 @@ lay_row "${LAY_ROWS[main]}" vpc
 lay_plain "$REPLY"
 assert_eq 5 ${#${=REPLY}} "a tg row shows name, kind, scope, env and region: ${REPLY}"
 
-t 'layout: a 45-character name is clipped to 40, keeping its start and its end'
+t 'layout: a 73-character name is clipped to 56, keeping its start and its end'
 lay_clip "$LY_LONG"
 typeset LY_CLIPPED=$REPLY
 lay_row "${LAY_ROWS[long]}" "$LY_CLIPPED"
 assert_nonempty "$REPLY" "no row shows ${LY_CLIPPED}"
 lay_shape "$REPLY" 2
-assert_eq '42' "${REPLY%%|*}" 'the kind column starts after the 40-column name and one space'
+assert_eq '58' "${REPLY%%|*}" 'the kind column starts after the 56-column name and one space'
 
 t 'layout: the clipped row keeps its full path in rel, so the hidden middle of its name still matches'
 if [[ -n $IT_REAL_FZF ]]; then
@@ -216,11 +216,9 @@ lay_row "${LAY_ROWS[repo]}" configuration
 lay_plain "$REPLY"
 assert_eq 'configuration repo' "${(j: :)${=REPLY}}"
 
-t 'layout: a retired copy is clipped at both ends, so it stays apart from the live repo'
-lay_clip "$LY_RETIRED"
-assert_eq 'platform-configurati….retired-2026-09-14' "$REPLY" 'control: the expected clip itself'
-lay_row "${LAY_ROWS[repo]}" "$REPLY"
-assert_nonempty "$REPLY" 'no repo row shows the clipped retired name'
+t 'layout: a 41-character retired copy fits under the cap, so it shows whole beside the live repo'
+lay_row "${LAY_ROWS[repo]}" "$LY_RETIRED"
+assert_nonempty "$REPLY" 'no repo row shows the whole retired name'
 typeset -a LY_F=("${(@ps:\t:)REPLY}")
 lay_plain "${LY_F[4]}"
 assert_eq "~/strava/${LY_RETIRED}/" "$REPLY" 'rel still carries the whole name'

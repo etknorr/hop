@@ -23,7 +23,7 @@ typeset -g _HOP_C_ENV=$'\e[35m'
 # - It also makes --tiebreak=begin reward a name-prefix match instead of a kind-prefix match.
 # - Each width below is a cap: a list's column is as wide as its longest value, up to that cap.
 # - The name also has a floor, so a list of short names is not crammed against the kind column.
-typeset -g _HOP_W_NAME=40
+typeset -g _HOP_W_NAME=56
 typeset -g _HOP_W_NAME_MIN=20
 typeset -g _HOP_W_KIND=5
 typeset -g _HOP_W_SCOPE=22
