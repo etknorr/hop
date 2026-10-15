@@ -211,6 +211,10 @@ t 'pty: the : view menu comes back with esc'
 if pty_open 'hop -k tg'; then
 	pty_key_ev ':'
 	assert_eq ': ' "$(pty_get prompt)" ': did not open the view menu'
+	# A menu row's dir field is a kind name, so the always-cd key must leave the picker open.
+	pty_key c
+	assert_eq '' "$(pty_pwd)" 'c accepted a menu row, whose dir is a kind name'
+	assert_eq ': ' "$(pty_get prompt)" 'c left the view menu'
 	pty_key_ev esc
 	assert_eq '> ' "$(pty_get prompt)" 'esc did not come back out of the view menu'
 	pty_key enter

@@ -275,6 +275,20 @@ AC_RUN=$(hop_probe "builtin cd -q -- ${(q)AC_START}; _hop_mode=open _hop_dispatc
 assert_eq "PWD=$AC_R/tf/unit" "$AC_RUN"
 assert_empty "$(stub_calls code)"
 
+# A `:` menu row is <display> TAB <kind> TAB <root>, so its dir field is a kind name like helm.
+t 'a row whose dir is not absolute, as a : menu row is, moves nothing and opens nothing'
+stub_reset
+fixture_tmpdir menurow
+mkdir -p -- "$REPLY/helm"
+AC_RUN=$(hop_probe "builtin cd -q -- ${(q)REPLY}
+for k in alt-enter '' ctrl-o ctrl-t; do
+	_hop_mode=cd+open _hop_dispatch \"\$k\" helm ${(q)AC_R} 2>&1
+	print -r -- \"st=\$? PWD=\$PWD\"
+done")
+assert_eq 4 "${#${(@M)${(@f)AC_RUN}:#st=1 PWD=$REPLY}}" "a menu row moved the shell or succeeded: ${AC_RUN}"
+assert_contains "$AC_RUN" 'hop: not a target directory: helm'
+assert_empty "$(stub_calls code)" 'a kind name is not a folder to open'
+
 t 'ctrl-o with VS Code unreachable says why and falls back to the editor'
 stub_reset
 AC_RUN=$(hop_probe "SSH_CONNECTION=x; _hop_tty_ok() { return 0 }; _hop_dispatch ctrl-o ${(q)AC_R}/tf/unit ${(q)AC_R}/tf/unit/main.tf" 2>&1)

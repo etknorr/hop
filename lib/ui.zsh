@@ -252,6 +252,15 @@ _hop_vim_binds() {
 		if [[ -n $guard && -n $act ]] && (( ${guard_keys[(Ie)$k]} )); then
 			act="transform:${guard_bin} check ${(q)guard} ${(qq)act}"
 		fi
+		# A `:` menu row's dir field is a kind name, so c there had cd'd into any ./helm that happened to exist.
+		# - The prompt test wraps the guard's own command rather than nesting a transform inside one.
+		if [[ $k == c && -n $root ]]; then
+			if [[ $act == transform:* ]]; then
+				act="transform:case \"\$FZF_PROMPT\" in \": \"*) printf ignore ;; *) ${act#transform:} ;; esac"
+			else
+				act=$_HOP_MENU_CD
+			fi
+		fi
 		args+=(--bind="${k}:${act:-ignore}")
 	done
 	args+=(--bind='(:ignore' --bind='):ignore')
@@ -399,6 +408,9 @@ typeset -ga _HOP_MATCHER_FLAGS=(
 	--tiebreak=begin,chunk
 )
 
+# The always-cd action, as a no-op while the `:` menu is open; see _hop_vim_binds.
+typeset -g _HOP_MENU_CD='transform:case "$FZF_PROMPT" in ": "*) printf ignore ;; *) printf %s "print(alt-enter)+accept" ;; esac'
+
 # _hop_pick <label> <header> [query] [reload] [root] [drill] [restore] [up]  <targets on stdin
 # - Emits the key line (empty for plain Enter) and then dir<TAB>preview<TAB>rel.
 # - Every verb rides --expect or print(), never become(), since only the parent shell can cd.
@@ -454,7 +466,8 @@ _hop_pick() {
 		--bind='alt-B:print(ctrl-g)+accept'
 		# Always a cd, whatever HOP_ACTION makes Enter do; NORMAL's c prints the same key.
 		# - Bound in both modes, since alt-enter is not one of the keys SEARCH unbinds.
-		--bind='alt-enter:print(alt-enter)+accept'
+		# - With a root there is a `:` menu, whose rows name kinds and not dirs, so there it does nothing.
+		--bind="alt-enter:${${root:+$_HOP_MENU_CD}:-print(alt-enter)+accept}"
 	)
 	# HOP_FZF_HEIGHT is a real knob: set it EMPTY and fzf takes the whole screen.
 	# - Default-if-unset, not :-, because empty has to stay a distinguishable answer.

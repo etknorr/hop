@@ -377,6 +377,11 @@ _hop_dispatch() {
 	emulate -L zsh
 	local key=$1 dir=$2 preview=${3:-$2} rel=${4:-}
 	_hop_dbg "dispatch key=${key:-<enter>} dir=${dir} preview=${preview} rel=${rel}"
+	# Every row's dir is absolute, so a relative one is a `:` menu row's kind name, never a place to act on.
+	if [[ $dir != /* ]]; then
+		print -ru2 -- "hop: not a target directory: ${dir}"
+		return 1
+	fi
 	case $key in
 		'') _hop_act_enter "$dir" "$preview" "$rel" ;;
 		alt-enter) _hop_act_cd "$dir" ;;

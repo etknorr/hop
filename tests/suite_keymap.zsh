@@ -165,8 +165,10 @@ t 'b prints ctrl-g and accepts (browse/github)'
 assert_eq 'print(ctrl-g)+accept' "$(_km_bind_action "$KM_FULL" b)"
 
 # c is the always-cd verb, so it prints the key SEARCH's alt-enter prints and shares its dispatch arm.
-t 'c prints alt-enter and accepts (cd, whatever Enter does)'
-assert_eq 'print(alt-enter)+accept' "$(_km_bind_action "$KM_FULL" c)"
+# - With a root there is a `:` menu, whose rows name kinds, so there it reads the prompt and does nothing.
+typeset -g KM_MENU_CD='transform:case "$FZF_PROMPT" in ": "*) printf ignore ;; *) printf %s "print(alt-enter)+accept" ;; esac'
+t 'c prints alt-enter and accepts (cd, whatever Enter does), except in the : menu'
+assert_eq "$KM_MENU_CD" "$(_km_bind_action "$KM_FULL" c)"
 
 t 'p toggles the preview'
 assert_eq 'toggle-preview' "$(_km_bind_action "$KM_FULL" p)"
@@ -253,6 +255,9 @@ KM_NOROOT=$(_km_binds_probe '' '' '' '')
 
 t 'with no root, : falls back to ignore (no menu to switch into)'
 assert_eq 'ignore' "$(_km_bind_action "$KM_NOROOT" :)"
+
+t 'with no root, c needs no menu test, so it is the plain always-cd action'
+assert_eq 'print(alt-enter)+accept' "$(_km_bind_action "$KM_NOROOT" c)"
 
 t 'with no root, enter is never bound at all (plain accept needs no help)'
 typeset -a noroot_items=("${(@ps:\x1e:)KM_NOROOT}")
@@ -420,7 +425,8 @@ assert_nonempty "$(_km_bind_action "$KM_GUARDED" j)" 'the guarded probe captured
 
 # Ten keys, not six: every action that LEAVES the picker, so a stray letter cannot exit it either.
 t 'every action that leaves the picker is wrapped in the guard'
-assert_eq "$(_km_guarded 'print(alt-enter)+accept')" "$(_km_bind_action "$KM_GUARDED" c)"
+assert_eq "transform:case \"\$FZF_PROMPT\" in \": \"*) printf ignore ;; *) ${$(_km_guarded 'print(alt-enter)+accept')#transform:} ;; esac" \
+	"$(_km_bind_action "$KM_GUARDED" c)" 'c keeps its guard inside the menu test, never as a transform nested in one'
 assert_eq "$(_km_guarded 'print(ctrl-o)+accept')" "$(_km_bind_action "$KM_GUARDED" o)"
 assert_eq "$(_km_guarded 'print(ctrl-t)+accept')" "$(_km_bind_action "$KM_GUARDED" O)"
 assert_eq "$(_km_guarded 'print(alt-o)+accept')" "$(_km_bind_action "$KM_GUARDED" e)"
@@ -557,9 +563,9 @@ assert_empty "$(_km_bind_action "$KM_PICK" alt-g)" 'alt-g inside the picker woul
 assert_empty "$(_km_bind_action "$KM_PICK" alt-b)" 'alt-b is fzf backward-word and SEARCH needs it'
 
 # alt-enter is SEARCH's always-cd key, and a bind rather than --expect, so the modal layer is not what carries it.
-t 'alt-enter prints alt-enter and accepts, in both modes'
-assert_eq 'print(alt-enter)+accept' "$(_km_bind_action "$KM_PICK" alt-enter)"
-assert_eq 'print(alt-enter)+accept' "$(_km_bind_action "$KM_PICK_NOVIM" alt-enter)"
+t 'alt-enter prints alt-enter and accepts, in both modes, except in the : menu'
+assert_eq "$KM_MENU_CD" "$(_km_bind_action "$KM_PICK" alt-enter)"
+assert_eq "$KM_MENU_CD" "$(_km_bind_action "$KM_PICK_NOVIM" alt-enter)"
 
 # ---------------------------------------------------------------------------
 # Tier 1e: the picker must not advertise a key it left bound to `ignore`.
