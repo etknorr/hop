@@ -15,3 +15,19 @@ Each entry names the phase, what the spec says, what the build does, and why.
 9. **Pathspec magic**: `gitls` matches `:(glob)` and bare pathspecs in memory. Any other magic (`:(icase)`, `:(exclude)`) is an error rather than a second `git ls-files` call. No preset or Eric's config uses one.
 10. **Named directories**: `_hop_rel` uses zsh's `${(D)p}`, which also abbreviates `hash -d` names. hopx only abbreviates `$HOME`. The parity harness runs `zsh -f`, where they agree.
 11. **`-x` on a workspace**: `_hop_ws_parse` tests `-x`, which is `access(2)`. hopx checks the mode's execute bits, so an ACL or a root-owned dir can disagree.
+
+## Phase 2
+
+1. **hopx speaks as `hop:`** in resolver notes and the headless report, so a report diffs byte for byte against zsh hop's. Messages that only hopx has (the cmdfile, an fzf failure, the missing picker) say `hopx:`.
+2. **Subcommands own the first word**: `rows`, `kinds`, `config`, `help` and the hidden `__*` verbs. Any other first word is hop's command line, so a target literally named `rows` needs `hopx -- rows`.
+3. **No picker yet**: with a terminal, a non-jump prints one `hopx: the picker arrives in phase 3` line, then the headless report. Without one, the output is hop's exactly.
+4. **Actions other than cd**: `-o`, `-e` and `--action=` parse and reach the resolver, where J1b reads them, but a jump under them exits 2 naming the target. Open and reveal are phase 3.
+5. **`hopx -`** exits 2, because it is the shell function's own `cd -` (phase 4). `hopx /` works.
+6. **Settings warnings keep the config's wording**: an invalid `HOP_JUMP` warns as `hopx: warning: jump "x" is not one of auto, unique, never; using auto`, where hop says `hop: HOP_JUMP=x is not one of ...`. Same fallback, different words.
+7. **The fzf floor is one line**: hop prints four lines when fzf is too old; hopx prints one naming the version and the floor.
+8. **`~name/x` in T0** reads the passwd entry, which is zsh's `userdirs`. `hash -d` named dirs aren't modelled, as in phase 1 (#10).
+9. **History is written by temp file and rename**, as the spec asks. hop rewrites the file in place, so a reader racing a write can see it truncated.
+10. **Orchestration lives in `hop.go`**, a second file in package main holding `hop()`'s flow (T0, levels, enumerate, rank, resolve, jump or report), so `main.go` stays dispatch. `internal/act` has only the cd half of `_hop_act_cd` so far.
+11. **`_hop_repos`' status 2** ("no readable repos in $HOP_REPOS") isn't modelled. Both "none configured" and "none readable" give hop's status-1 message.
+12. **`__resolve-dump` has two extra flags**: `--full` prints the whole line `testdata/resolve_runner.zsh` prints, so parity compares every column, and `--stats` reports fzf forks and time per query. Without them it prints the spec's six columns.
+13. **`resolve.sh` runs three extra stress sets** (corpus, typo, relaxed) after the spec's five. The go/no-go exit status reads only the five.
