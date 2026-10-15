@@ -665,7 +665,13 @@ _hop_resolve() {
 			_hop_decide T2 "$eq" 1 "${reply[@]}"
 			_hop_res_note="no exact match for: ${q} (showing: ${eq})"
 		else
+			# T2a reorders and spreads the words, so every outcome says how it read them; J2 already did.
 			_hop_decide T2a "$eq" 0 "${reply[@]}"
+			if [[ $_hop_res_verdict == pick ]]; then
+				_hop_res_note="no exact match for: ${q} (read as: ${eq})"
+			elif [[ $_hop_res_rule != dir ]]; then
+				_hop_res_note="hop: ${q} -> ${_hop_res_target##*$'\t'} (read as: ${eq})"
+			fi
 		fi
 		_hop_resolve_log "$q" "$t0"
 		return 0

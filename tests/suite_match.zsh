@@ -109,7 +109,7 @@ for q in \
 	security-tooling-prod Security-Tooling-Prod security_tooling_prod 'acct sec prod' terraform/account-security terraform/acount-security \
 	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod externaldns securitytoolingprod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
-	'acct sec prd' stg 'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
+	'acct sec prd' stg prod_vpc 'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
 	'kps zzqx' 'routemaxter kps zzqx' 'routemaster dev' \
 	"${MT_NONSENSE[@]}"; do
 	mt_case "$q"
@@ -278,6 +278,10 @@ done
 mt_jump 'jump T2a single' "$IP/routemaster/" routemaster-prod
 mt_get routemaster-prod
 assert_eq 'routemaster prod' "${reply[15]}" 'a word the rows already hold is never abbreviated, so raster-catalogue is not offered'
+assert_eq "hop: routemaster-prod -> $IP/routemaster/ (read as: routemaster prod)" "${reply[16]}" 'a T2a jump says how it read the words, since they were split apart'
+mt_pick T2a 3 - prod_vpc
+mt_get prod_vpc
+assert_eq 'no exact match for: prod_vpc (read as: prod vpc)' "${reply[16]}" 'a T2a pick opens on a query the user did not type, so the header says why'
 # A token run together from vocabulary words is read as those words, and still only offered.
 mt_pick T2 2 kubernetes/values/external-dns/ externaldns
 mt_get externaldns
