@@ -354,6 +354,10 @@ _hop_act_enter() {
 			_hop_code_fallback "$REPLY" "$preview"
 		elif [[ $verb == open ]] || (( whole )); then
 			_hop_code_fallback "$REPLY" "$dir"
+		elif [[ -f $preview ]]; then
+			# -o here falls back on the dir, so pointing at it as a way to see this file would mislead.
+			print -ru2 -- "hop: ${REPLY}, and only VS Code can reveal ${preview:t} in ${rel:-$dir}; -o opens the directory itself in the terminal editor"
+			return 1
 		else
 			print -ru2 -- "hop: ${REPLY}, and only VS Code can reveal ${rel:-$dir}; use -o to open it in the terminal editor"
 			return 1

@@ -467,6 +467,8 @@ ac_fcase 'J2 --cd -e' . 'hop --cd -e security-tooling-prod'
 ac_fcase 'kubernetes/values -e' . 'hop -e kubernetes/values'
 ac_fcase 'kubernetes/values --cd -e' . 'hop --cd -e kubernetes/values'
 # J1b collapses files in one dir only under cd, so these tell whether hop hands the resolver the call's mode at all.
+ac_fcase 'reveal file no code' . 'HOP_CODE=hop-no-such-code hop -e eks security'
+ac_fcase 'reveal dir no code' . 'HOP_CODE=hop-no-such-code hop -e terraform/acct-security-tooling-prod/env-prod'
 ac_fcase 'J1b cd' . 'hop monitoring/grafana'
 ac_fcase 'J1b -o' . 'hop -o monitoring/grafana'
 ac_fcase 'J1b --cd -e' . 'hop --cd -e monitoring/grafana'
@@ -586,6 +588,10 @@ ac_flag_want 'J2 --cd -e' 0 "$AC_MT/terraform/acct-security-tooling-prod" "code 
 t 'reveal on a dir with no file at its top explains itself: a failure alone, a note after a cd'
 ac_flag_want 'kubernetes/values -e' 1 "$AC_MT" '' 'hop: nothing to reveal at the top of kubernetes/values/; use -o to open it as a folder'
 ac_flag_want 'kubernetes/values --cd -e' 0 "$AC_MT/kubernetes/values" '' 'hop: nothing to reveal at the top of kubernetes/values/'
+
+t 'reveal with no VS Code names the file it would have shown, and what -o does instead'
+ac_flag_want 'reveal file no code' 1 "$AC_MT" '' "only VS Code can reveal main.tf in ${AC_SP}/eks/; -o opens the directory itself in the terminal editor"
+ac_flag_want 'reveal dir no code' 1 "$AC_MT" '' 'only VS Code can reveal terraform/acct-security-tooling-prod/env-prod/; use -o to open it in the terminal editor'
 
 t 'J1b reads the mode hop resolved: two files in one dir jump under cd, and need a pick under -o or --cd -e'
 ac_flag_want 'J1b cd' 0 "$AC_MT/kubernetes/services/monitoring" ''
