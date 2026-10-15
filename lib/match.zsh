@@ -248,22 +248,27 @@ _hop_elsewhere() {
 	fi
 
 	# A repo ranks by its first appearance in the history, as the repo or anything inside it, then by path.
-	local -a hist keys rows places
+	local -a hist keys raw rows places
 	[[ -r ${HOP_HISTFILE:-} ]] && hist=("${(@f)$(<"$HOP_HISTFILE")}")
 	for (( i = 1; i <= $#hits; i++ )); do
 		keys+=("${(l:6::0:)${hist[(i)${(b)homes[i]}(|/*)]}}${homes[i]}"$'\t'"${hits[i]}"$'\t'"$i")
 	done
 	_hop_sort_bytes "${keys[@]}"
+	# The repo is the name, since it is what tells the rows apart, and a name keeps both ends when it is clipped.
 	for k in "${reply[@]}"; do
 		i=${k##*$'\t'}
 		places+=("${(D)homes[i]}")
 		_hop_literal_fields "${hits[i]}" ''
 		if [[ -d ${hits[i]} ]]; then
-			rows+=("$(_hop_row dir "${homes[i]:t}" - - "${hits[i]:t}" "${reply[1]}" "${reply[2]}")")
+			_hop_row_raw dir - - - "${homes[i]:t}" "${reply[1]}" "${reply[2]}"
 		else
-			rows+=("$(_hop_row file "${homes[i]:t}" - - "${hits[i]:t}" "${reply[1]}" "${reply[2]}" f)")
+			_hop_row_raw file - - - "${homes[i]:t}" "${reply[1]}" "${reply[2]}" f
 		fi
+		raw+=("$REPLY")
 	done
+	# Laid out as one list of its own, never like the list of the repo this was reached from.
+	_hop_layout "${(F)raw}"
+	rows=("${(@f)REPLY}")
 	_hop_elsewhere_log pick "$#rows"
 
 	local _hop_res_verdict=pick _hop_res_tier=T0 _hop_res_rule=elsewhere _hop_res_query=$1 _hop_res_target=''

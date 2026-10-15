@@ -31,7 +31,7 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   A path can start with its repo's name too, so `hop configuration/terraform/acct-security-tooling-prod` works from `~`.
   One match jumps and says where it was found.
   A path that several checkouts have jumps only when they're all checkouts of one origin and exactly one is on its default branch, and the note says so: `(found in configuration, the main checkout of 4)`.
-  Otherwise the picker opens on just those, the most recently visited repo first.
+  Otherwise the picker opens on just those, each row named by its repo, the most recently visited repo first.
   Inside a repo, other repos are tried only when the repo has nothing close to the query, so every in-repo jump and pick is unchanged.
 - The columns in a list line up: kind, scope, env, region and the path start at the same column on every row.
   A name longer than the 28-column name field pushed the rest of its row to the right, as `platform-configuration.retired-2026-09-14` did in the repo picker and long helm service names did in the main picker.

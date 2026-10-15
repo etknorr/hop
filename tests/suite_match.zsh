@@ -883,6 +883,23 @@ MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
 export HOP_HISTFILE=/dev/null
 assert_contains "$MT_RUN" 'hop: best matches: ~/strava/hop.old/shared/dir/, ~/personal/hop/shared/dir/, ~/strava/hop/shared/dir/'
 
+t 'elsewhere: the picker names each repo and lines its rows up as one list, from outside a repo or inside one'
+typeset MT_CWD MT_SHAPE
+typeset -a MT_SHAPES
+for MT_CWD in "$MT_WSH" "$MT_REPO"; do
+	stub_fzf_select '' 1
+	MT_STUB=$REPLY
+	mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_CWD}; HOP_JUMP=unique hop shared/dir" "HOP_WORKSPACES=$MT_WS" >/dev/null
+	MT_IN=("${(@f)$(mt_slurp "$MT_STUB/stdin")}")
+	assert_eq 3 ${#MT_IN} "from ${MT_CWD}: the picker holds hop.old and both hop repos"
+	MT_SHAPES=()
+	for MT_SHAPE in "${MT_IN[@]}"; do
+		MT_SHAPE=${(S)${MT_SHAPE%%$'\t'*}//$'\e'\[*m/}
+		MT_SHAPES+=("${#MT_SHAPE} ${(j: :)${=MT_SHAPE}}")
+	done
+	assert_eq '25 hop dir|25 hop dir|25 hop.old dir' "${(j:|:)${(@o)MT_SHAPES}}" "from ${MT_CWD}: each row is the repo name and kind, at one width"
+done
+
 typeset MT_SORT MT_SORT_T='elsewhere: candidates sort in byte order, so a name comes before every name it prefixes'
 MT_SORT=$(hop_probe 'export LC_ALL=en_US.UTF-8
 typeset tab

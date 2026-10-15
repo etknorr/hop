@@ -642,7 +642,7 @@ stops at the first one that finds something:
    `(found in configuration, the main checkout of 4)`. hop reads this from each checkout's own git
    files rather than running `git`, so it costs a few milliseconds. `HOP_JUMP=unique` turns this
    rule off, since there the path names more than one target. Otherwise the picker opens on
-   just those, the repo you visited most recently first, then by path.
+   just those, each row named by its repo, the repo you visited most recently first, then by path.
 
    Inside a repo, other repos are tried only when the repo has nothing close to the query, so
    a match or a typo pick in the repo you're in still wins. The lookup needs a `/` with a name
