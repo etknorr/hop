@@ -107,7 +107,7 @@ for q in \
 	terraform/acct-security-tooling-prod/env-prod/us-east-1/vpc kubernetes/services/monitoring/grafana.yaml \
 	./sandbox/abg terraform/nope/x acct-security-tooling-prod/env-prod curity-tooling-prod/env-pr \
 	security-tooling-prod Security-Tooling-Prod security_tooling_prod 'acct sec prod' terraform/account-security terraform/acount-security \
-	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod kps kpstack kubeprom \
+	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod externaldns securitytoolingprod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
 	'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
 	"${MT_NONSENSE[@]}"; do
@@ -277,6 +277,13 @@ done
 mt_jump 'jump T2a single' "$IP/routemaster/" routemaster-prod
 mt_get routemaster-prod
 assert_eq 'routemaster prod' "${reply[15]}" 'a word the rows already hold is never abbreviated, so raster-catalogue is not offered'
+# A token run together from vocabulary words is read as those words, and still only offered.
+mt_pick T2 2 kubernetes/values/external-dns/ externaldns
+mt_get externaldns
+assert_eq 'external dns' "${reply[15]}"
+mt_pick T2 4 "$SP/" securitytoolingprod
+mt_get securitytoolingprod
+assert_eq 'security tooling prod' "${reply[15]}" 'three words run together split into three terms'
 for w in kps kpstack kubeprom; do
 	mt_pick T3 2 kubernetes/values/kube-prometheus-stack/ "$w"
 done

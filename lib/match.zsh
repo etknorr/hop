@@ -151,6 +151,7 @@ _hop_literal_target() {
 # _hop_vocab_build <rel...> -> _hop_vocab and _hop_segs, the words T2 and T3 may rewrite a query into.
 # - Both are declared by _hop_resolve, so building them once serves every tier and every relaxed term.
 # - _hop_vocab is every rel token split on / - _ . with 2-char tokens dropped, plus the kind names.
+# - _hop_vocab_set holds the same words as keys, for the whole-word lookups of _hop_compound.
 # - _hop_segs is every whole rel segment, extension stripped, 3 chars or more.
 _hop_vocab_build() {
 	emulate -L zsh
@@ -159,6 +160,8 @@ _hop_vocab_build() {
 	local -a rels=("$@")
 	_hop_vocab=(${(u)${(L)${=${(j: :)rels//[\/_.-]/ }}}})
 	_hop_vocab=(${_hop_vocab:#?(|?)} "${_HOP_ALL_KINDS[@]}")
+	local -a ones=("${(@)_hop_vocab//*/1}")
+	_hop_vocab_set=("${(@)_hop_vocab:^ones}")
 	_hop_segs=(${(u)${(L)${(s:/:)${(j:/:)rels}}}%.*})
 	_hop_segs=(${_hop_segs:#(|?|??)})
 }
@@ -179,10 +182,40 @@ _hop_abbrevs() {
 	(( $#reply ))
 }
 
+# _hop_compound <token> -> 0 with reply the two or three vocabulary words, 3 chars or more each, the token runs together.
+# - `externaldns` is external dns, and `securitytoolingprod` is security tooling prod.
+# - The longest first word wins, and two words before three.
+_hop_compound() {
+	emulate -L zsh
+	local t=$1 a b c
+	local -i i j n=${#t}
+	reply=()
+	for (( i = n - 3; i >= 3; i-- )); do
+		a=${t[1,i]} b=${t[i+1,n]}
+		if (( ${+_hop_vocab_set[$a]} && ${+_hop_vocab_set[$b]} )); then
+			reply=("$a" "$b")
+			return 0
+		fi
+	done
+	for (( i = n - 6; i >= 3; i-- )); do
+		a=${t[1,i]}
+		(( ${+_hop_vocab_set[$a]} )) || continue
+		for (( j = n - 3; j >= i + 3; j-- )); do
+			b=${t[i+1,j]} c=${t[j+1,n]}
+			if (( ${+_hop_vocab_set[$b]} && ${+_hop_vocab_set[$c]} )); then
+				reply=("$a" "$b" "$c")
+				return 0
+			fi
+		done
+	done
+	return 1
+}
+
 # _hop_rewrite <query> [wide] -> 0 with reply=(approx effq), the query rewritten into fzf OR groups (T2).
 # - Every token is split out on whitespace and / - _ . and kept as-is when some vocabulary word contains it.
 # - A token no word contains gets typo fixes: zsh's approximate glob, 1 error, or 2 from 8 chars, transposition counted once.
-# - A token with neither gets the words it abbreviates to; see _hop_abbrevs.
+# - A token with neither is split into the words it runs together, else gets the words it abbreviates to.
+# - The split comes first: `externaldns` had abbreviated to extras, and the external-dns rows were never offered.
 # - Typo before abbreviation, and a word the token merely starts with is refused, fixed `rotuemaster`.
 # - That had read as roster|raster, and `routemastr` as route.
 # - Only wide abbreviates a token some word already contains, so `routemaster-prod` stays T2a instead of gaining raster.
@@ -212,6 +245,12 @@ _hop_rewrite() {
 			n=$(( ${#tok} >= 8 ? 2 : 1 ))
 			typo=(${(M)_hop_vocab:#(#a${n})${tok}})
 			alts+=("${typo[@]}")
+		fi
+		# A run-together token becomes separate terms, so no OR group can hold it.
+		if (( ! exact && ! $#typo && ${#tok} >= 6 )) && _hop_compound "$tok"; then
+			groups+=("${reply[@]}")
+			approx=1
+			continue
 		fi
 		if (( ! $#typo && ( ! exact || wide ) )); then
 			_hop_abbrevs "$tok" && alts+=("${reply[@]}")
@@ -574,6 +613,7 @@ _hop_resolve() {
 	fi
 
 	local -a _hop_vocab _hop_segs
+	local -A _hop_vocab_set
 	_hop_rels_of "${all[@]}"
 	_hop_vocab_build "${reply[@]}"
 
