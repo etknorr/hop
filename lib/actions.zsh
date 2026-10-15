@@ -94,13 +94,15 @@ _hop_action_mode() {
 }
 
 # _hop_enter_mode -> REPLY is what Enter does in this call: hop()'s resolved mode, else HOP_ACTION.
+# - On workspace and repo rows reveal is named open, because there it runs `code -n` too; see _hop_act_enter.
 _hop_enter_mode() {
 	emulate -L zsh
 	if [[ -n ${_hop_mode:-} ]]; then
 		REPLY=$_hop_mode
-		return 0
+	else
+		_hop_action_mode "${HOP_ACTION:-cd}" quiet
 	fi
-	_hop_action_mode "${HOP_ACTION:-cd}" quiet
+	(( ${_hop_folder_rows:-0} )) && REPLY=${REPLY/reveal/open}
 	return 0
 }
 

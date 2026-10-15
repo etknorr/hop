@@ -714,6 +714,13 @@ assert_eq 'SEARCH  type to filter  esc normal  enter open  M-enter cd  ^o code  
 assert_eq $'enter open · M-enter cd\n^O file · ^T folder · ^Y copy\nM-y copy file · M-o edit\nM-B github · M-a +conf · M-p preview' \
 	"$(hop_probe '_hop_mode=open; _hop_header reloadcmd')"
 
+# A workspace or repo row is a whole folder, where Enter under reveal runs `code -n` exactly as open does.
+t 'the legends on workspace and repo rows name reveal as the open it runs'
+assert_eq 'NORMAL  j/k move  g/G top/bot  / search  ? help  enter open  c cd  q quit' \
+	"$(hop_probe 'COLUMNS=100 _hop_mode=reveal _hop_folder_rows=1; _hop_vim_header NORMAL')"
+assert_contains "$(hop_probe '_hop_mode=cd+reveal _hop_folder_rows=1; _hop_header')" 'enter cd+open'
+assert_contains "$(hop_probe '_hop_mode=reveal; _hop_header')" 'enter reveal' 'control: a target row still says reveal'
+
 # The longest mode re-flows the non-modal legend rather than widening it past the default's widest line.
 t 'the non-modal legend is no wider at the longest mode than at cd'
 typeset -a km_hl=("${(@f)$(hop_probe '_hop_mode=cd+reveal; _hop_header reloadcmd')}")
