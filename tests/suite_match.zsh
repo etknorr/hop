@@ -903,6 +903,59 @@ else
 	assert_eq 'a.b a' "$MT_SORT" 'the control is (o) putting a.b first; then _hop_sort_bytes must put a first'
 fi
 
+# mt_co <name> <origin|-> <main|detached|branch> <path> -> a checkout in the co workspace, on that branch, holding that path.
+# - origin/HEAD names origin/main whenever there is an origin, which is what a fresh clone has.
+mt_co() {
+	emulate -L zsh
+	local d=$MT_WSH/co/$1 url=$2 br=$3
+	mkdir -p -- "$d/$4"
+	_hop_fix_git -C "$d" init -q -b main
+	_hop_fix_git -c user.name=hop -c user.email=hop@example.invalid -C "$d" commit -q --allow-empty -m co
+	if [[ $url != - ]]; then
+		_hop_fix_git -C "$d" remote add origin "$url"
+		_hop_fix_git -C "$d" update-ref refs/remotes/origin/main HEAD
+		_hop_fix_git -C "$d" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+	fi
+	case $br in
+		main) ;;
+		detached) _hop_fix_git -C "$d" checkout -q --detach ;;
+		*) _hop_fix_git -C "$d" checkout -q -b "$br" ;;
+	esac
+}
+typeset MT_CO="co=$MT_WSH/co"
+mt_co a-main https://github.com/acme/conf.git main p1/x
+mt_co a-feat git@github.com:acme/conf feat p1/x
+mt_co b1 https://github.com/acme/b main p2/x
+mt_co b2 https://github.com/acme/b main p2/x
+mt_co c1 https://github.com/acme/one main p3/x
+mt_co c2 https://github.com/acme/two feat p3/x
+mt_co d1 - main p4/x
+mt_co d2 https://github.com/acme/d feat p4/x
+mt_co e1 https://github.com/acme/e detached p5/x
+mt_co e2 https://github.com/acme/e feat p5/x
+# A linked worktree on main beside its own primary on a branch, with no origin/HEAD, so the default falls back to main.
+mt_co f1 - feat p6/x
+_hop_fix_git -C "$MT_WSH/co/f1" remote add origin https://github.com/acme/f
+_hop_fix_git -C "$MT_WSH/co/f1" worktree add -q "$MT_WSH/co/f1wt" main
+mkdir -p -- "$MT_WSH/co/f1wt/p6/x"
+
+t 'elsewhere: of two checkouts of one origin, the one on its default branch is jumped to, and the note says why'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p1/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/a-main/p1/x" 'git@host:org/repo and https://host/org/repo.git are one origin'
+assert_contains "$MT_RUN" 'hop: p1/x -> ~/co/a-main/p1/x/ (found in a-main, the main checkout of 2)'
+
+t 'elsewhere: a linked worktree on main beats its primary on a branch, with main as the default when origin/HEAD is unset'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p6/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/f1wt/p6/x"
+
+t 'elsewhere: two on main, different origins, a checkout with no origin, and a detached HEAD all still pick'
+typeset w
+for w in p2/x p3/x p4/x p5/x; do
+	MT_RUN=$(mt_headless "$MT_WSH" "hop $w" "HOP_WORKSPACES=$MT_CO")
+	assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH" "${w} jumped"
+	assert_contains "$MT_RUN" "2 targets matched the query: ${w}"
+done
+
 t 'elsewhere: inside a repo, a path only another repo has jumps there, because this repo has nothing close'
 MT_RUN=$(mt_headless "$MT_REPO" 'hop wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/wvlomp/qarnix"

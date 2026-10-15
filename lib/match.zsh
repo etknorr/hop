@@ -182,8 +182,8 @@ _hop_literal_fields() {
 # - A path may start with a repo's own name, which works whether or not a workspace holds that repo.
 # - Each anchor costs one case-insensitive glob, and no other repo's rows are ever enumerated.
 # - One distinct target jumps, saying where it was found.
-# - Several never jump: the same path in a repo and its retired copy is exactly when a guess is wrong.
-# - They open a picker over just those, the one in the repo visited most recently first, then by path.
+# - Several jump only when every one is a checkout of one origin and exactly one is on its default branch; see _hop_main_checkout.
+# - Otherwise they open a picker over just those, the one in the repo visited most recently first, then by path.
 _hop_elsewhere() {
 	emulate -L zsh
 	setopt local_options extended_glob
@@ -229,12 +229,18 @@ _hop_elsewhere() {
 	done
 	(( $#hits )) || return 1
 
-	local _hop_gen_root=''
+	local _hop_gen_root='' why=''
+	local -i j=0
 	if (( $#hits == 1 )); then
-		_hop_literal_fields "${hits[1]}" ''
-		_hop_elsewhere_log jump 1 "${reply[3]}"
-		[[ ${hkinds[1]} == workspace ]] && where[1]="workspace ${where[1]}"
-		print -ru2 -- "hop: ${1} -> ${reply[3]} (found in ${where[1]})"
+		j=1
+	elif _hop_main_checkout "${homes[@]}"; then
+		j=${REPLY%% *} why=", the ${REPLY#* } checkout of ${#hits}"
+	fi
+	if (( j )); then
+		_hop_literal_fields "${hits[j]}" ''
+		_hop_elsewhere_log jump "$#hits" "${reply[3]}"
+		[[ ${hkinds[j]} == workspace ]] && where[j]="workspace ${where[j]}"
+		print -ru2 -- "hop: ${1} -> ${reply[3]} (found in ${where[j]}${why})"
 		_hop_dispatch '' "${reply[@]}"
 		_hop_st=$?
 		return 0
@@ -266,6 +272,93 @@ _hop_elsewhere() {
 	_hop_run "paths  ${#rows} found" "$1" '' "${(F)rows}"
 	_hop_st=$?
 	return 0
+}
+
+# _hop_main_checkout <dir...> -> 0 with REPLY "<index> <branch>" for the one dir on its default branch, when all share one origin.
+# - Two clones and two worktrees of one repo hold every path alike, and the one on main is the one you mean.
+# - Checkouts of different origins, a dir with no origin, or two on their default branch all fail, so the caller picks.
+_hop_main_checkout() {
+	emulate -L zsh
+	local origin='' b=''
+	local -i i n=0 at=0
+	local -a reply
+	for (( i = 1; i <= $#; i++ )); do
+		_hop_git_facts "${argv[i]}" || return 1
+		[[ -z $origin || ${reply[1]} == "$origin" ]] || return 1
+		origin=${reply[1]}
+		[[ -n ${reply[2]} && ${reply[2]} == "${reply[3]}" ]] || continue
+		(( n++ ))
+		at=i b=${reply[2]}
+	done
+	(( n == 1 )) || return 1
+	REPLY="${at} ${b}"
+}
+
+# _hop_git_facts <dir> -> 0 with reply=(origin branch default), read from the checkout's git files without running git.
+# - Measured: two git calls for each of four checkouts took 55ms, against a 20ms budget for the whole rule.
+# - origin is remote.origin.url without scheme, user or a trailing .git, so git@host:org/repo and https://host/org/repo agree.
+# - branch is empty on a detached HEAD, and default is what origin/HEAD names, else main when a main branch exists, else master.
+# - A linked worktree's .git is a file naming its gitdir, and config and refs live in that gitdir's commondir.
+# - Anything it cannot read fails, a reftable repo included, so a guess never becomes a jump.
+_hop_git_facts() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local d=$1 g common line sect='' url='' head def=''
+	reply=()
+	if [[ -d $d/.git ]]; then
+		g=$d/.git
+	elif [[ -f $d/.git ]]; then
+		read -r line < "$d/.git" || return 1
+		g=${line#gitdir: }
+		[[ $g == /* ]] || g=$d/$g
+	else
+		return 1
+	fi
+	common=$g
+	if [[ -r $g/commondir ]]; then
+		read -r line < "$g/commondir" || return 1
+		if [[ $line == /* ]]; then common=$line; else common=$g/$line; fi
+	fi
+	[[ -r $common/config && -r $g/HEAD && ! -e $common/reftable ]] || return 1
+
+	for line in "${(@f)$(<"$common/config")}"; do
+		line=${${line##[[:space:]]##}%%[[:space:]]##}
+		if [[ $line == \[* ]]; then
+			sect=$line
+		elif [[ -z $url && $sect == (#i)\[remote\ \"origin\"\] && $line == (#i)url[[:space:]]#=* ]]; then
+			url=${${line#*=}##[[:space:]]##}
+		fi
+	done
+	url=${${url#\"}%\"}
+	[[ -n $url ]] || return 1
+	url=${${url%/}%.git}
+	if [[ $url == *://* ]]; then
+		url=${${url#*://}#*@}
+	else
+		url=${${url#*@}/:/\/}
+	fi
+
+	read -r head < "$g/HEAD" || return 1
+	if [[ $head == 'ref: refs/heads/'* ]]; then head=${head#ref: refs/heads/}; else head=''; fi
+	if [[ -r $common/refs/remotes/origin/HEAD ]]; then
+		read -r line < "$common/refs/remotes/origin/HEAD"
+		[[ $line == 'ref: refs/remotes/origin/'* ]] && def=${line#ref: refs/remotes/origin/}
+	fi
+	if [[ -z $def ]]; then
+		def=main
+		_hop_git_has "$common" main || ! _hop_git_has "$common" master || def=master
+	fi
+	reply=("${(L)url}" "$head" "$def")
+}
+
+# _hop_git_has <common-dir> <branch> -> 0 when the branch exists, locally or on origin, as a loose or a packed ref.
+_hop_git_has() {
+	emulate -L zsh
+	local c=$1 b=$2 p
+	[[ -e $c/refs/heads/$b || -e $c/refs/remotes/origin/$b ]] && return 0
+	[[ -r $c/packed-refs ]] || return 1
+	p=$'\n'$(<"$c/packed-refs")$'\n'
+	[[ $p == *" refs/heads/${b}"$'\n'* || $p == *" refs/remotes/origin/${b}"$'\n'* ]]
 }
 
 # _hop_sort_bytes <string...> -> reply is the strings in byte order, so `configuration` sorts before `configuration.old`.
