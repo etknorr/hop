@@ -537,10 +537,17 @@ Every provider emits four TAB-separated fields:
 <display>  \t  <dir>  \t  <preview_path>  \t  <rel>
 ```
 
-`display` is pre-padded and ANSI-coloured in `_hop_row`, because fzf does not align `--with-nth`
-fields. Padding is applied to the plain text *before* colouring, since `printf` counts an escape
-sequence's bytes as width. `dir` is the `cd` target; `preview_path` is what the preview pane and the
-file verbs act on.
+`display` is padded and ANSI-coloured by hop, because fzf does not align `--with-nth` fields. Each
+list is laid out as a whole, so the kind, scope, env, region and path columns start at the same
+column on every row. A column is as wide as the longest value in that list, up to a cap, and the
+name column is between 20 and 56 characters wide. A scope, env or region column that's `-` on every
+row is left out, so a repo row shows only its name and kind before the path. `dir` is the `cd`
+target; `preview_path` is what the preview pane and the file verbs act on.
+
+A name longer than 56 keeps its start and its end around a `…`. Most names come from the path, and
+`rel` holds the whole path, so a query still matches the part that's cut. A name that isn't in the
+path, such as a workspace name set with `name = path` or one that `--name-fn` reads from a file,
+can't be matched on its cut part.
 
 `rel` is the target's path relative to the repo root, dimmed, and it's the only path fzf searches.
 The absolute `dir` is never searched, so your home directory or a temp-dir suffix can't match a
@@ -555,10 +562,13 @@ query. The trailing `/` is what marks a directory target:
 
 `_hop_row <kind> <scope> <env> <region> <name> <dir> <preview> [f]` builds every field, `rel`
 included, from the root `_hop_generate` is running for. The optional 8th argument `f` makes the
-row a file target: the preview is the destination, and `dir` is only its parent. A `--fn` provider
-written before `rel` existed still works. Its 3-field rows get a `rel` derived from `dir`, so they
-always count as directory targets, and `hop --doctor` names the kind so you can move it to
-`_hop_row`.
+row a file target: the preview is the destination, and `dir` is only its parent. Inside
+`_hop_generate`, `_hop_row` leaves the display unpadded, and hop pads the whole list once it has
+every row, so a `--fn` provider's rows line up with every other kind's. A row whose display the
+provider prints itself, without `_hop_row`, is shown as printed and won't line up. A `--fn`
+provider written before `rel` existed still works. Its 3-field rows get a `rel` derived from
+`dir`, so they always count as directory targets, and `hop --doctor` names the kind so you can
+move it to `_hop_row`.
 
 The name column comes **first**. It is the only field distinguishing one row from another, and a
 fixed 55-column prefix pushed it off-screen below about 160 columns. Putting it first also makes

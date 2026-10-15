@@ -21,6 +21,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   A query that matches nothing comes back as an empty list in NORMAL, and the second `esc` restores every row rather than leaving the list stuck empty.
   `:` drops a kept query, since it would filter the kind list too.
   `HOP_VIM=0` and `--no-vim` are unchanged.
+- A scope, env or region column that's `-` on every row of a list is left out of it, so the repo picker shows only name and kind before the path, and the workspace picker drops region.
+
 ### Fixed
 
 - hop now finds a path typed from outside the repo that holds it.
@@ -31,6 +33,13 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   A path that several checkouts have jumps only when they're all checkouts of one origin and exactly one is on its default branch, and the note says so: `(found in configuration, the main checkout of 4)`.
   Otherwise the picker opens on just those, the most recently visited repo first.
   Inside a repo, other repos are tried only when the repo has nothing close to the query, so every in-repo jump and pick is unchanged.
+- The columns in a list line up: kind, scope, env, region and the path start at the same column on every row.
+  A name longer than the 28-column name field pushed the rest of its row to the right, as `platform-configuration.retired-2026-09-14` did in the repo picker and long helm service names did in the main picker.
+  The region column wasn't padded at all, so the path moved with the region's length.
+  Each column is now as wide as its longest value in the list, up to a cap, and the name column is between 20 and 56 characters wide.
+  A longer name keeps its start and its end around a `…`, and the path column still holds the whole path, so when a name comes from the path, a query still matches the part that's cut.
+  This holds for the main picker and every reload of it, the directory rows a query adds to it, such as an account or env dir, and the repo and workspace pickers.
+
 
 ## [0.2.0] - 2026-10-14
 
