@@ -503,8 +503,9 @@ func realpath(p string) string {
 // cmdResolveDump is `hopx __resolve-dump`: one query per stdin line against one enumeration, never cd, never history.
 // - The default line is query, verdict, tier, rule, rel(target) and n; --full prints testdata/resolve_runner.zsh's line.
 // - --stats adds one stderr line with the fzf fork count and the time per query, enumeration excluded.
+// - --ms ends each default line with that query's resolve time in ms, T0 included, for per-tier timing.
 func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
-	full, stats, root, jump := false, false, "", ""
+	full, stats, ms, root, jump := false, false, false, "", ""
 	var names []string
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
@@ -512,6 +513,8 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 			full = true
 		case a == "--stats":
 			stats = true
+		case a == "--ms":
+			ms = true
 		case a == "--root" && i+1 < len(args):
 			i++
 			root = args[i]
@@ -561,6 +564,7 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 	for sc.Scan() {
 		q := sc.Text()
 		n++
+		began := time.Now()
 		res, t0 := resolve.Result{}, false
 		if jump != "never" && len(strings.Fields(q)) == 1 {
 			if t, ok := resolve.Literal(q, root, root); ok {
@@ -571,7 +575,11 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 			res = r.Resolve(q, all)
 		}
 		if !full {
-			fmt.Fprintf(bw, "%s\t%s\t%s\t%s\t%s\t%d\n", q, res.Verdict, res.Tier, res.Rule, res.Target.Rel, res.N)
+			fmt.Fprintf(bw, "%s\t%s\t%s\t%s\t%s\t%d", q, res.Verdict, res.Tier, res.Rule, res.Target.Rel, res.N)
+			if ms {
+				fmt.Fprintf(bw, "\t%.3f", float64(time.Since(began).Microseconds())/1000)
+			}
+			bw.WriteByte('\n')
 			continue
 		}
 		f := []string{q, ".", "cd", jump, "-", res.Verdict, res.Tier, res.Rule, res.Target.Dir, res.Target.Preview, res.Target.Rel,
