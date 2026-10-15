@@ -1206,6 +1206,8 @@ MT_RUN=$(mt_kw "$MT_KW" solo)
 assert_contains "$MT_RUN" 'hop: reading "solo" as -k solo'
 assert_contains "$MT_RUN" "st=1 PWD=$MT_KW" 'the one networking row auto-accepted'
 assert_contains "$MT_RUN" 'picking one needs a terminal'
+assert_contains "$MT_RUN" 'hop: a kind word alone lists that kind and never jumps; hop -k solo jumps to its one target.'
+assert_not_contains "$MT_RUN" 'narrow the query' 'one target already matched, so narrowing is no advice'
 stub_fzf_select '' 1
 MT_STUB=$REPLY
 mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_KW}; hop solo" "HOP_CONFIG=$MT_KWCFG" >/dev/null

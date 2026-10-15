@@ -1220,6 +1220,8 @@ _hop_headless_report() {
 		print -ru2 -- 'hop: fix the spelling, since hop never jumps on a corrected query.'
 	elif [[ $_hop_res_tier == T0 ]]; then
 		print -ru2 -- 'hop: put the repo name in front of the path, or give the whole path from ~/, so it names one of them.'
+	elif [[ -n ${_hop_kword:-} && $_hop_res_verdict == empty ]] && (( _hop_res_n == 1 )); then
+		print -ru2 -- "hop: a kind word alone lists that kind and never jumps; hop -k ${_hop_kword} jumps to its one target."
 	else
 		print -ru2 -- 'hop: narrow the query until exactly one target matches and hop will jump straight to it.'
 	fi
