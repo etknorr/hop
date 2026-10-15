@@ -1,0 +1,45 @@
+# expect widget.exp <label> <shell argv...>: ^G on a half-typed line opens the real picker, a pick cds, and the line comes back.
+# - The shell's prompt must render as "[<basename of PWD, from its prompt hook>]> ".
+set timeout 10
+set label [lindex $argv 0]
+log_user 0
+set stty_init "rows 40 cols 140"
+spawn -noecho {*}[lrange $argv 1 end]
+expect_before -re "\033\\\[6n" { send "\033\[1;1R"; exp_continue }
+proc fail {why} { global label; puts "FAIL widget-$why"; exit 1 }
+proc pass {what} { global label; puts "PASS widget-$what" }
+expect {
+	-re {\[repo\]> } {}
+	timeout { fail "first-prompt" }
+}
+# Waits are expect-with-timeout, not sleep, so the cursor-report answer above keeps running; pwsh blocks on it.
+expect -timeout 1 timeout {}
+send "echo half-typed"
+expect -timeout 1 timeout {}
+send "\007"
+expect {
+	"hopx ▸" { pass "opens-picker" }
+	timeout { fail "opens-picker" }
+}
+send "gamma"
+expect -timeout 2 timeout {}
+send "\r"
+expect {
+	-re {\[gamma\]> } { pass "cd-and-prompt-hook" }
+	-re {\[repo\]> } { fail "cd-and-prompt-hook (prompt stale or no cd)" }
+	timeout { fail "cd-and-prompt-hook (no prompt)" }
+}
+expect -timeout 1 timeout {}
+send "\r"
+expect {
+	-re {[\r\n](\e\[[0-9;?]*[a-zA-Z])*half-typed} { pass "line-restored" }
+	timeout { fail "line-restored" }
+}
+expect -re {\[gamma\]> }
+send "hopx -\r"
+expect {
+	-re {\[repo\]> } { pass "dash" }
+	timeout { fail "dash" }
+}
+send "exit\r"
+expect eof

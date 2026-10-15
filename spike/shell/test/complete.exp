@@ -1,0 +1,25 @@
+# expect complete.exp <label> <shell argv...>: TAB completes a flag, and a kind from the binary's own config.
+# - Line editors redraw only the inserted suffix, so the completed line is echoed back as words rather than read off the screen.
+# - printf '<%s>' brackets each word, which the typed command line itself never shows, in every shell including pwsh.
+set timeout 8
+set label [lindex $argv 0]
+log_user 0
+set stty_init "rows 40 cols 140"
+spawn -noecho {*}[lrange $argv 1 end]
+expect_before -re "\033\\\[6n" { send "\033\[1;1R"; exp_continue }
+expect -re {\]> }
+proc check {name typed want} {
+	expect -timeout 1 timeout {}
+	send "hopx $typed\t"
+	expect -timeout 2 timeout {}
+	send "\001printf '<%s>' \r"
+	expect {
+		-re "<hopx>$want" { puts "PASS $name" }
+		timeout { puts "FAIL $name" }
+	}
+	expect -re {\]> }
+}
+check complete-flag "--wor" "<--workspaces>"
+check complete-kind "-k " "<-k><u>"
+send "exit\r"
+expect -timeout 3 eof

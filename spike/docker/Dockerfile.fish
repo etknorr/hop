@@ -2,7 +2,7 @@
 FROM ubuntu:24.04
 ARG TARGETARCH
 RUN apt-get update -qq \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends fish git ca-certificates curl bsdutils >/dev/null \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends fish git ca-certificates curl bsdutils expect >/dev/null \
 	&& rm -rf /var/lib/apt/lists/*
 COPY fzf.sha256 /tmp/fzf.sha256
 RUN curl -fsSL -o /tmp/fzf-0.73.1-linux_${TARGETARCH}.tar.gz https://github.com/junegunn/fzf/releases/download/v0.73.1/fzf-0.73.1-linux_${TARGETARCH}.tar.gz \

@@ -1,0 +1,5 @@
+# The widget test's bash: PROMPT_COMMAND feeds the prompt, so a stale prompt shows it never re-ran.
+PROMPT_COMMAND='PRE=${PWD##*/}'
+PS1='[$PRE]> '
+eval "$(hopx init bash)"
+cd "$HOPX_T/repo"
