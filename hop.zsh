@@ -487,14 +487,15 @@ hop() {
 				opts=1
 				shift
 				;;
+			# An empty --action= is refused too, or a `--action=$MODE` with MODE unset silently did what HOP_ACTION says.
+			--action | --action=)
+				print -ru2 -- "hop: --action needs a mode, as --action=MODE: ${(j:, :)_HOP_ACTIONS}"
+				return 2
+				;;
 			--action=*)
 				act_flag=${1#--action=}
 				opts=1
 				shift
-				;;
-			--action)
-				print -ru2 -- "hop: --action needs a mode, as --action=MODE: ${(j:, :)_HOP_ACTIONS}"
-				return 2
 				;;
 			--no-vim)
 				HOP_VIM=0
