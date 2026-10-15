@@ -532,7 +532,7 @@ _hop_decide() {
 	return 0
 }
 
-# _hop_decide_jump -> the J1, J1b, J3 and J2 rules, in that order, over _hop_decide's own locals.
+# _hop_decide_jump -> the J1, J1b, J3, J0 and J2 rules, in that order, over _hop_decide's own locals.
 # - J3 runs before J2, which is what keeps every jump the display-only matcher made: 0 lost in four sweeps.
 # - Without it `disaster-recovery prod` moved from its one leaf to the env dir above it.
 _hop_decide_jump() {
@@ -575,6 +575,27 @@ _hop_decide_jump() {
 		fi
 	fi
 	[[ $jump == unique ]] && return 0
+
+	# J0, the workspace and repo levels only: one row's name is the whole query, so `configuration` skips its retired copies.
+	# - Never in a repo, where a helm release, a tg unit and a service file can all share one name.
+	if [[ -z $root && $tier == T1 ]] && (( ! opq )) && [[ $eq != *[[:space:]]* ]]; then
+		local -a named
+		local row
+		for row in "${M[@]}"; do
+			[[ ${(L)${${=${row%%$'\t'*}}[1]}} == "${(L)eq}" ]] && named+=("$row")
+		done
+		if (( $#named == 1 )); then
+			_hop_res_fields "${named[1]}"
+			_hop_res_verdict=jump _hop_res_rule=name _hop_res_target=${(pj:\t:)reply}
+			# Said aloud, because the rows it skipped are ones the user may have meant.
+			if (( $#M == 2 )); then
+				_hop_res_note="hop: ${q} -> ${reply[3]} (exact name; 1 other contains it)"
+			else
+				_hop_res_note="hop: ${q} -> ${reply[3]} (exact name; $(( $#M - 1 )) others contain it)"
+			fi
+			return 0
+		fi
+	fi
 
 	# J2: every match lies under one dir the query names on token boundaries, and no term is a kind word.
 	(( $#X == 1 && ! opq )) && [[ -n $root ]] || return 0

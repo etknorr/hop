@@ -678,7 +678,7 @@ done
 # ---------------------------------------------------------------------------
 # Built under the probe's $HOME, so every rel is the ~ form a real user sees.
 typeset MT_WSH=$HOP_FIX_HOME
-for w in strava/configuration strava/hop personal/notes; do
+for w in strava/configuration strava/hop personal/notes personal/configuration-old personal/hop; do
 	mkdir -p -- "$MT_WSH/$w"
 	_hop_fix_git -C "$MT_WSH/$w" init -q -b main
 done
@@ -709,6 +709,17 @@ assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO"
 t 'workspaces: outside a repo, a name no workspace answers falls back to the repos'
 MT_RUN=$(mt_headless "$MT_WSH" 'hop configuration' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration" 'hop configuration from ~ has to land on the repo'
+assert_contains "$MT_RUN" 'hop: configuration -> ~/strava/configuration/ (exact name; 1 other contains it)' \
+	'J0 skips configuration-old, so it says what it skipped'
+
+t 'repos: a name exactly one repo has jumps past the repos that only contain it'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop -R configuration' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"
+
+t 'repos: a name two repos share exactly still opens the picker'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop -R hop' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" '2 targets matched the query: hop'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO"
 
 t 'workspaces: and a name neither level answers still says nothing matched'
 MT_RUN=$(mt_headless "$MT_WSH" 'hop zzqx' "HOP_WORKSPACES=$MT_WS")
