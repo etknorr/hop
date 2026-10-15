@@ -1135,3 +1135,90 @@ assert_eq "${reply[3]}" "${reply[5]}" 'under never, every jump today is lost'
 assert_contains "$MT_RUN" 'lost     names  abg  today -> sandbox/abg/  now pick T1 -'
 assert_contains "$MT_RUN" 'eval_real: FAIL'
 assert_contains "$MT_RUN" 'st=1'
+
+# ---------------------------------------------------------------------------
+# A first word that names an inactive kind, read as -k.
+# ---------------------------------------------------------------------------
+# Its own repo and config: tg and dir active, file and puppet registered but not, and a top-level puppet/ as a real repo has.
+typeset MT_KW MT_KWCFG
+fixture_repo kindword || return 1
+MT_KW=$REPLY
+fixture_write terraform/acct-a/vpc/terragrunt.hcl 'include {}'
+fixture_write terraform/acct-b/vpc/terragrunt.hcl 'include {}'
+fixture_write puppet/README.md '# puppet'
+fixture_write kubernetes/services/networking/aeraki.yaml 'kind: Application'
+fixture_commit kindword
+fixture_tmpdir kwcfg || return 1
+MT_KWCFG=$REPLY/config.zsh
+print -rl -- 'hop_preset terragrunt dir file puppet' "hop_kind solo --dirs 'kubernetes/services' --desc 'one row'" > "$MT_KWCFG"
+
+# mt_kw <cwd> <hop-args> [VAR=value...] -> the run under the kind-word config, then its code calls on one line.
+mt_kw() {
+	emulate -L zsh
+	local cwd=$1 args=$2
+	shift 2
+	stub_reset
+	mt_headless "$cwd" "hop ${args}" "HOP_CONFIG=$MT_KWCFG" "$@"
+	print -r -- "calls=${(j:|:)${(@f)$(stub_calls code)}//$'\t'/ }"
+}
+
+t 'kind word: file as the first word is -k file, says so, and the action still applies'
+MT_RUN=$(mt_kw "$MT_KW" 'file -e aeraki.yaml')
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" "calls=code -r $MT_KW/kubernetes/services/networking/aeraki.yaml"
+assert_contains "$MT_RUN" "st=0 PWD=$MT_KW"
+MT_RUN=$(mt_kw "$MT_KW" 'File -e aeraki.yaml')
+assert_contains "$MT_RUN" 'hop: reading "File" as -k file' 'the kind name is compared without case'
+
+t 'kind word: file alone opens on the file kind and never jumps'
+MT_RUN=$(mt_kw "$MT_KW" file)
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" 'targets matched, and picking one needs a terminal.'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_KW"
+
+t 'kind word: a kind with one row, or one workspace, alone still waits for a pick'
+MT_RUN=$(mt_kw "$MT_KW" solo)
+assert_contains "$MT_RUN" 'hop: reading "solo" as -k solo'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_KW" 'the one networking row auto-accepted'
+assert_contains "$MT_RUN" 'picking one needs a terminal'
+MT_RUN=$(mt_kw "$MT_KW" '-w file' "HOP_WORKSPACES=strava-ws=$MT_WSH/strava")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_KW" 'the one workspace auto-accepted'
+stub_fzf_select '' 1
+MT_STUB=$REPLY
+mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_KW}; hop solo" "HOP_CONFIG=$MT_KWCFG" >/dev/null
+mt_argv "$MT_STUB"
+assert_eq 0 ${#${(M)reply:#--select-1}} 'with a terminal, --select-1 would accept the one row unseen'
+assert_ne 0 ${#reply} 'the picker never ran, so the absence above means nothing'
+
+t 'kind word: a rest that matches nothing is reported with -k, never as an ignored word'
+MT_RUN=$(mt_kw "$MT_KW" 'file zzqx')
+assert_contains "$MT_RUN" 'hop: nothing matched the query: zzqx with -k file'
+assert_not_contains "$MT_RUN" 'ignored'
+
+t 'kind word: puppet, which a row holds, tg, an active kind, a typed -k, and a later word all stay plain words'
+MT_RUN=$(mt_kw "$MT_KW" puppet)
+assert_contains "$MT_RUN" "st=0 PWD=$MT_KW/puppet" 'the top-level puppet/ dir is what puppet means here'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" 'tg vpc')
+assert_contains "$MT_RUN" '2 targets matched the query: tg vpc'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" '-k dir file')
+assert_contains "$MT_RUN" 'nothing matched the query: file, so'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" 'vpc file')
+assert_contains "$MT_RUN" 'ignored: file'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" '-a file -e aeraki.yaml')
+assert_not_contains "$MT_RUN" 'reading' '-a already includes every kind'
+
+t 'kind word: -w, -R and outside a repo read it exactly as a typed -k, which those levels ignore'
+MT_RUN=$(mt_kw "$MT_WSH" 'file strava' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_not_contains "$MT_RUN" 'REPLY=' 'a redeclared local printed itself to stdout'
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava"
+MT_RUN=$(mt_kw "$MT_KW" '-w file strava' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava"
+MT_RUN=$(mt_kw "$MT_KW" '-R file strava/conf' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"

@@ -1017,6 +1017,27 @@ _hop_term_eq() {
 	return 1
 }
 
+# _hop_word_unread <word> <rows-text> -> 0 when no tier reads the word over these rows, so the relaxed tier would drop it.
+# - It builds what _hop_resolve builds for _hop_term_eq, which is what makes it the same test the relaxed tier runs.
+# - An exact hit is checked first, so a word some row holds costs no vocabulary build; above _HOP_APPROX_MAX rows it is the only check, as in _hop_resolve.
+_hop_word_unread() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local t=$1 rows=$2 REPLY _hop_text=''
+	local -a all rels reply _hop_vocab _hop_segs
+	local -A _hop_vocab_set
+	all=("${(@f)rows}")
+	all=(${all:#})
+	(( $#all )) || return 0
+	_hop_rels_of "${all[@]}"
+	rels=("${reply[@]}")
+	_hop_text_build
+	_hop_hits "$t" "$rows" && return 1
+	(( $#all > _HOP_APPROX_MAX )) && return 0
+	_hop_vocab_build "${rels[@]}"
+	! _hop_term_eq "$t" "$rows"
+}
+
 # _hop_all_but_one -> 0 when some rows match every kept word but one, and they are decided as a relaxed pick.
 # - Each word matches alone and no row matches all of them, so one word at a time is left out.
 # - The picker opens on every pair OR-ed, `a | b  a | c  b | c`, which is what keeps exactly the rows missing one word.
@@ -1122,7 +1143,7 @@ _hop_headless_report() {
 	emulate -L zsh
 	local query=${1:-} label=${2:-}
 	_hop_dbg "headless label=${label} rows=${_hop_res_n} query=${query}"
-	if [[ $_hop_res_verdict == empty ]] && (( _hop_res_n == 1 )) && [[ ${_hop_jump:-${HOP_JUMP:-auto}} != never ]]; then
+	if [[ $_hop_res_verdict == empty && -z ${_hop_kword:-} ]] && (( _hop_res_n == 1 )) && [[ ${_hop_jump:-${HOP_JUMP:-auto}} != never ]]; then
 		_hop_res_note=''
 		_hop_res_jump
 		return $?
@@ -1136,7 +1157,7 @@ _hop_headless_report() {
 	fi
 	print -ru2 -- 'hop: no terminal available, so the picker cannot run (/dev/tty could not be opened).'
 	if [[ $_hop_res_verdict == none ]]; then
-		print -ru2 -- "hop: nothing matched${query:+ the query: $query}, so there was nothing to jump to."
+		print -ru2 -- "hop: nothing matched${query:+ the query: $query}${_hop_kword:+ with -k $_hop_kword}, so there was nothing to jump to."
 		# The row cap is the one reason a typo goes uncorrected, and the picker header is not there to say so.
 		[[ -n $_hop_res_note && $_hop_res_note != 'nothing close to: '* ]] && print -ru2 -- "hop: ${_hop_res_note}, so a misspelt word is not corrected; -k narrows the kinds."
 		return 1

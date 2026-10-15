@@ -64,6 +64,7 @@ _hop_usage() {
 	print -r -- '  hop -k tg,helm      restrict to specific kinds'
 	print -r -- '  hop -c, --cwd       only targets under $PWD, for any kind'
 	print -r -- '  hop -k file x.yml   find a tracked FILE by name (opt-in: it is every file)'
+	print -r -- '  hop file x.yml      the same: a first word naming a kind outside the defaults is -k'
 	print -r -- '  hop -c -k file x    find a file in just this subtree'
 	print -r -- '  hop /   hopr        cd to the repo root'
 	print -r -- '  hop -               cd -'
@@ -286,7 +287,8 @@ _hop_res_pick() {
 			input=$(_hop_res_input "$targets")
 			;;
 		empty)
-			[[ ${_hop_jump:-$HOP_JUMP} != never ]] && _hop_pick_select1=1
+			# A kind read from the first word names a family, not a target, so even its one row waits for Enter.
+			[[ ${_hop_jump:-$HOP_JUMP} != never && -z ${_hop_kword:-} ]] && _hop_pick_select1=1
 			;;
 	esac
 	local -a trows=("${(f)targets}")
@@ -448,7 +450,7 @@ hop() {
 	local IFS=$' \t\n\0'
 
 	local -a kinds words
-	local all=0 repopick=0 wspick=0 here=0 opts=0 mode=''
+	local all=0 repopick=0 wspick=0 here=0 opts=0 kgiven=0 mode=''
 	local -i act_cd=0 act_open=0 act_reveal=0
 	local act_flag=''
 	# Read by the resolver, the pickers, the legends and _hop_act_enter through dynamic scope.
@@ -564,12 +566,12 @@ hop() {
 					return 2
 				fi
 				kinds=(${=${2//,/ }})
-				opts=1
+				opts=1 kgiven=1
 				shift 2
 				;;
 			-k*)
 				kinds=(${=${${1#-k}//,/ }})
-				opts=1
+				opts=1 kgiven=1
 				shift
 				;;
 			/ | -)
@@ -655,6 +657,48 @@ hop() {
 		fi
 	fi
 
+	# -c narrows every kind to the subtree you are standing in, not just the file kind.
+	# - Enumeration still starts at the repo root, because a kind's bases are repo-root relative.
+	# - Filtering the rows afterwards, in _hop_rows, is what makes one flag work identically for all kinds.
+	# - $PWD is LOGICAL while the rows are built from git's PHYSICAL root, so both sides resolve first.
+	# - Unresolved, every row was dropped in any repo under macOS /tmp or a symlinked parent.
+	# - _hop_act_browse fixed this same class with ${1:A}, and its comment names the /tmp case.
+	# - Filtering in zsh rather than awk, because `awk -v` escape-processes the value it is handed.
+	# - So a directory whose name contains a backslash silently matched nothing at all.
+	if (( here )) && [[ -n $root ]]; then
+		local hdir=${PWD:A} hroot=${root:A}
+		[[ $hdir != "$hroot" ]] && _hop_under=$hdir
+	fi
+
+	# A first word naming a kind outside the active set, which no row this call would match reads, is that kind.
+	# - So `hop file x` is `hop -k file x`, while tg vpc, a dir named puppet, and every later word stay plain words.
+	# - It runs before T0, so the rest of the query is what T0 and the resolver see, exactly as after a typed -k.
+	# - The rows are generated only when the word is such a kind, and in a repo they are kept for the resolve below.
+	local _hop_kword='' pre=''
+	local -i pre_st=-1
+	local w1=${(L)words[1]-}
+	if (( ! kgiven && ! all && $#words && ${+commands[fzf]} )) && (( ${_HOP_ALL_KINDS[(Ie)$w1]} && ! ${kinds[(Ie)$w1]} )); then
+		local lrows=''
+		if (( wspick )); then
+			lrows=$(_hop_provider_ws)
+		elif (( repopick )) || [[ -z $root ]]; then
+			# Assigned, because a bare `local REPLY` over the one declared above prints it to stdout.
+			local -a reply=()
+			local REPLY=''
+			(( ! repopick )) && _hop_ws_parse && lrows=$(_hop_provider_ws)
+			_hop_repo_targets && lrows+=$'\n'$REPLY
+		else
+			_hop_dbg "generate root=${root} kinds=${(j:,:)${(@u)kinds}}"
+			pre=$(_hop_rows "$root" "$_hop_under" "${(@u)kinds}")
+			pre_st=$?
+			lrows=$pre
+		fi
+		if _hop_word_unread "${words[1]}" "$lrows"; then
+			print -ru2 -- "hop: reading \"${words[1]}\" as -k ${w1}"
+			kinds=("$w1") words=("${(@)words[2,-1]}") _hop_kword=$w1 pre_st=-1
+		fi
+	fi
+
 	# T0: a typed path is a filesystem fact, so it jumps before fzf or any enumeration is paid for.
 	# - -k does not narrow it, because no kind is consulted; -w and -R name a different level, so they skip it.
 	if (( ! wspick && ! repopick && $#words == 1 )) && [[ $_hop_jump != never ]]; then
@@ -707,24 +751,15 @@ hop() {
 		return 2
 	fi
 
-	# -c narrows every kind to the subtree you are standing in, not just the file kind.
-	# - Enumeration still starts at the repo root, because a kind's bases are repo-root relative.
-	# - Filtering the rows afterwards, in _hop_rows, is what makes one flag work identically for all kinds.
-	# - $PWD is LOGICAL while the rows are built from git's PHYSICAL root, so both sides resolve first.
-	# - Unresolved, every row was dropped in any repo under macOS /tmp or a symlinked parent.
-	# - _hop_act_browse fixed this same class with ${1:A}, and its comment names the /tmp case.
-	# - Filtering in zsh rather than awk, because `awk -v` escape-processes the value it is handed.
-	# - So a directory whose name contains a backslash silently matched nothing at all.
-	if (( here )); then
-		local hdir=${PWD:A} hroot=${root:A}
-		[[ $hdir != "$hroot" ]] && _hop_under=$hdir
-	fi
-
 	local targets
 	local -i st
-	_hop_dbg "generate root=${root} kinds=${(j:,:)kinds}"
-	targets=$(_hop_rows "$root" "$_hop_under" "${kinds[@]}")
-	st=$?
+	if (( pre_st >= 0 )); then
+		targets=$pre st=$pre_st
+	else
+		_hop_dbg "generate root=${root} kinds=${(j:,:)kinds}"
+		targets=$(_hop_rows "$root" "$_hop_under" "${kinds[@]}")
+		st=$?
+	fi
 	if (( st == 2 )); then
 		print -ru2 -- "hop: no targets under ${PWD} for kinds: ${(j:,:)kinds}"
 		return 1
