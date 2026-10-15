@@ -619,3 +619,73 @@ assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
 t 'repos: hop -R matches by the ~ rel'
 MT_RUN=$(mt_headless "$MT_REPO" 'hop -R strava/conf' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"
+
+# ---------------------------------------------------------------------------
+# tests/eval_real.zsh, the real-repo sweep harness, driven over the fixture.
+# ---------------------------------------------------------------------------
+# tests/run never runs the harness, so these are what keep it from rotting between real-repo runs.
+# - nonsense is left out: its 500 words cost a resolve each, and the nonsense property above already covers the rule.
+
+# mt_eval [VAR=value...] -- [set...] -> run the harness over the fixture repo, then print its status.
+mt_eval() {
+	emulate -L zsh
+	local -a pins
+	while (( $# )) && [[ $1 != -- ]]; do
+		pins+=("$1")
+		shift
+	done
+	shift
+	hop_bound 120 zsh -f -c "$(fixture_pins "HOP_TEST_REPO=$MT_REPO" "${pins[@]}")
+zsh -f ${(q)HOP_HOME}/tests/eval_real.zsh ${(j: :)${(@q)argv}}
+print -r -- \"st=\$?\"" 2>&1
+}
+
+# mt_eval_cols <output> <set> -> reply is that set's table columns: set queries today kept lost changed new pick none seconds.
+mt_eval_cols() {
+	emulate -L zsh
+	local line=${(M)${(@f)1}:#${(b)2} *}
+	reply=(${=line})
+}
+
+t 'eval_real: without HOP_TEST_REPO it skips, and succeeds'
+MT_RUN=$(hop_bound 30 zsh -f -c "$(fixture_pins HOP_TEST_REPO=)
+zsh -f ${(q)HOP_HOME}/tests/eval_real.zsh
+print -r -- \"st=\$?\"" 2>&1)
+assert_contains "$MT_RUN" 'eval_real: skipped'
+assert_contains "$MT_RUN" 'st=0'
+
+t 'eval_real: an unknown set is refused with status 2'
+MT_RUN=$(mt_eval -- names bogus)
+assert_contains "$MT_RUN" 'eval_real: unknown set: bogus'
+assert_contains "$MT_RUN" 'st=2'
+
+MT_RUN=$(mt_eval -- names pref3 scope+env name+env)
+
+t 'eval_real: over the fixture, every jump today is kept and the run succeeds'
+mt_eval_cols "$MT_RUN" names
+assert_eq 10 $#reply "no names line in: ${MT_RUN}"
+assert_eq '0 0' "${reply[5]} ${reply[6]}" 'names: lost and changed'
+assert_eq "${reply[3]}" "${reply[4]}" 'names: every jump today is kept'
+assert_eq 1 $(( ${reply[3]:-0} > 0 )) 'control: with no jump today, kept equalling today proves nothing'
+assert_contains "$MT_RUN" 'eval_real: ok'
+assert_contains "$MT_RUN" 'st=0'
+
+t 'eval_real: the four query sets are all derived and swept'
+typeset MT_SET
+typeset -a MT_EMPTY=()
+for MT_SET in names pref3 scope+env name+env; do
+	mt_eval_cols "$MT_RUN" "$MT_SET"
+	(( ${reply[2]:-0} > 0 )) || MT_EMPTY+=("$MT_SET")
+done
+assert_empty "${(j:, :)MT_EMPTY}" 'a set with no queries would pass vacuously'
+
+t 'eval_real: the fixture'"'"'s scope+env pairs jump to the account dirs as new jumps'
+assert_contains "$MT_RUN" 'new      scope+env  security-tooling-prod prod  -> terraform/acct-security-tooling-prod/ (T1 dir)'
+
+t 'eval_real: HOP_EVAL_JUMP=never loses every jump today, and the run fails naming them'
+MT_RUN=$(mt_eval HOP_EVAL_JUMP=never -- names)
+mt_eval_cols "$MT_RUN" names
+assert_eq "${reply[3]}" "${reply[5]}" 'under never, every jump today is lost'
+assert_contains "$MT_RUN" 'lost     names  abg  today -> sandbox/abg/  now pick T1 -'
+assert_contains "$MT_RUN" 'eval_real: FAIL'
+assert_contains "$MT_RUN" 'st=1'

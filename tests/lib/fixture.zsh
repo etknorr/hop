@@ -187,7 +187,7 @@ fixture_sources() {
 		enum) specs=('hop.zsh' 'lib/*(.)' 'presets/*(.)' 'bin/*(.)') ;;
 		# Everything `zsh -n` must accept, the test harness included.
 		parseable) specs=('hop.zsh' 'config.example.zsh' 'lib/*(.)' 'presets/*(.)' 'bin/*(.)' \
-			'completions/_*(.)' 'tests/run' 'tests/lib/*(.)' 'tests/suite_*.zsh') ;;
+			'completions/_*(.)' 'tests/run' 'tests/lib/*(.)' 'tests/*.zsh') ;;
 		*) print -ru2 -- "fixture_sources: unknown group: ${1}"; return 2 ;;
 	esac
 	reply=()
