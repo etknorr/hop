@@ -22,7 +22,13 @@ function @CMD@ --description 'jump to a target in this repo'
 	return $rc
 end
 
-complete -c @CMD@ -f -a '(command hopx __complete (commandline -opc)[2..-1] (commandline -ct))'
+# The current word goes through a variable: an empty `(commandline -ct)` would substitute to no argument at all.
+function __hopx_complete
+	set -l words (commandline -opc)[2..-1]
+	set -l cur (commandline -ct)
+	command hopx __complete $words "$cur"
+end
+complete -c @CMD@ -f -a '(__hopx_complete)'
 
 # A binding body runs in this shell, so the cd sticks; repaint re-runs fish_prompt, and the half-typed line is never touched.
 function __hopx_widget

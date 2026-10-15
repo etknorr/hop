@@ -25,16 +25,19 @@ zmodload -F zsh/files b:zf_rm 2>/dev/null
 	return rc
 }
 
+# compadd, not _describe, which refuses words that look like options outside _arguments.
 _hopx() {
 	emulate -L zsh
-	local -a lines cands
-	local l
+	local -a lines cands shown
+	local l w d
 	lines=("${(@f)$(command hopx __complete "${(@)words[2,CURRENT]}")}")
 	for l in "${lines[@]}"; do
 		[[ -n $l ]] || continue
-		cands+=("${${l%%$'\t'*}//:/\\:}:${l#*$'\t'}")
+		w=${l%%$'\t'*} d=${l#*$'\t'}
+		cands+=("$w")
+		shown+=("$w${d:+  -- $d}")
 	done
-	_describe -t hopx-args hopx cands
+	compadd -l -d shown -a cands
 }
 (( $+functions[compdef] )) && compdef _hopx @CMD@
 
