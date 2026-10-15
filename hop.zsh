@@ -771,6 +771,10 @@ hop() {
 		return 1
 	fi
 	if (( st )) || [[ -z $targets ]]; then
+		# T0 lists no kind, so a path in another repo is found even when these kinds list nothing here.
+		if (( _hop_xrepo )) && _hop_elsewhere "$query" "$root"; then
+			return $_hop_st
+		fi
 		print -ru2 -- "hop: no targets in ${root} for kinds: ${(j:,:)kinds}"
 		return 1
 	fi
