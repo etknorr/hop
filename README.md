@@ -13,10 +13,10 @@ tab-completion is the wrong shape: the interesting unit is not "a directory" but
 thing", and those things sit at inconsistent depths. `hop` enumerates the things, not the tree.
 
 ```
-vpc                     tg    payments             prod      us-east-1  terraform/payments/prod/us-east-1/vpc/
-vpc                     tg    payments             staging   us-east-1  terraform/payments/staging/us-east-1/vpc/
-web                     helm  kubernetes/values    -         -          kubernetes/values/web/
-alerting                mod   terraform/modules    -         -          terraform/modules/alerting/
+vpc                  tg   payments          prod    us-east-1   terraform/payments/prod/us-east-1/vpc/
+vpc                  tg   payments          staging us-east-1   terraform/payments/staging/us-east-1/vpc/
+web                  helm kubernetes/values -       -           kubernetes/values/web/
+alerting             mod  terraform/modules -       -           terraform/modules/alerting/
 ```
 
 It is a zsh function, not a binary, because the primary verb is `cd` and only the parent shell can
@@ -359,7 +359,7 @@ deliberate paste to trigger.
 
 `\b` and `\f`, if a program prints them raw, still read as `ctrl-h` and `ctrl-l`, which are `--expect`
 keys rather than binds. `--expect` outranks every bind and so cannot be guarded. Both are in-picker
-level navigation; moving the remaining `--expect` keys onto guarded binds is queued for 0.2.0.
+level navigation; moving the remaining `--expect` keys onto guarded binds isn't done yet.
 
 **The guard does not cover the bare control bytes, and it structurally cannot.** It works by hooking
 the `alt-<char>` that an unparsed escape *introducer* produces. `\a`, `\b` and `\f` carry no
@@ -381,7 +381,8 @@ ten guarded keys go dead at once. `esc` is then the only way out of the picker.
 `:` switches which kinds are listed, **in place**, with no nested fzf process. It reuses the single
 fzf instance by reloading it with a menu and using `$FZF_PROMPT` as the mode flag. `enter` switches
 to that kind; `esc` returns to the view you came from. `:` drops a query kept from SEARCH, because
-it would filter the kind list too, so that view comes back unfiltered.
+it would filter the kind list too, so `esc` out of the menu brings back the full list, not the
+filtered one.
 
 Menu counts are cached per repo, per `HEAD`, *and* per the index's own state, so a commit, a branch
 switch and a bare `git add` all invalidate them for free. The index has to be in the key because
@@ -545,11 +546,11 @@ Every provider emits four TAB-separated fields:
 `display` is padded and ANSI-coloured by hop, because fzf does not align `--with-nth` fields. Each
 list is laid out as a whole, so the kind, scope, env, region and path columns start at the same
 column on every row. A column is as wide as the longest value in that list, up to a cap. The name
-column is at least 20 characters wide. Past 28 it's only as wide as 95% of the list's names, so a
-few long names don't push the other columns and the path off every row, and it's never wider than
-56. A scope, env or region column that's `-` on every row is left out, so a repo row shows only its
-name and kind before the path. `dir` is the `cd` target; `preview_path` is what the preview pane and
-the file verbs act on.
+column is at least 20 characters wide. When some names run past 28, it's only as wide as 95% of
+the list's names need, and never narrower than 28 or wider than 56, so a few long names don't push
+the other columns and the path off every row. A scope, env or region column that's `-` on every
+row is left out, so a repo row shows only its name and kind before the path. `dir` is the `cd`
+target; `preview_path` is what the preview pane and the file verbs act on.
 
 A name longer than its column keeps its start and its end around a `…`. Most names come from the
 path, and `rel` holds the whole path, so a query still matches the part that's cut. A name that
@@ -646,18 +647,20 @@ stops at the first one that finds something:
    only one of them is on `main`, hop lands there, and the note says why:
    `(found in configuration, the main checkout of 4)`. hop reads this from each checkout's own git
    files rather than running `git`, so it costs a few milliseconds. `HOP_JUMP=unique` turns this
-   rule off, since there the path names more than one target. Otherwise the picker opens on
-   just those, each row named by its repo, the repo you visited most recently first, then by path.
+   rule off, since there the path names more than one target. When they don't jump, the picker
+   opens on just those, each row named by its repo, the repo you visited most recently first, then
+   by path.
 
    Inside a repo, other repos are tried only when the repo has nothing close to the query, so
    a match or a typo pick in the repo you're in still wins. The lookup needs a `/` with a name
    after it, so `hop configuration/` is still matched like any other query. It skips paths
    starting with `./`, `../`, `/` or `~` and paths with a `.` or `..` segment, and it's off under
    `-c`, which keeps the search under `$PWD`. Under `-p` or `HOP_JUMP=never` it still runs, and
-   even one match opens the picker. A misspelt path isn't corrected here, but when no repo has the
-   path and some repo has its first directory, hop names that repo, because the typo is fixed from
-   inside it. It only checks whether the path exists in each repo,
-   so it lists no repo's targets and costs a few milliseconds.
+   even one match opens the picker. A misspelt path isn't corrected here. When no repo has the path
+   but some repo has its first directory, hop names the repos that have it, the first three and a
+   count of the rest. A typo is only corrected from inside its repo, so cd into one and run the
+   query again. It only checks whether the path exists in each repo, so it lists no repo's targets
+   and costs a few milliseconds.
 2. **Exact**: fzf matches the words against the row's name line (name, kind, scope, env and
    region) and its `rel` path, with `--exact`, `-i` and `--tiebreak=begin,chunk`. The picker gets
    the same flags from the same array, so the two always agree on which rows match. Your
@@ -685,15 +688,15 @@ Before any of these, a first word that names a registered kind outside your defa
 as `-k` when that kind has targets in this repo and no default target holds the word as a whole
 word of its name line or its path. So with `file` not a default kind, `hop file aeraki.yaml` is
 `hop -k file aeraki.yaml`, and hop prints `hop: reading "file" as -k file`. `hop file` alone opens
-the picker on that kind, even when it holds one target. A default kind such as `tg`, a kind name
-after the first word, a kind with no targets here, and a word some default target holds all stay
-plain words, so `hop puppet` in a repo with a top-level `puppet/` still goes to that dir. A kind
-name that's only part of a word, as `conf` is of `aws-config`, doesn't count as held. Nothing is
-read as `-k` when you pass `-k` or `-a`, or under `-w` or `-R`, which list no kinds. Outside a repo
-it's read only before a path, so `hop file terraform/x` from `~` looks the path up in your repos as
-`hop -k file terraform/x` does, while `hop puppet` from `~` stays a workspace query. When it fires
-in a repo, the default kinds are listed once to check the word, and with no terminal a rest that
-matches nothing is reported as `nothing matched the query: zzqx with -k file`.
+the picker on that kind, even when it holds one target. `hop -k file` is the form that jumps to a
+lone target. A default kind such as `tg`, a kind name after the first word, a kind with no targets
+here, and a word some default target holds all stay plain words, so `hop puppet` in a repo with a
+top-level `puppet/` still goes to that dir. A kind name that's only part of a word, as `conf` is of
+`aws-config`, doesn't count as held. Nothing is read as `-k` when you pass `-k` or `-a`, or under
+`-w` or `-R`, which list no kinds. Outside a repo it's read only when one path follows it, so
+`hop file terraform/x` from `~` looks the path up in your repos as `hop -k file terraform/x` does,
+while `hop puppet` from `~` stays a workspace query. With no terminal, a rest that matches nothing
+is reported as `nothing matched the query: zzqx with -k file`.
 
 #### Jump rules
 
@@ -712,7 +715,8 @@ window. An exact match jumps when one of these holds, checked in this order:
 | J2 | every match is under one directory, the words name that directory on whole-word boundaries, and none of them is a kind name | `security-tooling-prod` jumps to `terraform/acct-security-tooling-prod/` |
 
 The name line is all hop searched before paths were added, so a query that jumped before still
-jumps, unless another match's name line is clipped.
+jumps, unless another match has a clipped kind, scope, env or region, or a clipped name its path
+doesn't spell out whole.
 
 J2 prints one line saying why it jumped, such as
 `hop: security-tooling-prod -> terraform/acct-security-tooling-prod/ (all 3 matches are under it)`,
