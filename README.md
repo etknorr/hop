@@ -65,7 +65,7 @@ launch from muscle memory.
 zinit light etknorr/hop
 
 # pinned to a release
-zinit ice ver'v0.2.0'
+zinit ice ver'v0.3.0'
 zinit light etknorr/hop
 ```
 
@@ -78,7 +78,7 @@ In your plugin file, usually `~/.zsh_plugins.txt`:
 etknorr/hop
 
 # pinned to a release
-etknorr/hop branch:v0.2.0
+etknorr/hop branch:v0.3.0
 ```
 
 The annotation is called `branch:`, but it is handed straight to `git clone`, so a tag pins fine.
@@ -95,7 +95,7 @@ github = "etknorr/hop"
 # pinned to a release
 [plugins.hop]
 github = "etknorr/hop"
-tag = "v0.2.0"
+tag = "v0.3.0"
 ```
 
 Then `sheldon lock --update`.
@@ -110,7 +110,7 @@ git clone https://github.com/etknorr/hop.git \
   "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
 
 # pinned to a release
-git clone --branch v0.2.0 https://github.com/etknorr/hop.git \
+git clone --branch v0.3.0 https://github.com/etknorr/hop.git \
   "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
 ```
 
@@ -129,7 +129,7 @@ No manager, one line of `.zshrc`, and nothing between you and the checkout:
 git clone https://github.com/etknorr/hop.git ~/.local/share/hop
 
 # pinned to a release
-git clone --branch v0.2.0 https://github.com/etknorr/hop.git ~/.local/share/hop
+git clone --branch v0.3.0 https://github.com/etknorr/hop.git ~/.local/share/hop
 ```
 
 ```zsh
