@@ -186,6 +186,7 @@ _hop_abbrevs() {
 # - Typo before abbreviation, and a word the token merely starts with is refused, fixed `rotuemaster`.
 # - That had read as roster|raster, and `routemastr` as route.
 # - Only wide abbreviates a token some word already contains, so `routemaster-prod` stays T2a instead of gaining raster.
+# - wide abbreviates each typo fix too, so `acount` reaches acct through account.
 # - _hop_resolve asks for wide only when the narrow rewrite matched nothing, which is what keeps `account -> acct`.
 # - A token nothing explains fails the whole rewrite, so a nonsense word is never invented into a match.
 # - approx is 0 when every token survived unchanged, which is T2a: a separator or case change only.
@@ -196,7 +197,7 @@ _hop_rewrite() {
 	local q=${(L)1}
 	local -i wide=${2:-0}
 	local -a toks=(${=${q//[\/_.-]/ }}) groups alts typo
-	local tok
+	local tok w
 	local -i n approx=0 exact
 	for tok in "${toks[@]}"; do
 		if (( ${#tok} < 3 )); then
@@ -214,6 +215,11 @@ _hop_rewrite() {
 		fi
 		if (( ! $#typo && ( ! exact || wide ) )); then
 			_hop_abbrevs "$tok" && alts+=("${reply[@]}")
+		fi
+		if (( wide )); then
+			for w in "${typo[@]}"; do
+				_hop_abbrevs "$w" && alts+=("${reply[@]}")
+			done
 		fi
 		alts=("${(@u)alts}")
 		(( $#alts )) || return 1

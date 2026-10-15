@@ -106,7 +106,7 @@ for q in \
 	terraform/acct-security-tooling-prod Terraform/ACCT-Security-Tooling-Prod \
 	terraform/acct-security-tooling-prod/env-prod/us-east-1/vpc kubernetes/services/monitoring/grafana.yaml \
 	./sandbox/abg terraform/nope/x acct-security-tooling-prod/env-prod curity-tooling-prod/env-pr \
-	security-tooling-prod Security-Tooling-Prod security_tooling_prod 'acct sec prod' terraform/account-security \
+	security-tooling-prod Security-Tooling-Prod security_tooling_prod 'acct sec prod' terraform/account-security terraform/acount-security \
 	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
 	'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
@@ -259,6 +259,9 @@ mt_get terraform/account-security
 assert_eq 'terraform account | acct security' "${reply[15]}" 'the picker opens on the rewrite, which is what the rows matched'
 assert_eq 'terraform/acct-security-tooling-staging/' "${${reply[14]#*,}%%,*}" 'row 2 is the staging account dir'
 assert_contains "${reply[16]}" 'no exact match for: terraform/account-security' 'the header says the query was rewritten'
+mt_pick T2 7 "$SP/" terraform/acount-security
+mt_get terraform/acount-security
+assert_eq 'terraform account | acct security' "${reply[15]}" 'a typo fix is abbreviated too, so acount reaches acct through account'
 
 typeset w
 for w in securty-tooling-prod secuirty-tooling-prod; do
