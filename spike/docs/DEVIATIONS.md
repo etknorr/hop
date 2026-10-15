@@ -31,3 +31,24 @@ Each entry names the phase, what the spec says, what the build does, and why.
 11. **`_hop_repos`' status 2** ("no readable repos in $HOP_REPOS") isn't modelled. Both "none configured" and "none readable" give hop's status-1 message.
 12. **`__resolve-dump` has two extra flags**: `--full` prints the whole line `testdata/resolve_runner.zsh` prints, so parity compares every column, and `--stats` reports fzf forks and time per query. Without them it prints the spec's six columns.
 13. **`resolve.sh` runs three extra stress sets** (corpus, typo, relaxed) after the spec's five. The go/no-go exit status reads only the five.
+
+## Phase B3 (spec phases 3 and 4: picker, actions, shell init)
+
+1. **Kind menu key**: alt-k. hop's `:` lives in the NORMAL mode of the modal layer, which the spec leaves out, so in plain fzf search `:` would just type. With the menu bound, enter, esc and alt-enter ask `hopx __key` whether the list holds kinds or targets. The menu clears the query when it opens and when it closes, since the query typed there filtered kinds.
+2. **Prompt**: `hopx ▸ `, so a hopx picker can't be mistaken for hop's. The legend's last line names alt-a and alt-k.
+3. **Cancel status**: 130, as the spec's cd protocol says. hop returns 0 on esc.
+4. **Menu counts**: live. hop caches them per HEAD and index and warms the cache in the background, because a zsh sweep takes about 1.6 s. hopx counts all 11 of Eric's kinds from one listing in 43 ms, so there is no cache.
+5. **Two `__rows` forms**: with an absolute root as the first word it is phase 1's unranked enumeration, which the parity harness compares. Inside a picker, `__rows [kind...]` reads root and `-c` dir from the session and ranks by history, as `_hop_rows` does for a reload.
+6. **Remember order**: ctrl-o and ctrl-t remember before they run. hop remembers after `_hop_act_open` succeeds, but hopx may exec the editor (the no-code fallback) and never come back.
+7. **VS Code check**: `_hop_code_usable` is "on PATH or not", as the spec allows. The VSCODE_IPC_HOOK_CLI, SSH and DISPLAY checks aren't ported.
+8. **No drill or up pickers** (ctrl-l, ctrl-h), as the spec says, so the workspace picker has no ctrl-l into a workspace's repos.
+9. **Init script location**: `internal/shell/init/`, not `spike/shell/`, because `//go:embed` can't reach a parent directory. `spike/shell/test/` holds the shell tests.
+10. **zsh ^G when hop is loaded**: if `hop-widget` exists, `hopx init zsh` defines `hopx-widget` but binds no key, so the two coexist in Eric's shell. Bind it by hand to try it there.
+11. **zsh completion**: `compadd -d`, not `_describe`, which offered nothing for `--wor` because it won't complete option-shaped words outside `_arguments`.
+12. **pwsh cd failure**: a failed `Set-Location` returns 1 instead of throwing. The prototype's `-ErrorAction Stop` ended the caller's whole script on the backslash case.
+13. **`init` subcommand**: it takes the first word, like `rows` and `config`, so a target named `init` needs `hopx -- init`.
+14. **Editor split**: on whitespace, as hop's `${=REPLY}` is. The prototype's quote-aware split isn't kept.
+15. **fish completion**: goes through a function, since an empty `(commandline -ct)` substitutes to no argument at all. The binary then saw `-k` as the current word and offered flags instead of kinds.
+16. **Docker images**: built from release tarballs on ubuntu:24.04, because `mcr.microsoft.com/powershell` pulls a 32-bit arm image on this host. Both images verify fzf 0.73.1 and pwsh 7.5.3 against checksums pinned in `spike/docker/*.sha256`.
+17. **G6 in docker**: the Go pty test, cross-compiled with `go test -c`, runs in the containers with the worktree mounted read-only at its own path for `testdata`. The bench mounts `~/strava/configuration` at `/repo` instead, because a `~/strava` path mounted at itself shows up empty under Docker Desktop.
+18. **Newline case**: T0 only. A directory name holding a newline splits its row in hop and in hopx alike (see "Found in hop"), so the cd tests reach it by path.

@@ -214,3 +214,163 @@ Phase 1's commits landed at 10:26 and phase 2's last code commit at 11:20, so ph
 - `resolve.Result.Input(all)` is the picker's stdin for a pick, and `Result.Query` and `Result.Note` are its `--query` and first header line.
 - `session.pick` in `hop.go` is where the picker goes. It currently reports instead of picking when a terminal exists.
 - `act.CD` is the cd half of `_hop_act_cd`. Open, reveal, copy and the editor actions are still to build.
+
+## Phase B3: picker, actions and shell init (spec phases 3 and 4)
+
+Status: done. Nothing is left over for phase 5. The writing-style advisor pass on this file is still left for phase 5, as before.
+
+### What exists
+
+- `internal/pick`: the fzf argv (`_hop_pick` without the modal layer), the session JSON, `Key` (the one decision a bind can't make), `Shim` (`__sh`), `Preview` (`bin/hop-preview` without `--keys`), `Parse` (`_hop_parse_result`) and `Run`.
+  - Every callback is a `hopx __verb` command run through `--with-shell '<hopx> __sh'`, and no bind string holds a path or a query.
+  - The matcher flags come from `match.Flags`, so the picker and the headless resolver can't drift.
+  - A resolver pick opens ordered (`--no-sort` plus `change:toggle-sort+unbind(change)`) with its note above the legend, and only an empty query gets `--select-1`.
+  - `--freeze-left=1` is passed from fzf 0.67.0, and `HOP_FZF_HEIGHT` set but empty is fullscreen.
+- Keys: Enter, alt-enter (always cd), ctrl-o, ctrl-t, ctrl-y, alt-y, alt-o, alt-B (`print(ctrl-g)+accept`), ctrl-/ and alt-p (preview), ctrl-r, alt-a (reload with every kind) and alt-k (the kind menu, see `DEVIATIONS.md`).
+- Callbacks: `__preview {2} {3}`, `__rows [kind...]` (session root and `-c` dir, ranked), `__menu` (live counts), `__key enter|esc|alt-enter`, `__header` and `__sh`.
+- `internal/act`: `Actor.Dispatch` is `_hop_dispatch`, and `Actor.Enter` is `_hop_act_enter` for every mode.
+  - cd goes through the cmdfile. `code -r` only ever gets a file, and a dir always gets `code -n`.
+  - Reveal stands in a README or first file for a dir. A failed `code` after a cd keeps the cd and returns code's status.
+  - With no `code`, open falls back to `$VISUAL`/`$EDITOR`, which is exec'd with fds 0 to 2 on the terminal. Copy probes `HOP_CLIPBOARD`, pbcopy, wl-copy, xclip, xsel and clip.exe, and browse runs `gh browse` from the repo root.
+- `internal/tty`: `/dev/tty` for fzf's screen when stderr isn't a terminal, and `Attach` (`Dup2`, `Dup3` on linux) before the editor exec.
+- `internal/shell` and `hopx init zsh|bash|fish|pwsh [--cmd NAME]`: the prototype's scripts, with the traps the spec lists, plus `hopx __complete` (flags, `--action=` modes, `init` shells, and kinds with their descriptions from the loaded config).
+- Flags: `-a -k -c -w -R -p -o -e --cd --action= -h -V`, with hop's exit-2 rules. `-o`, `-e` and `--action=` now act on a jump instead of exiting 2.
+- `internal/ptytest`: a pty driver with no dependency past `syscall` (`TIOCPTYGRANT`/`TIOCPTYUNLK`/`TIOCPTYGNAME` on darwin, `TIOCSPTLCK`/`TIOCGPTN` on linux).
+- `spike/shell/test/` (`run-all.sh`, `fixture.sh`, `cd.{sh,fish,ps1}`, `pick.{sh,fish,ps1}`, `widget.exp`, `complete.exp`, `rc/`) and `spike/docker/Dockerfile.{fish,pwsh}`.
+- `spike/parity/bench_pick.zsh` and `bench_shells.zsh`.
+- One new dependency: `golang.org/x/term` (and `golang.org/x/sys` under it), for `isatty`, since `/dev/null` passes a character-device check.
+
+### G5: shell coverage
+
+`spike/shell/test/run-all.sh` builds hopx for darwin and linux/arm64, then gives each shell a fresh fixture repo (`plain`, `with space`, `trail-space-backslash\ `, `café`, a name holding a newline, `brack[1]`, `alpha`, `beta/gamma`) and a clean environment. It took 69 s, and a second run gave the same result.
+
+| shell | where | pass | fail | xfail |
+|---|---|---|---|---|
+| zsh 5.9 | host | 31 | 0 | 0 |
+| bash 5.3 | host | 31 | 0 | 0 |
+| bash 3.2 (`/bin/bash`) | host | 31 | 0 | 0 |
+| fish 3.7.0 | docker, ubuntu:24.04 | 33 | 0 | 0 |
+| pwsh 7.5.3 | docker, ubuntu:24.04 | 32 | 0 | 1 |
+
+Every shell runs the same cases:
+
+- `cd.*`, with no terminal: T0 to each of the six names, three resolver jumps (`gamma`, `with space`, `brack`), `hopx /`, `hopx -`, no match (rc 1, no move), a bad flag (rc 2), `--action=cd+open` with a `code` that exits 3 (rc 3 and the cd kept), the bare binary printing its dir, `hopx -h | grep`, no cmdfile left in `$TMPDIR`, the history, and `HOPX_CMDFILE` not leaking into the shell.
+- `pick.*`, on a terminal from `script(1)`, with `FZF_DEFAULT_OPTS` binds firing on `load` in place of keystrokes: cancel (rc 130, no move), Enter on three targets, and ctrl-y to a stub pbcopy.
+- `init-parses`: `zsh -n`, `bash -n`, `/bin/bash -n`, `fish -n` and pwsh `[scriptblock]::Create`.
+- `widget.exp`, interactive under expect: ^G on a half-typed line opens the real picker, a pick cds, the prompt hook re-runs (`[gamma]> `), the half-typed line comes back and runs, and `hopx -` returns.
+- `complete.exp`: TAB completes `--wor` to `--workspaces` and `-k ` to the fixture's one kind.
+- fish and pwsh also run G6, below.
+
+The pwsh XFAIL is the expected backslash case: pwsh on Unix reads `\` as a separator, so `Set-Location -LiteralPath '/fx/repo/trail-space-backslash\ '` fails. hopx wrote the right path. The function reports the error and returns 1 without leaving the dir it was in.
+
+G5 passes.
+
+### G6: callbacks don't depend on the shell
+
+`TestPicker` drives the real fzf on a pty through seven cases: Enter, ctrl-y, esc, the preview pane, alt-k to the helm kind and a pick there, alt-a and a pick among every kind, and an ordered relaxed pick with its note. Each case runs once per `$SHELL`:
+
+| where | `$SHELL` | result |
+|---|---|---|
+| host | `/bin/sh`, zsh | pass |
+| docker, fish image | fish, `/bin/sh` | pass |
+| docker, pwsh image | pwsh, `/bin/sh` | pass |
+
+The host runs were repeated 8 times in a row and the docker runs 3 times, all passing. G6 passes.
+
+Two harness bugs turned up on the way, both in the test and not in hopx:
+
+- A wait matched output drawn before the last keystroke.
+- tcell repaints only the cells that changed, so a count like `1/27` may never be drawn whole. The pty test now waits on the selected row's preview instead.
+
+### G7, second half: per jump
+
+`bench_shells.zsh`, `eks security` (a T1 jump) through each shell's function, cd included, measured as (15 jumps minus 0 jumps) / 15 in one shell, median of 5 such pairs. Init is the shell with the init minus the bare shell, median of 31. Load average was about 5 to 9.
+
+| shell | ms per jump | init ms |
+|---|---|---|
+| hop, zsh, sourced (what ^G runs) | 393.6 | 4.9 (`source hop.zsh`) |
+| hopx, zsh | 65.9 | 3.8 |
+| hopx, bash 5.3 | 71.2 | 5.2 |
+| hopx, bash 3.2 | 75.5 | 1.0 |
+| bare hopx binary, no function | 66.8 | none |
+| hopx, fish 3.7 (docker) | 33.1 | 3.2 |
+| hopx, pwsh 7.5 (docker) | 37.0 | 155.4 |
+| bare hopx binary (docker) | 30.2 | none |
+
+- G7 passes: a jump through hopx's function is 5 to 6 times faster than hop's ^G in every host shell.
+- The function itself costs up to 9 ms over the bare binary.
+- Init is noise-level in the POSIX shells. Two earlier 15-run passes gave 0.9 to 10.0 ms for hopx and 4.6 to 18.6 ms for hop.
+- The docker rows run on linux with the repo on a bind mount, so compare them only with the docker bare-binary row.
+- pwsh's 155 ms init is the shell's own cost: `Invoke-Expression` over a captured `hopx init pwsh`, and `Get-Command Set-PSReadLineKeyHandler` autoloading PSReadLine under `-NoProfile`.
+
+### Callback latency against hop's scripts
+
+`bench_pick.zsh`, `~/strava/configuration` with Eric's config, median of 15:
+
+| callback | hopx ms | hop ms | hop script |
+|---|---|---|---|
+| preview, a file | 4.7 | 21.3 | `bin/hop-preview` |
+| preview, a dir | 4.6 | 17.9 | `bin/hop-preview` |
+| reload, default kinds, 1,042 rows | 21.1 | 346.2 | `bin/hop-kinds rows` |
+| kind menu | 42.9 | 32.1 | `bin/hop-kinds menu`, counts cached |
+
+The menu is the one row where hopx is slower, because it counts all 11 kinds live (12,033 rows for `file` alone) where hop reads a cache. hop's cold menu shows no counts at all, and warming them costs about 1.6 s in the background.
+
+### Manual check on Eric's real data
+
+`TestRealRepoPicker` (runs only with `HOPX_PARITY_REPO`) drives the picker on a pty in `~/strava/configuration` with `eric.toml`. History, clipboard, `code` and the editor are stubs in a temp dir. The last column is the time from exec to the drawn prompt.
+
+| dir | command | keys | outcome | first draw |
+|---|---|---|---|---|
+| . | `hopx` | type `eks staging`, Enter | cd `terraform/acct-infrastructure/env-staging/us-east-1/services_eks` | 252 ms |
+| . | `hopx eks staging` | Enter | the same cd | 127 ms |
+| . | `hopx -p vpc prod` | Down, Enter | cd `terraform/acct-log-archives/env-prod/us-east-1/vpc`, the second candidate | 128 ms |
+| . | `hopx thanos` | ctrl-y | pbcopy got `…/kubernetes/values/thanos`, no cd | 148 ms |
+| . | `hopx` | alt-k, `rules`, Enter, `heatmaps prime`, Enter | cd `kubernetes/charts/service-rules/heatmaps/prime-prod` (rules isn't a default kind) | 109 ms |
+| . | `hopx` | alt-a, `playbook`, Enter | cd `mesos/templates/playbook` (a `dir` row from the every-kind reload) | 129 ms |
+| terraform/acct-security-tooling-prod | `hopx -c` | `vpc`, Enter | cd `terraform/acct-security-tooling-prod/env-prod/us-east-1/vpc` | 108 ms |
+| . | `hopx --action=open eks staging` | Enter | `code -n …/services_eks`, a dir, so never `-r` | 104 ms |
+| . | `hopx -k file -p atlantis.yaml` | ctrl-o | `code -r …/backstage/atlantis.yaml`, a file | 189 ms |
+| . | `hopx -p routemaster` | alt-o | the editor exec'd on `…/routemaster/main.tf` | 108 ms |
+| . | `hopx -w` | esc | rc 130, no cd | 87 ms |
+
+Before the menu case used `rules`, it tried `thanos legacy` among helm rows. That returned rc 1 with `hop: no match`, which is correct: Eric's repo has no thanos-legacy.
+
+### Tests
+
+`go vet ./...` is clean and `go test ./...` passes, with 90 top-level tests (261 counting subtests) across 17 packages. Four are skipped unless `HOPX_PARITY_REPO` is set: `TestParityRows`, `TestParityResolve`, `TestEricConfig` and `TestRealRepoPicker`. All six spec targets cross-compile with `CGO_ENABLED=0`.
+
+New in this phase:
+
+- `pick`: argv goldens (`testdata/golden/argv.golden`: default, `-c`, `-k helm`, `--action=open`, `HOP_FZF_HEIGHT=`, `-w`).
+  - Every argv goes through the real `fzf --filter` and exits 0, with a control that injects an unknown action and expects rc 2.
+  - Also covered: no bind string holds the binary's path, the legends, `Parse` (blank `--expect` line, `print()+accept`'s extra line, empty preview), `SplitWords`, `Shim` in-process and fall-through, `Key` in and out of the menu, the session round trip, and `Preview` (file, dir with dotfiles and a subdir, empty dir, 400-line cap, missing target).
+- `act`: every Enter mode against a stub `code`, a failing `code` after cd, the no-code fallbacks, and each key's argv, cd and history.
+- `shell`: each init parsed by the host shells, `--cmd` renaming, the pwsh path quoting, and `Complete`.
+- `main`: `__rows` equals `hopx rows` plus rank and honours `-c`, `__menu` counts, `__key`, `__header` and `__sh` through `run`, `init`, and `__complete`.
+- `TestPicker` (above), and `ptytest`'s own test.
+
+### I2: lines
+
+| area | zsh code lines | Go code lines |
+|---|---|---|
+| picker, actions, preview, kind menu (`ui.zsh`, `actions.zsh`, `bin/hop-preview`, `bin/hop-kinds`) | 823, of which about 200 are the modal layer that isn't ported | 477 (`pick`) + 388 (`act`) + 50 (`tty`) |
+| shell glue | zsh only: the widget and `completions/_hop` | 182 lines of init script for four shells, 95 (`shell`) |
+| tests | not ported | 958 Go, plus 343 lines of shell and expect harness |
+
+Without the modal layer the picker and actions run under 1.5 Go lines per zsh line, against 1.8 for the engine and 1.5 for the resolver.
+
+### I3: pace
+
+Phase 2's last commit was at 11:22. This phase's code commits landed between 12:41 and 13:24, and its docs about 25 minutes later, so it took about two and a half agent-hours. The effort research put picker and keymap at 6 days, shell init at 4, actions at 3 and the pty and E2E harness at 3 (16 conventional days). The time went on harness bugs (the wait marker, tcell's partial repaints, Docker Desktop's empty same-path mount) rather than on hopx itself. The prototypes' shell traps all held.
+
+### Found in hop
+
+- The alt-a legend is stale. `lib/ui.zsh:29` says `M-a +conf` and `bin/hop-preview:99` says "add the conf kind", but `hop.zsh:728` reloads with every kind (`_HOP_ALL_KINDS`).
+- A directory whose name holds a newline breaks its row. `_hop_generate` prints the row with the newline inside it, so fzf sees two or three broken lines. hopx matches this for parity. T0 still reaches such a dir by path.
+
+### For phase 5
+
+- `run-all.sh` builds everything it needs, including the linux test binary for G6, and needs the `hopx-b3-fish` and `hopx-b3-pwsh` images: `docker build -f spike/docker/Dockerfile.fish -t hopx-b3-fish spike/docker`, and the same for pwsh. `NO_DOCKER=1` runs the host shells only.
+- Per jump, fzf forks are still the cost: the bare binary takes 67 ms on the host for a T1 jump, and the shell function adds almost nothing. The `fzfembed` measurement is the next lever.
+- pwsh on Windows remains unverified past cross-compile, as the spec says.
