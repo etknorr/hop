@@ -38,16 +38,14 @@ func setup(t *testing.T) string {
 }
 
 func TestUsageAndVersion(t *testing.T) {
-	if _, e, rc := hopx(t); rc != 2 || !strings.Contains(e, "usage: hopx") {
-		t.Errorf("no args: rc %d", rc)
-	}
 	if o, _, rc := hopx(t, "-h"); rc != 0 || !strings.Contains(o, "usage: hopx") {
 		t.Errorf("-h: rc %d", rc)
 	}
 	if o, _, rc := hopx(t, "-V"); rc != 0 || !strings.HasPrefix(o, "hopx ") {
 		t.Errorf("-V: %q", o)
 	}
-	for _, a := range [][]string{{"bogus"}, {"rows", "-w", "-R"}, {"rows", "-a", "-k", "dir"}, {"rows", "extra"}, {"__rows"}, {"config"}} {
+	for _, a := range [][]string{{"-Z"}, {"-o", "-e"}, {"--action"}, {"--action=bogus"}, {"--action=open", "-o"}, {"/", "x"}, {"x", "-"}, {"-k"},
+		{"rows", "-w", "-R"}, {"rows", "-a", "-k", "dir"}, {"rows", "extra"}, {"__rows"}, {"config"}, {"__resolve-dump", "--bogus"}} {
 		if _, _, rc := hopx(t, a...); rc != 2 {
 			t.Errorf("%v: rc %d, want 2", a, rc)
 		}
@@ -123,5 +121,22 @@ func TestParityRows(t *testing.T) {
 	t.Logf("\n%s", out)
 	if err != nil {
 		t.Errorf("rows.sh: %v", err)
+	}
+}
+
+// TestParityResolve runs spike/parity/resolve.sh under HOP_JUMP=auto, or $PARITY_JUMPS, against a real repo.
+func TestParityResolve(t *testing.T) {
+	repo := os.Getenv("HOPX_PARITY_REPO")
+	if repo == "" {
+		t.Skip("set HOPX_PARITY_REPO to a repo matching testdata/eric.toml, e.g. ~/strava/configuration")
+	}
+	cmd := exec.Command("bash", filepath.Join("..", "parity", "resolve.sh"), repo)
+	if os.Getenv("PARITY_JUMPS") == "" {
+		cmd.Env = append(os.Environ(), "PARITY_JUMPS=auto")
+	}
+	out, err := cmd.CombinedOutput()
+	t.Logf("\n%s", out)
+	if err != nil {
+		t.Errorf("resolve.sh: %v", err)
 	}
 }

@@ -20,8 +20,12 @@ import (
 
 const version = "0.0.0-spike"
 
-const usage = `usage: hopx <command> [args]
+const usage = `usage: hopx [-a | -k KINDS] [-c] [-p] [--cd] [-o | -e | --action=MODE] [query...]
+       hopx -w | -R [query...]
+       hopx / | -
+       hopx <command> [args]
 
+  hopx [query...]                          resolve the query and jump; with no picker yet, a non-jump is reported
   hopx rows [-k KINDS] [--root DIR] [-a]   print the rows hop's list would hold, unranked
   hopx rows -w                             workspace rows
   hopx rows -R                             repo rows
@@ -42,6 +46,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || !subcommands[args[0]] {
+		return cmdHop(args, stdout, stderr)
+	}
 	err := dispatch(args, stdout, stderr)
 	switch {
 	case err == nil:
@@ -58,6 +65,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 var errNoRows = errors.New("no rows")
 
+// subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hopx -- rows`.
+var subcommands = map[string]bool{
+	"-h": true, "--help": true, "help": true, "-V": true, "--version": true,
+	"rows": true, "__rows": true, "__resolve-dump": true, "kinds": true, "config": true,
+}
+
 func dispatch(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		return errUsage
@@ -73,6 +86,8 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 		return cmdRows(args[1:], stdout, stderr)
 	case "__rows":
 		return cmdRowsHidden(args[1:], stdout, stderr)
+	case "__resolve-dump":
+		return cmdResolveDump(args[1:], stdout, stderr)
 	case "kinds":
 		return cmdKinds(stdout, stderr)
 	case "config":
