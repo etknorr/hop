@@ -301,6 +301,11 @@ and `alt-a` needs a reload command. The repo picker (`hop -R`) has only `h` and 
 (`hop -w`) has only `l`. Where a key is not bound, the legend and the `?` overlay both leave it out
 rather than name a key that does nothing.
 
+Every printable ASCII key is bound in NORMAL, so none of them types. After an `esc` out of SEARCH
+the query is still live, though, and a key fzf can't bind still lands in it and filters the list:
+a non-ASCII character, such as the `π` that Option+p sends when your terminal doesn't treat Option
+as Meta, or a paste.
+
 ### SEARCH
 
 Every printable key types. `esc` returns to NORMAL and keeps the query, so the list stays filtered

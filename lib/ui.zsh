@@ -163,7 +163,8 @@ _hop_vim_binds() {
 	local to_search="${unbind_all}+enable-search+end-of-line+change-prompt(/ )+change-header(${sh})+${prev_restore}"
 
 	# Esc keeps the query on the way back to NORMAL, so j/k walk the filtered rows and a verb acts on one.
-	# - Search stays ENABLED in NORMAL: every printable key is bound there, so nothing types into the query.
+	# - Search stays ENABLED in NORMAL: every printable ASCII key is bound there, so none of them types into the query.
+	# - A non-ASCII key, such as Option+p sending π, or a paste still lands in the query and filters; fzf has no bind for either.
 	# - disable-search is deliberately absent, because it is what once left NORMAL holding a dead list.
 	# - With search off, a cleared query was never re-matched, so a query matching nothing froze at 0 rows.
 	# - With search on, a `clear-query` emitted by esc's transform re-filters by itself, and no search() is needed.
