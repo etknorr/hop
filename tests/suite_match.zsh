@@ -716,6 +716,11 @@ t 'workspaces: outside a repo, an exact repo match beats a workspace pick that i
 MT_RUN=$(mt_headless "$MT_WSH" 'hop personal configuration' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/personal/configuration-old" 'a relaxed workspace pick had hidden the one repo both words name'
 
+t 'workspaces: the repo fallback resolves the repos once, not again inside the repo picker'
+fixture_tmpdir mtdbg
+MT_RUN=$(mt_headless "$MT_WSH" 'hop configuration' "HOP_WORKSPACES=$MT_WS" HOP_DEBUG=1 "HOP_DEBUG_LOG=$REPLY/log")
+assert_eq 2 "$(grep -c ' resolve ' "$REPLY/log")" "one resolve over the workspaces and one over the repos: $(mt_slurp "$REPLY/log")"
+
 t 'repos: a name exactly one repo has jumps past the repos that only contain it'
 MT_RUN=$(mt_headless "$MT_REPO" 'hop -R configuration' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"

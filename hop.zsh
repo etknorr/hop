@@ -303,15 +303,21 @@ _hop_res_pick() {
 # - fzf's status is read by _hop_fzf_status, which this shares with _hop_ws_picker.
 # - _hop_key/_hop_dir/_hop_preview/_hop_rel are local here so nothing leaks into the interactive shell.
 # - So are the resolver's fields, which _hop_resolve writes by name.
+# - Unless the caller set _hop_res_ready, which means it already resolved these targets into its own fields.
 # - root is passed through only so the modal `:` kind picker can re-enumerate; '' disables it.
 _hop_run() {
 	emulate -L zsh
 	local label=$1 query=$2 reload=$3 targets=$4 root=${5:-} restore=${6:-} up=${7:-}
 	local _hop_key _hop_dir _hop_preview _hop_rel _hop_st
-	local _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
-	local -i _hop_res_n _hop_res_m _hop_res_inj
-	local -a _hop_res_rows
-	_hop_resolve "$query" "$targets" "$root" "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}" "${_hop_under:-}"
+	local -i pre=${_hop_res_ready:-0}
+	# Shadowed, so a picker reached from this one through ctrl-h resolves for itself.
+	local -i _hop_res_ready=0
+	if (( ! pre )); then
+		local _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
+		local -i _hop_res_n _hop_res_m _hop_res_inj
+		local -a _hop_res_rows
+		_hop_resolve "$query" "$targets" "$root" "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}" "${_hop_under:-}"
+	fi
 	_hop_res_pick "$label" "$(_hop_header "$reload")" "$query" "$targets" "$reload" "$root" '' "$restore" "$up" \
 		|| return $_hop_st
 
@@ -354,10 +360,14 @@ _hop_ws_picker() {
 		_hop_res_rank
 		local -i wsrank=$REPLY
 		if _hop_repo_targets; then
-			_hop_resolve "$query" "$REPLY" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
+			local repos=$REPLY
+			local -i nrepos=$#reply
+			_hop_resolve "$query" "$repos" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
 			_hop_res_rank
 			if (( REPLY > wsrank )); then
-				_hop_repo_picker "$query"
+				# The repo resolve is handed on, so the repo picker neither re-enumerates nor resolves again.
+				local -i _hop_res_ready=1
+				_hop_repo_picker "$query" "$repos" "$nrepos"
 				return $?
 			fi
 			_hop_resolve "$query" "$targets" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
@@ -403,24 +413,28 @@ _hop_repo_targets() {
 	[[ -n $REPLY ]] || return 2
 }
 
+# _hop_repo_picker [query] [rows] [count] -> the REPO level; rows and count come from a caller that already built them.
 _hop_repo_picker() {
 	emulate -L zsh
-	local query=${1:-} REPLY
+	local query=${1:-} REPLY=${2:-}
 	# A repo row names a whole folder too, exactly as a workspace row does in _hop_ws_picker.
-	local -i _hop_folder_rows=1
+	local -i _hop_folder_rows=1 n=${3:-0}
 	local -a reply
-	_hop_repo_targets
-	case $? in
-		1)
-			print -ru2 -- 'hop: not in a git repository, and no repos found (set $HOP_REPOS)'
-			return 1
-			;;
-		2)
-			print -ru2 -- 'hop: no readable repos in $HOP_REPOS'
-			return 1
-			;;
-	esac
-	_hop_run "repos  ${#reply} found" "$query" '' "$REPLY" '' '' _hop_ws_picker
+	if [[ -z $REPLY ]]; then
+		_hop_repo_targets
+		case $? in
+			1)
+				print -ru2 -- 'hop: not in a git repository, and no repos found (set $HOP_REPOS)'
+				return 1
+				;;
+			2)
+				print -ru2 -- 'hop: no readable repos in $HOP_REPOS'
+				return 1
+				;;
+		esac
+		n=$#reply
+	fi
+	_hop_run "repos  ${n} found" "$query" '' "$REPLY" '' '' _hop_ws_picker
 }
 
 hop() {
