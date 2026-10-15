@@ -71,9 +71,14 @@ _hop_row() {
 }
 
 # _hop_row_raw <same arguments as _hop_row> -> REPLY is the row with its display columns unpadded, joined by _HOP_US.
+# - A separator inside a value would add a cell and shift every later column, so it reads as `?`.
 _hop_row_raw() {
 	emulate -L zsh
 	local us=$_HOP_US dir=$6 preview=${7:-$6}
+	if [[ $1$2$3$4$5 == *${us}* ]]; then
+		_hop_row_raw "${1//${us}/?}" "${2//${us}/?}" "${3//${us}/?}" "${4//${us}/?}" "${5//${us}/?}" "${@[6,-1]}"
+		return
+	fi
 	_hop_rel "$dir" "$preview" "${8:-}"
 	REPLY="${5:--}${us}${1:--}${us}${2:--}${us}${3:--}${us}${4:--}	${dir}	${preview}	${_HOP_C_DIM}${REPLY}${_HOP_OFF}"
 }

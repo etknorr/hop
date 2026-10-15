@@ -259,3 +259,17 @@ assert_eq "$LY_LEGACY" "${rows[3]}" 'a legacy row has no columns to align'
 lay_shapes 5 "${(F)rows[1,2]}"
 rows=(${(f)REPLY})
 assert_eq 1 $#rows "the raw rows beside it still align: ${(j:; :)rows}"
+
+t 'layout: a separator byte inside a name reads as ?, so it adds no cell and shifts no column'
+LY_OUT=$(hop_probe "typeset REPLY r1
+_hop_row_raw dir sc - - \$'we\\x1fird' /r/x /r/x
+r1=\$REPLY
+_hop_row_raw dir sc - - normal /r/y /r/y
+_hop_layout \"\$r1\"\$'\\n'\"\$REPLY\"
+print -r -- \"\$REPLY\"")
+rows=(${(f)LY_OUT})
+lay_plain "${rows[1]}"
+assert_eq 'we?ird dir sc' "${(j: :)${=REPLY}}" 'the part after the separator landed in the kind column'
+lay_shapes 3 "$LY_OUT"
+rows=(${(f)REPLY})
+assert_eq 1 $#rows "rows drawn at more than one shape: ${(j:; :)rows}"
