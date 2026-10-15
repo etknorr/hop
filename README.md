@@ -629,15 +629,15 @@ window. An exact match jumps when one of these holds, checked in this order:
 | Rule | When | Example |
 |---|---|---|
 | J1 | exactly one target matches | `eks security` |
-| J1b | every match is in one directory, and Enter would `cd` | `monitoring/grafana`, whose files all sit in `kubernetes/services/monitoring/` |
+| J1b | every match is in one directory, and Enter is plain `cd` | `monitoring/grafana`, whose files all sit in `kubernetes/services/monitoring/` |
 | J3 | exactly one row matches on its name line alone, which is all hop searched before paths were added, so every query that jumped before still does | `trust prod` |
 | J2 | every match is under one directory, the words name that directory on whole-word boundaries, and none of them is a kind name | `security-tooling-prod` jumps to `terraform/acct-security-tooling-prod/` |
 
 J2 prints one line saying why it jumped, such as
 `hop: security-tooling-prod -> terraform/acct-security-tooling-prod/ (all 3 matches are under it)`.
 `kub` doesn't jump to `kubernetes/`, because a prefix isn't a whole word, and `tg vpc` doesn't jump
-by J2, because `tg` names a whole family. Under `open` or `reveal`, J1b doesn't collapse the files
-in one directory, because each file is a target of its own.
+by J2, because `tg` names a whole family. Under any mode but plain `cd`, `cd+reveal` included, J1b
+doesn't collapse the files in one directory, because each file is a target of its own.
 
 An account or env directory is not a row of any kind, but it still shows up when your query names
 it: hop adds it as a row only when it matches the same query, and J2 is the only rule that jumps to

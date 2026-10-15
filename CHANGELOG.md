@@ -35,7 +35,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - `hop --doctor` shows `HOP_ACTION`, `HOP_JUMP` and `HOP_CODE`, whether VS Code is reachable from this shell and why not, and any `--fn` kind still printing 3-field rows.
   `--doctor=short` shows the same settings but withholds a custom launcher path.
 - Completions offer `-p`, `--cd`, `-o`, `-e` and `--action=MODE`, and leave out the combinations hop refuses.
-- Outside a repo, a query that matches no workspace is tried against your repos, so `hop configuration` from `~` lands on the repo.
+- Outside a repo, a query that matches no workspace is tried against your repos, so `hop configuration` from `~` finds the repo instead of saying nothing matched.
+  It jumps when one repo matches and opens the repo picker when several do.
 - `tests/eval_real.zsh` checks the jump rules against a real checkout named by `HOP_TEST_REPO`; `tests/run` doesn't run it.
   It asks every name, 3-letter prefix, scope+env pair and name+env pair from the repo's own rows, and fails if a query that jumped with hop 0.1.2's matcher now opens the picker or lands elsewhere.
   It also fails if any of 500 dictionary words the rows don't contain jumps.

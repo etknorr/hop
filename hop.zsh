@@ -327,7 +327,7 @@ _hop_run() {
 # - Answers "just nav to the workspace, or show its repos" without forcing the choice up front.
 # - Drilling scopes $HOP_REPOS to the chosen workspace, so the repo picker needs no new argument.
 # - fallback is set only when hop chose this level itself, outside a repo, rather than by -w.
-# - Then a query no workspace answers is tried against the repos, so `hop configuration` from ~ lands on the repo.
+# - Then a query no workspace answers is tried against the repos, so `hop configuration` from ~ finds the repo.
 _hop_ws_picker() {
 	emulate -L zsh
 	local query=${1:-} fallback=${2:-} targets
