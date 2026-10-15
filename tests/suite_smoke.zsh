@@ -232,6 +232,9 @@ typeset vshort
 vshort=$(hop_probe 'hop -V')
 assert_eq "$verout" "$vshort"
 
+t 'hop -v is the same as -V'
+assert_eq "$vshort" "$(hop_probe 'hop -v')"
+
 t 'hop --version is exactly "hop VERSION (describe)" when the shell loaded what is on disk'
 typeset smdesc
 smdesc=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null)

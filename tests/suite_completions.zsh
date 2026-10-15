@@ -141,6 +141,12 @@ t '-p and --pick are one option'
 ct_excl --pick
 assert_eq '-p --pick' "${reply[*]}"
 
+t '-v completes, and is described exactly as -V'
+ct_spec -V
+typeset CT_VSPEC=${REPLY/-V\[/-v[}
+ct_spec -v
+assert_eq "$CT_VSPEC" "$REPLY" '-v has to complete as the same option -V is'
+
 t 'the header names every flag the specs define'
 typeset CT_HEAD
 CT_HEAD=$(sed -n '1,/^$/p' "$HOP_HOME/completions/_hop")

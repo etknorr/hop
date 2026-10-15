@@ -80,7 +80,7 @@ _hop_usage() {
 	print -r -- '  hop upgrade         fast-forward main to the newest release, then exec zsh'
 	print -r -- '  hop upgrade 0.1.0   pin the install to exactly that release, detached'
 	print -r -- '  hop upgrade --check what is installed vs what is released; changes nothing'
-	print -r -- '  hop -V, --version   print the installed version'
+	print -r -- '  hop -V, -v, --version  print the installed version'
 	print -r -- '  hop -h, --help      this text'
 	print -r -- ''
 	print -r -- '  kinds, * being in the default set:'
@@ -488,7 +488,7 @@ hop() {
 				_hop_usage
 				return 0
 				;;
-			-V | --version)
+			-V | -v | --version)
 				_hop_version
 				return 0
 				;;
