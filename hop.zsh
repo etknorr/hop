@@ -154,7 +154,7 @@ _hop_repos() {
 # - 644 terragrunt units include 36 named `vpc`; alphabetical order buries the one you use daily.
 # - The rank+index key keeps the sort stable and survives two rows sharing one dir.
 # - Only the rows whose dir is in the history are keyed and sorted; the rest keep input order untouched.
-# - Field 2 comes from _hop_dirs_of in one pass: the per-row extraction this replaced cost 51-56ms on 1041 rows.
+# - Field 2 comes from _hop_dirs_of in one pass rather than one extraction per row; _hop_dirs_of has the cost.
 _hop_rank() {
 	emulate -L zsh
 	local targets=$1
