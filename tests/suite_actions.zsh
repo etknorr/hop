@@ -311,7 +311,9 @@ ac_usable stale VSCODE_IPC_HOOK_CLI=/nonexistent/vscode-ipc.sock
 ac_usable live VSCODE_IPC_HOOK_CLI=${(q)AC_SOCK} SSH_CONNECTION=x OSTYPE=linux-gnu DISPLAY=
 ac_usable sshconn SSH_CONNECTION=x
 ac_usable sshtty SSH_TTY=/dev/ttys009
-ac_usable linux OSTYPE=linux-gnu DISPLAY= WAYLAND_DISPLAY=
+ac_usable linux OSTYPE=linux-gnu DISPLAY= WAYLAND_DISPLAY= WSL_DISTRO_NAME= WSL_INTEROP=
+ac_usable wsl OSTYPE=linux-gnu DISPLAY= WAYLAND_DISPLAY= WSL_DISTRO_NAME=Ubuntu WSL_INTEROP=
+ac_usable wslinterop OSTYPE=linux-gnu DISPLAY= WAYLAND_DISPLAY= WSL_DISTRO_NAME= WSL_INTEROP=/run/WSL/1_interop
 ac_usable wayland OSTYPE=linux-gnu DISPLAY= WAYLAND_DISPLAY=wayland-0
 ac_usable x11 OSTYPE=linux-gnu DISPLAY=:0
 ac_usable mac OSTYPE=darwin24.0 DISPLAY= WAYLAND_DISPLAY=")
@@ -346,6 +348,10 @@ assert_contains "${AC_U[linux]-}" 'DISPLAY'
 assert_eq 0 "${${AC_U[wayland]-x}%%$'\t'*}"
 assert_eq 0 "${${AC_U[x11]-x}%%$'\t'*}"
 assert_eq 0 "${${AC_U[mac]-x}%%$'\t'*}" 'macOS needs no DISPLAY'
+
+t '_hop_code_usable: WSL with no DISPLAY is usable, since code there is the Windows-side shim'
+assert_eq 0 "${${AC_U[wsl]-x}%%$'\t'*}" "${AC_U[wsl]-no result}"
+assert_eq 0 "${${AC_U[wslinterop]-x}%%$'\t'*}" "${AC_U[wslinterop]-no result}"
 
 # ---------------------------------------------------------------------------
 # The flags, through hop itself, headless, over the resolver's real-shaped fixture.

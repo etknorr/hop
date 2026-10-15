@@ -117,6 +117,7 @@ _hop_code_cmd() {
 # - A stale hook is a terminal that outlived its window, where `code` fails or opens on the wrong host.
 # - With no hook, an SSH session means `code` would start on the remote host, which has no window.
 # - Linux with no DISPLAY or WAYLAND_DISPLAY has no screen to open one on.
+# - Except under WSL, where `code` is the Windows-side shim and opens VS Code on Windows with no X or Wayland at all.
 _hop_code_usable() {
 	emulate -L zsh
 	local -a reply
@@ -135,7 +136,7 @@ _hop_code_usable() {
 		REPLY='this is an SSH session with no VS Code window attached'
 		return 1
 	fi
-	if [[ $OSTYPE == linux* && -z ${DISPLAY:-} && -z ${WAYLAND_DISPLAY:-} ]]; then
+	if [[ $OSTYPE == linux* && -z ${DISPLAY:-} && -z ${WAYLAND_DISPLAY:-} && -z ${WSL_DISTRO_NAME:-} && -z ${WSL_INTEROP:-} ]]; then
 		REPLY='there is no DISPLAY or WAYLAND_DISPLAY for VS Code to open on'
 		return 1
 	fi
