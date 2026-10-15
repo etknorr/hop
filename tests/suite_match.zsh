@@ -347,6 +347,40 @@ mt_get 'routemaster dev'
 assert_eq 'ignored: one of: routemaster, dev' "${reply[16]}" 'every word matches alone, so dropping one is what finds the rows'
 assert_eq 0 "${reply[13]}" 'an ancestor holding one word alone is never injected'
 
+t 'resolve: _hop_hits answers in zsh exactly as fzf --filter does, word by word'
+typeset MT_HITS
+MT_HITS=$(hop_probe "
+builtin cd -q -- ${(q)MT_REPO} || exit 96
+typeset rows w _hop_text=''
+typeset -a all rels reply bad
+rows=\$(_hop_generate \$PWD \${=HOP_DEFAULT_KINDS//,/ })
+all=(\"\${(@f)rows}\")
+_hop_rels_of \"\${all[@]}\"
+rels=(\"\${reply[@]}\")
+_hop_text_build
+[[ -n \$_hop_text ]] || print -r -- 'no text'
+for w in vpc VPC prod tg mesos 'l[a]b' 'b*#' us-east zzqx sbx abg routemaster 'routemaster | zzqx' 'zzqx | qqzz' ${(j: :)${(q)MT_NONSENSE[@]}}; do
+	_hop_hits \"\$w\" \"\$rows\"
+	integer zs=\$?
+	_hop_match \"\$w\" \"\$rows\"
+	(( zs == \$? )) || bad+=(\"\$w\")
+done
+print -r -- \"bad=\${(j:,:)bad}\"")
+assert_eq 'bad=' "$MT_HITS" 'a word zsh and fzf disagree on changes which words the relaxed tier keeps'
+
+t 'resolve: the relaxed tier decides its kept words in zsh, without an fzf per word'
+typeset MT_FORKS
+MT_FORKS=$(hop_probe "
+builtin cd -q -- ${(q)MT_REPO} || exit 96
+typeset _hop_res_verdict _hop_res_tier _hop_res_rule _hop_res_query _hop_res_note _hop_res_target
+typeset -i _hop_res_n _hop_res_m _hop_res_inj
+typeset -a _hop_res_rows
+functions -c _hop_filter _hop_filter_real
+# _hop_match runs the filter in a command substitution, so the count has to leave through a file.
+_hop_filter() { print -r -- \"\$1\" >> ${(q)MT_WORK}/forks; _hop_filter_real \"\$@\" }
+_hop_resolve 'vpc zzqx' \"\$(_hop_generate \$PWD \${=HOP_DEFAULT_KINDS//,/ })\" \$PWD cd auto
+print -r -- \"\$_hop_res_tier \$(grep -c . ${(q)MT_WORK}/forks)\"")
+assert_eq 'relaxed 3' "$MT_FORKS" 'T1, the rerun on vpc and the ancestor rows; zzqx and vpc alone are decided in zsh'
 
 # ---------------------------------------------------------------------------
 # HOP_JUMP, and -c.

@@ -683,7 +683,8 @@ _hop_resolve() {
 	# Relaxed: each word resolves alone, through whichever tier reads it, and the words nothing reads are dropped.
 	if (( $#terms >= 2 )); then
 		local -a keep drop eqs
-		local t
+		local t _hop_text=''
+		_hop_text_build
 		for t in "${terms[@]}"; do
 			if _hop_term_eq "$t" "$rows"; then
 				keep+=("$t") eqs+=("$REPLY")
@@ -716,6 +717,34 @@ _hop_resolve() {
 	return 0
 }
 
+# _hop_text_build -> _hop_text, the fields 1 and 4 of _hop_resolve's rows lowercased, or '' when zsh cannot stand in for fzf.
+# - That is exactly the text fzf matches under --with-nth=1,4 and -i, so _hop_hits can search it instead of forking.
+# - fzf folds Latin diacritics and zsh does not, so text holding anything but ASCII and hop's own … clip marker is refused.
+_hop_text_build() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local -a f1=("${(@)all%%$'\t'*}")
+	_hop_text=${(L)${(F)${(@)f1//$'\e'\[[0-9;]#m/}}}$'\n'${(L)${(F)rels}}
+	[[ ${_hop_text//…/} != *[^$'\x01'-$'\x7f']* ]] || _hop_text=''
+}
+
+# _hop_hits <eq> <rows-text> -> 0 when some row matches eq, answered in zsh whenever that is provably fzf's answer.
+# - For one OR group of plain ASCII words, an --exact match is a substring search of _hop_text.
+# - Anything else forks fzf: an AND of groups needs one row holding them all, and ' ^ $ ! \ are fzf syntax.
+# - Measured: the relaxed tier forked 5 to 8 fzf processes, and a 4-word query took 122ms against a 100ms budget.
+_hop_hits() {
+	emulate -L zsh
+	local e=${(L)1} a
+	if [[ -n ${_hop_text:-} && ${e// | /} != *' '* && $e != *[^$'\x20'-$'\x7e']* && $e != *[\'\^\$\!\\]* ]]; then
+		for a in "${(@s: | :)e}"; do
+			[[ $_hop_text == *"$a"* ]] && return 0
+		done
+		return 1
+	fi
+	local -a reply
+	_hop_match "$e" "$2"
+}
+
 # _hop_term_eq <term> <rows-text> -> 0 with REPLY the term as the first tier that reads it does: T1, T2 narrow, T2 wide, T3.
 _hop_term_eq() {
 	emulate -L zsh
@@ -723,13 +752,13 @@ _hop_term_eq() {
 	local -a reply
 	local -i wide
 	REPLY=$t
-	_hop_match "$t" "$rows" && return 0
+	_hop_hits "$t" "$rows" && return 0
 	for wide in 0 1; do
 		_hop_rewrite "$t" "$wide" || continue
 		REPLY=${reply[2]}
-		_hop_match "$REPLY" "$rows" && return 0
+		_hop_hits "$REPLY" "$rows" && return 0
 	done
-	_hop_loose "$t" && _hop_match "$REPLY" "$rows" && return 0
+	_hop_loose "$t" && _hop_hits "$REPLY" "$rows" && return 0
 	REPLY=''
 	return 1
 }
