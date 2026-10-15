@@ -1,0 +1,1506 @@
+.cl
+.claude
+.claude -
+.gi
+.github
+.github -
+.tx
+.tx -
+<ro
+<root>
+<root> -
+aba
+abacus
+abacus -
+abacus prod
+abacus staging
+acc
+accounts
+accounts -
+ach
+achieve
+achieve -
+achievement
+achievement prod
+achievement staging
+act
+active
+active -
+active prod
+active staging
+active-integrity
+active-integrity -
+activities
+activities -
+activities prod
+activities staging
+activity
+activity prod
+activity staging
+activitystats
+activitystats prod
+activitystats staging
+activitystream
+activitystream prod
+activitystream staging
+aer
+aero
+aero prod
+aff
+affiliate
+affiliate prod
+ai-
+ai-kb
+ai-kb prod
+ai-team
+ai-team -
+ai-tooling-telemetry
+ai-tooling-telemetry prod
+air
+airflow
+airflow prod
+airflow staging
+airflow-edge-worker
+airflow-edge-worker prod
+airflow-edge-worker staging
+alb
+alb-logs
+alb-logs -
+alb-logs prod
+alb-logs staging
+alt
+alternat
+alternat dev
+alternat prod
+alu
+alumninati
+alumninati -
+alumninati prod
+alumninati staging
+amr
+amr prod
+amr staging
+amu
+amundsen
+amundsen -
+amundsen prod
+ana
+analytics
+analytics prod
+analytics staging
+and
+android
+android prod
+ant
+anthropic-compliance-poller
+anthropic-compliance-poller prod
+api
+api-server-demo-safe-to-delete
+api-server-demo-safe-to-delete prod
+apidocs
+apidocs -
+apt
+apt prod
+ara
+arapaho
+arapaho prod
+arc
+archivist
+archivist -
+archivist prod
+archivist staging
+arg
+argo
+argo -
+argo-cron-workflow
+argo-cron-workflow -
+argo-rollouts
+argo-rollouts -
+argo-workflow
+argo-workflow -
+argo-workflows
+argo-workflows prod
+argo-workflows staging
+argo/argo-apps
+argo/argo-apps -
+argo/argo-events
+argo/argo-events -
+argo/argo-rollouts
+argo/argo-rollouts -
+argo/argo-workflows
+argo/argo-workflows -
+argo/argocd
+argo/argocd -
+argo/image-updater
+argo/image-updater -
+argo/kubechecks
+argo/kubechecks -
+argocd
+argocd prod
+argocd staging
+argocd-cluster-synchronizer
+argocd-cluster-synchronizer prod
+ask
+askstrava
+askstrava prod
+askstrava staging
+atl
+atlantis
+atlantis prod
+atlantis staging
+aud
+audit
+audit prod
+audit-logs
+audit-logs prod
+aug
+augur2
+augur2 prod
+aut
+authorization
+authorization -
+authorization prod
+authorization staging
+automation
+automation -
+ava
+avatar
+avatar -
+avatar prod
+avatar staging
+aws
+aws -
+aws-alerts
+aws-alerts prod
+aws-config
+aws-config dev
+aws-config prod
+aws/aws-config
+aws/aws-config -
+aws/aws-security-group
+aws/aws-security-group -
+aws/aws-vpc
+aws/aws-vpc -
+aws/elasticache-memcached
+aws/elasticache-memcached -
+aws/elasticache-redis
+aws/elasticache-redis -
+aws/rds-aurora
+aws/rds-aurora -
+b2b
+b2b -
+bac
+backstage
+backstage -
+backstage prod
+backstage staging
+backup-vaults
+backup-vaults prod
+bat
+batter
+batter -
+batter prod
+batter staging
+batter-cleanup-consumer
+batter-cleanup-consumer prod
+baz
+bazel
+bazel prod
+bed
+bedb
+bedb -
+bedb prod
+bedrock-logging
+bedrock-logging prod
+bee
+bees
+bees -
+bees prod
+bees staging
+big
+big-ben
+big-ben -
+bil
+billing
+billing -
+bli
+blizzard
+blizzard -
+blizzard prod
+boo
+boodles
+boodles prod
+boogie
+boogie -
+boogie prod
+boogie staging
+bor
+boring-registry
+boring-registry staging
+bot
+bot-logs
+bot-logs -
+bot-logs prod
+bot-spark
+bot-spark prod
+bots
+bots -
+bre
+breytur
+breytur -
+breytur prod
+bul
+bullhorn
+bullhorn -
+bullhorn prod
+bun
+bundler
+bundler -
+bundler prod
+bundler staging
+bur
+burrito
+burrito -
+but
+butler
+butler prod
+cai
+cairn
+cairn prod
+cairn staging
+cal
+callaway
+callaway -
+callaway prod
+callaway staging
+cam
+cambron
+cambron -
+cas
+cassandra_reaper
+cassandra_reaper prod
+cassandra-reaper
+cassandra-reaper staging
+cdk
+cdk -
+cha
+challenge
+challenge prod
+challenge staging
+chat
+chat -
+chat prod
+chat staging
+clo
+closed
+closed prod
+closed-static
+closed-static -
+cloudchipr
+cloudchipr -
+cloudformation
+cloudformation -
+cloudfront-access-logs
+cloudfront-access-logs prod
+cloudtrail
+cloudtrail prod
+clu
+clusterer
+clusterer prod
+coc
+cockroach
+cockroach prod
+coconut
+coconut -
+coconut prod
+com
+comms
+comms -
+comms prod
+comms staging
+comms-exp-platform
+comms-exp-platform -
+community
+community prod
+community staging
+community-engagement
+community-engagement -
+con
+contax
+contax -
+contax prod
+contax staging
+contentful
+contentful prod
+contentful staging
+cor
+core
+core prod
+core staging
+cortana
+cortana -
+cortana prod
+cos
+cosmos
+cosmos staging
+costco
+costco -
+costco prod
+costco staging
+cow
+cowbell
+cowbell -
+cowbell prod
+cowbell staging
+cri
+criterium
+criterium prod
+cro
+crowdstrike
+crowdstrike prod
+cru
+cruise-control
+cruise-control -
+cur
+curb
+curb -
+curb prod
+curb staging
+cursor-bedrock
+cursor-bedrock prod
+das
+dass
+dass -
+dass prod
+dass staging
+dat
+data
+data -
+data prod
+data staging
+data-tooling
+data-tooling -
+data-tooling prod
+def
+default_vpc
+default_vpc dev
+del
+deltastreamer
+deltastreamer -
+deltastreamer prod
+dem
+demo
+demo prod
+dep
+deployment
+deployment prod
+deployment-dashboard
+deployment-dashboard -
+dev
+dev_strava_com
+dev_strava_com dev
+developers
+developers -
+dix
+dixie
+dixie -
+dixie staging
+dmz
+dmz prod
+doc
+doccano
+doccano prod
+docker
+docker prod
+docs
+docs -
+documentation
+documentation -
+dor
+dorado
+dorado prod
+dre
+drewops
+drewops prod
+ec2
+ec2 prod
+ec2 staging
+ecr
+ecr prod
+ecr-credentials
+ecr-credentials -
+ecr/ecr-proxy
+ecr/ecr-proxy -
+ein
+einkenni
+einkenni -
+einkenni prod
+einkenni staging
+eks
+eks playgrou…
+eks prod
+eks staging
+eks-olivier
+eks-olivier playgrou…
+ema
+emaki
+emaki -
+emaki prod
+emb
+embargo
+embargo -
+embargo prod
+ent
+entrust
+entrust -
+env
+envoy-filters
+envoy-filters -
+era
+erasure
+erasure -
+erasure prod
+erasure staging
+etl
+etl prod
+eve
+events
+events prod
+events staging
+eventually
+eventually -
+eventually prod
+eventually staging
+exp
+experimental
+experimental prod
+explore
+explore prod
+ext
+external-dns
+external-dns -
+external-secrets
+external-secrets -
+fat
+fatmap-redirects
+fatmap-redirects prod
+fatmap-redirects staging
+fea
+feast
+feast -
+feast prod
+feast staging
+features
+features -
+features prod
+fee
+feedentry
+feedentry prod
+feedentry staging
+fiv
+fivetran
+fivetran prod
+fla
+flatmaps
+flatmaps -
+flatmaps prod
+flatmaps staging
+fli
+flink
+flink prod
+flink staging
+flo
+flood
+flood -
+flood prod
+fly
+flyover-video
+flyover-video -
+flyover-video-yis
+flyover-video-yis prod
+fol
+follows
+follows -
+follows prod
+follows staging
+for
+forgery
+forgery -
+forgery prod
+fre
+fresco
+fresco -
+fresco prod
+fyi
+fyi prod
+gar
+garage
+garage -
+garage prod
+garage staging
+gat
+gateway
+gateway -
+gau
+gauntlet
+gauntlet -
+gauntlet prod
+gauntlet staging
+gbm
+gbm prod
+gea
+gear
+gear -
+gear prod
+gear staging
+gem
+gemserver
+gemserver prod
+gen
+generic-irsa
+generic-irsa -
+geo
+geo prod
+geocoder
+geocoder prod
+geocoder staging
+gil
+gila
+gila prod
+git
+github
+github prod
+github staging
+github_actions
+github_actions prod
+github_actions_self_hosted
+github_actions_self_hosted prod
+github-actions
+github-actions -
+github-actions-deploy-auth
+github-actions-deploy-auth -
+github-actions/arc-scale-set-controller
+github-actions/arc-scale-set-controller -
+github-actions/bazel-remote-cache
+github-actions/bazel-remote-cache -
+github-actions/github-actions-active-deploy-auth
+github-actions/github-actions-active-deploy-auth -
+github-actions/github-actions-canary-auth
+github-actions/github-actions-canary-auth -
+github-actions/github-actions-deploy-auth
+github-actions/github-actions-deploy-auth -
+github-actions/github-actions-runners
+github-actions/github-actions-runners -
+github-actions/github-actions-strava-orka-runner
+github-actions/github-actions-strava-orka-runner -
+github-actions/github-actions-strava-orka-runner-dev
+github-actions/github-actions-strava-orka-runner-dev -
+github-actions/github-actions-web-deploy-auth
+github-actions/github-actions-web-deploy-auth -
+github-runners
+github-runners -
+glo
+globalscale
+globalscale -
+globalscale prod
+glu
+glue
+glue prod
+go-
+go-commons
+go-commons prod
+gol
+goldilocks
+goldilocks -
+golinks
+golinks -
+golinks staging
+gra
+gradle-enterprise
+gradle-enterprise -
+gradle-enterprise prod
+grafana
+grafana -
+grafana prod
+grafana staging
+grafana-datasources
+grafana-datasources -
+grafana-mcp
+grafana-mcp -
+grafana-operator
+grafana-operator -
+grafana-operator-resources
+grafana-operator-resources -
+graphite
+graphite prod
+graphql
+graphql -
+graphql prod
+gri
+gringotts
+gringotts -
+gringotts prod
+gua
+guardduty
+guardduty prod
+gum
+gumball
+gumball -
+hal
+hal -
+hal prod
+hea
+heatmaps
+heatmaps -
+heatmaps prod
+heatmaps staging
+hel
+helm
+helm prod
+het
+hetchy
+hetchy -
+hetchy dev
+hetchy prod
+hon
+honte
+honte -
+honte prod
+honte staging
+hoo
+hooray
+hooray -
+hor
+horton
+horton -
+horton prod
+horton staging
+iam
+iam prod
+iam staging
+ice
+icecap
+icecap prod
+ide
+identifiers
+identifiers -
+identifiers-graphql-js
+identifiers-graphql-js -
+identifiers-graphql-js prod
+identity
+identity prod
+ima
+imagery-tiler
+imagery-tiler -
+imagery-tiler prod
+imagery-tiler staging
+inc
+inclusive-codebase
+inclusive-codebase -
+inclusive-codebase prod
+inf
+infra-oidc
+infra-oidc prod
+infrastructure
+infrastructure -
+infrastructure prod
+infrastructure staging
+infrastructure/ack-iam
+infrastructure/ack-iam -
+infrastructure/active
+infrastructure/active -
+infrastructure/cert-manager
+infrastructure/cert-manager -
+infrastructure/crowdstrike/falcon-operator-production
+infrastructure/crowdstrike/falcon-operator-production -
+infrastructure/crowdstrike/falcon-operator-staging
+infrastructure/crowdstrike/falcon-operator-staging -
+infrastructure/dockerhub-auth
+infrastructure/dockerhub-auth -
+infrastructure/efs-csi-driver
+infrastructure/efs-csi-driver -
+infrastructure/external-dns
+infrastructure/external-dns -
+infrastructure/external-secrets
+infrastructure/external-secrets -
+infrastructure/flink
+infrastructure/flink -
+infrastructure/gradle-enterprise/gradle-enterprise
+infrastructure/gradle-enterprise/gradle-enterprise -
+infrastructure/karpenter
+infrastructure/karpenter -
+infrastructure/karpenter-overprovisioner
+infrastructure/karpenter-overprovisioner -
+infrastructure/keda
+infrastructure/keda -
+infrastructure/kyverno
+infrastructure/kyverno -
+infrastructure/load-balancer
+infrastructure/load-balancer -
+infrastructure/nexus
+infrastructure/nexus -
+infrastructure/node-problem-detector
+infrastructure/node-problem-detector -
+infrastructure/node-terminator
+infrastructure/node-terminator -
+infrastructure/rbac
+infrastructure/rbac -
+infrastructure/reloader
+infrastructure/reloader -
+infrastructure/secret-store
+infrastructure/secret-store -
+infrastructure/snapshot-controller
+infrastructure/snapshot-controller -
+infrastructure/storageclasses
+infrastructure/storageclasses -
+infrastructure/vpa
+infrastructure/vpa -
+int
+internal
+internal prod
+internal-mcp
+internal-mcp -
+internal-mcp prod
+interview
+interview dev
+isa
+isactivedeadyet
+isactivedeadyet -
+isactivedeadyet prod
+ist
+istio
+istio -
+it
+it prod
+jam
+jam staging
+jams
+jams -
+jams prod
+jams-hub
+jams-hub -
+jams-hub prod
+jsm
+jsm prod
+jsm staging
+k8s
+k8s-demo-app
+k8s-demo-app prod
+k8s-demo-app staging
+kaf
+kafka
+kafka -
+kafka prod
+kafka staging
+kar
+karpenter
+karpenter -
+karpenter-overprovisioner
+karpenter-overprovisioner -
+karpenter-provisioners
+karpenter-provisioners -
+karpenter-servicemonitor
+karpenter-servicemonitor -
+karta
+karta -
+karta prod
+karta staging
+kia
+kiali
+kiali -
+kic
+kickoff
+kickoff -
+kickoff prod
+kickoff staging
+kit
+kitchensink
+kitchensink prod
+kitchensink staging
+kod
+kodos
+kodos prod
+kom
+kommentar
+kommentar -
+kommentar prod
+kommentar staging
+kon
+koncierge
+koncierge prod
+koncierge staging
+kub
+kube-dashboard
+kube-dashboard -
+kube-prometheus-stack
+kube-prometheus-stack -
+kubernetes
+kubernetes -
+kud
+kudos
+kudos -
+kudos prod
+kudos staging
+kyv
+kyverno
+kyverno -
+lab
+labs
+labs -
+labs prod
+lac
+lacework
+lacework prod
+lam
+laminar
+laminar -
+laminar prod
+laminar staging
+lan
+langsmith
+langsmith prod
+langsmith staging
+las
+laser
+laser -
+laser prod
+lib
+lib -
+lif
+liftoff
+liftoff prod
+lim
+limitrange-spark
+limitrange-spark -
+lin
+linkerd
+linkerd prod
+liv
+livemaas
+livemaas -
+livemaas prod
+livemaas staging
+livemaas-afm
+livemaas-afm prod
+livemaas-afm staging
+log
+logging
+logging -
+lug
+luggage
+luggage -
+luggage prod
+lul
+lululemon
+lululemon prod
+mac
+macaw
+macaw prod
+macaw staging
+macmetal
+macmetal prod
+macstadium
+macstadium prod
+mad
+madison
+madison -
+madison dev
+madison prod
+madison staging
+mag
+magenta
+magenta prod
+mah
+maharaj
+maharaj -
+maharaj prod
+mai
+mailroom
+mailroom -
+mailroom prod
+mailroom staging
+maintenance
+maintenance -
+mal
+malheur
+malheur -
+malheur prod
+malheur staging
+map
+map-lab
+map-lab prod
+map-lab staging
+map-platform
+map-platform prod
+map-renderer-controller
+map-renderer-controller prod
+map-renderer-controller staging
+map-rendering-engine
+map-rendering-engine prod
+map-styles
+map-styles prod
+map-styles staging
+maps
+maps prod
+maputnik
+maputnik -
+mar
+marketing
+marketing prod
+marshal
+marshal -
+marshal prod
+marshal staging
+mas
+mass
+mass -
+mass prod
+mass staging
+mat
+matamata
+matamata -
+matamata prod
+matamata2
+matamata2 prod
+matterform
+matterform -
+matterform prod
+may
+mayorship
+mayorship -
+mayorship prod
+mayorship staging
+mcp
+mcp-poc-web
+mcp-poc-web prod
+mem
+memcache
+memcache staging
+meme
+meme -
+meme prod
+men
+mentions
+mentions -
+mentions prod
+mer
+meridian
+meridian prod
+merlin
+merlin -
+merlin prod
+merlin staging
+mes
+mesocyclone
+mesocyclone -
+mesocyclone prod
+mesocyclone staging
+mesos
+mesos -
+mesos prod
+mesos staging
+met
+metrics-server
+metrics-server -
+metro
+metro -
+metro prod
+metronome
+metronome prod
+min
+mingle
+mingle -
+mingle prod
+mingle staging
+ml
+ml dev
+ml prod
+ml-
+ml-python
+ml-python -
+mlm
+mlmodels
+mlmodels -
+mlmodels prod
+mob
+moby
+moby -
+moby prod
+moby staging
+mod
+modoc
+modoc -
+modoc prod
+modoc staging
+modules
+modules -
+moi
+moil
+moil -
+moil prod
+moil staging
+mon
+monitoring
+monitoring -
+monitoring prod
+monitoring staging
+monitoring/cloudchipr
+monitoring/cloudchipr -
+monitoring/ephemeral-storage-metrics
+monitoring/ephemeral-storage-metrics -
+monitoring/event-exporter
+monitoring/event-exporter -
+monitoring/grafana
+monitoring/grafana -
+monitoring/grafana-dashboards
+monitoring/grafana-dashboards -
+monitoring/grafana-datasources
+monitoring/grafana-datasources -
+monitoring/grafana-mcp
+monitoring/grafana-mcp -
+monitoring/grafana-operator
+monitoring/grafana-operator -
+monitoring/kiali
+monitoring/kiali -
+monitoring/kube-dashboard
+monitoring/kube-dashboard -
+monitoring/kube-prometheus-stack
+monitoring/kube-prometheus-stack -
+monitoring/metrics-server
+monitoring/metrics-server -
+monitoring/prometheus-pushgateway
+monitoring/prometheus-pushgateway -
+monitoring/service-prometheus-rules
+monitoring/service-prometheus-rules -
+monitoring/thanos
+monitoring/thanos -
+monitoring/yace
+monitoring/yace -
+mor
+moraine
+moraine -
+moraine prod
+moraine staging
+mos
+mosaic
+mosaic -
+mosaic prod
+mov
+movements
+movements staging
+mrc
+mrc prod
+mrc staging
+mre
+mre-assets
+mre-assets prod
+mre-device-farm
+mre-device-farm staging
+muf
+mufasa
+mufasa -
+mufasa prod
+mufasa staging
+mus
+musique
+musique -
+musique prod
+mux
+mux prod
+nam
+namerd
+namerd -
+namerd prod
+neo
+neogeo
+neogeo prod
+net
+networking/aeraki
+networking/aeraki -
+networking/egress-gateway
+networking/egress-gateway -
+networking/envoy-filters
+networking/envoy-filters -
+networking/external-cdn-ingress-gateway
+networking/external-cdn-ingress-gateway -
+networking/external-ingress-gateway
+networking/external-ingress-gateway -
+networking/ingress-gateway
+networking/ingress-gateway -
+networking/istio-base
+networking/istio-base -
+networking/istio-cni
+networking/istio-cni -
+networking/istio-gateways
+networking/istio-gateways -
+networking/istiod
+networking/istiod -
+networking/pitstop-developer-canaries-auth
+networking/pitstop-developer-canaries-auth -
+networking/strava-com-ingress
+networking/strava-com-ingress -
+networking/vpc-ingress-gateway
+networking/vpc-ingress-gateway -
+networking/webhook-gateway
+networking/webhook-gateway -
+nex
+nexus
+nexus -
+nexus prod
+nexus staging
+nix
+nix-cache
+nix-cache prod
+not
+notification
+notification prod
+notification staging
+ntp
+ntp prod
+nvi
+nvidia-gpu-test
+nvidia-gpu-test -
+nvidia-k8s
+nvidia-k8s -
+obs
+observability
+observability prod
+observability staging
+observation-deck
+observation-deck -
+observation-deck prod
+okt
+okta
+okta prod
+onb
+onboarding
+onboarding -
+onboarding prod
+onboarding staging
+ott
+otters
+otters -
+otters prod
+otters staging
+paa
+paas
+paas -
+paas prod
+pac
+packages
+packages -
+packer
+packer -
+pag
+pagado
+pagado -
+pagado prod
+pagado staging
+pagerduty
+pagerduty prod
+pak
+pakora
+pakora -
+pakora prod
+pee
+peek
+peek -
+pho
+phoots
+phoots -
+phoots dev
+phoots prod
+phoots staging
+pik
+pike
+pike -
+pike prod
+pit
+pitstop
+pitstop -
+pitstop prod
+pla
+places
+places prod
+places staging
+planet
+planet prod
+planet staging
+planetiler
+planetiler prod
+pol
+policies
+policies -
+pos
+postal
+postal -
+postal prod
+posthole
+posthole -
+posthole prod
+posthole staging
+pow
+power
+power prod
+power staging
+pre
+prefix-lists
+prefix-lists prod
+prehabcoach
+prehabcoach -
+prehabcoach prod
+pri
+pricecake
+pricecake -
+pricecake prod
+pricecake staging
+prime
+prime prod
+prime staging
+primoz
+primoz -
+primoz prod
+primoz staging
+pritunl-vpn
+pritunl-vpn -
+pro
+prometheus
+prometheus -
+prometheus prod
+promtools
+promtools -
+promtools prod
+pup
+puppet
+puppet -
+puz
+puzzler
+puzzler -
+puzzler prod
+puzzler staging
+pym
+pymk
+pymk prod
+pys
+pyspark-experimental
+pyspark-experimental prod
+pyt
+python
+python prod
+python-commons
+python-commons -
+pzo
+pzones
+pzones -
+raa
+raas
+raas -
+raas prod
+rac
+race-prediction
+race-prediction -
+raceshape
+raceshape -
+raceshape prod
+raceshape staging
+rai
+railyard
+railyard -
+railyard prod
+rain
+rain -
+rain prod
+rain staging
+ras
+raster-catalogue
+raster-catalogue prod
+raster-catalogue staging
+raster-pipelines
+raster-pipelines prod
+raster-pipelines staging
+rat
+ratelimit
+ratelimit prod
+raw
+raw-imagery
+raw-imagery prod
+rba
+rbac
+rbac prod
+rbac/runna
+rbac/runna prod
+rds
+rds prod
+rds staging
+rec
+recapit
+recapit -
+recapit prod
+recover_athletics
+recover_athletics prod
+recover_athletics staging
+recover-athletics
+recover-athletics -
+reg
+registry_copier
+registry_copier prod
+ren
+renovate
+renovate prod
+renovate staging
+res
+responsys
+responsys prod
+restricted-storage
+restricted-storage prod
+restricted-storage staging
+ric
+ricky
+ricky staging
+rit
+ritmo
+ritmo -
+ritmo prod
+ritmo staging
+ros
+roster
+roster staging
+rou
+route
+route prod
+route staging
+route-search-guardrail
+route-search-guardrail prod
+route53
+route53 prod
+routemaster
+routemaster -
+routemaster prod
+routemaster staging
+routestore
+routestore -
+routestore prod
+routestore staging
+routing
+routing -
+routing prod
+run
+runna
+runna playgrou…
+runna prod
+runna staging
+runna-ai-workflows
+runna-ai-workflows prod
+runna-staging
+runna-staging staging
+s3
+s3 prod
+s3 staging
+sag
+sagan
+sagan -
+sagan prod
+sca
+scaffolds/base
+scaffolds/base -
+scaling-report-reader
+scaling-report-reader prod
+sco
+scourge
+scourge -
+scourge prod
+scourge staging
+scout
+scout -
+scout prod
+scout staging
+scr
+scripts
+scripts -
+scu
+sculpt
+sculpt prod
+scy
+scylla
+scylla -
+scylla prod
+sec
+secor
+secor -
+secor prod
+secrets
+secrets playgrou…
+secrets prod
+secrets staging
+seg
+seggie
+seggie -
+seggie prod
+seggie staging
+segment
+segment prod
+segment staging
+sen
+sensor-tower-mcp
+sensor-tower-mcp -
+sensor-tower-mcp prod
+sentry
+sentry prod
+ser
+serious
+serious prod
+serverless
+serverless -
+services_eks
+services_eks staging
+sha
+shared
+shared prod
+shawn-test
+shawn-test staging
+sit
+sitemaps
+sitemaps -
+sitemaps prod
+sla
+slam
+slam -
+slam prod
+slam staging
+smr
+smr prod
+smr staging
+sno
+snowflake
+snowflake prod
+snowflake staging
+snowflake-jit-access
+snowflake-jit-access -
+snowplow-kafka
+snowplow-kafka -
+snowplow-kafka-acl-bootstrap
+snowplow-kafka-acl-bootstrap staging
+spa
+spark
+spark -
+spark prod
+spark staging
+spe
+spec
+spec -
+sta
+staging_strava_com
+staging_strava_com staging
+stash
+stash -
+stash prod
+stash staging
+str
+strava-com-ingress
+strava-com-ingress -
+vpc prod
+acct sec prod
+terraform/acct-sec
+kps
+zzqx
+eks staging

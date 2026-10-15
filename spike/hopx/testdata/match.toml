@@ -1,0 +1,27 @@
+# hopx config, imported from testdata/match.zsh by `hopx config import`.
+version = 1
+presets = ['helm', 'terraform-modules', 'dir']
+
+[[kind]]
+name = 'tg'
+desc = 'terragrunt units'
+default = true
+marker = 'terragrunt.hcl'
+under = 'terraform'
+layout = ['scope,env,region,name...', 'scope,name...']
+trim = { scope = 'acct-', env = 'env-' }
+preview = ['main.tf', '*.tf', 'terragrunt.hcl', 'README.md']
+
+[[kind]]
+name = 'mesos'
+desc = 'mesos services'
+default = true
+dirs = ['mesos/services']
+scope = '-'
+preview = ['service.conf']
+
+[[kind]]
+name = 'sbx'
+desc = 'sandbox dirs'
+default = true
+dirs = ['sandbox']
