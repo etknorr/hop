@@ -290,7 +290,8 @@ done
 assert_empty "$bad" 'a row whose dir field is not an existing absolute path'
 
 # ---------------------------------------------------------------------------
-# --select-1: the fast path, and the single most valuable behaviour in the tool.
+# A unique query jumps: the fast path, and the single most valuable behaviour in the tool.
+# - The resolver's J1 makes that jump before any picker opens; --select-1 is only the empty query's one-row accept.
 # ---------------------------------------------------------------------------
 # A non-unique query would make real fzf try to draw, so uniqueness is asserted BEFORE hop runs.
 if (( HAVE_FZF )); then
@@ -391,8 +392,8 @@ assert_eq 1 ${#${(M)ARGV:#--expect=*}} 'the picker is the call that passes --exp
 t 'the picker passes --exact to fzf'
 assert_eq 1 ${#${(M)ARGV:#--exact}} 'without --exact, fuzzy matching over a ~90-column line overmatches'
 
-t 'the picker passes --select-1, which is what makes a unique query jump'
-assert_eq 1 ${#${(M)ARGV:#--select-1}} 'the fast path is --select-1 and nothing else'
+t 'an empty query passes --select-1, the one-row auto-accept'
+assert_eq 1 ${#${(M)ARGV:#--select-1}} 'with no query, a list of one row has to accept itself, as it always did'
 
 if (( HAVE_FZF )); then
 	typeset -i xn fn

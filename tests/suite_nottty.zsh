@@ -161,7 +161,7 @@ assert_eq "$NT_REPO4" "$NT_PWD"
 # ---------------------------------------------------------------------------
 # The working case still works, which is the constraint the whole design is built around.
 # ---------------------------------------------------------------------------
-# `hop -k tg alpha` with no ctty returns in ~0.1s and cds, because --select-1 never needs a terminal.
+# `hop -k tg alpha` with no ctty returns in ~0.1s and cds, because the resolver's J1 jumps before any picker is needed.
 # - A guard placed in FRONT of the picker would refuse this, and that is why there is no such guard.
 t 'no ctty, UNIQUE-match query: still cds, exactly as before the fix'
 nt_run 'hop -k tg alpha' "$NT_REPO4"
