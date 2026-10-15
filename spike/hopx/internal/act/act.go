@@ -1,4 +1,4 @@
-// Package act carries out a chosen target; phase 2 has the cd half of _hop_act_cd, through the cmdfile protocol.
+// Package act carries out a chosen target: cd through the cmdfile protocol, and the VS Code, editor, copy and browse verbs.
 package act
 
 import (
