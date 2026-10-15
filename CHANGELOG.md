@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Fixed
+
+- hop now finds a path typed from outside the repo that holds it.
+  From `~` or a workspace root, `hop terraform/acct-security-tooling-prod` said nothing matched, because a path was only tried under `$PWD` and the current repo's root.
+  It's now also tried in every repo hop knows and under every workspace root, ignoring case.
+  A path can start with its repo's name too, so `hop configuration/terraform/acct-security-tooling-prod` works from `~`.
+  One match jumps and says where it was found.
+  A path that several repos have never jumps: the picker opens on just those, the most recently visited repo first.
+  Inside a repo, other repos are tried only when the repo has nothing close to the query, so every in-repo jump and pick is unchanged.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added

@@ -200,7 +200,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 |---|---|
 | `hop` | pick from the default kinds, starting in NORMAL mode |
 | `hop vpc prod` | a clear match jumps with no UI; otherwise the picker opens on the best matches first. See [How a query resolves](#how-a-query-resolves) |
-| `hop terraform/acct-x` | a path that exists jumps straight there, before any matching |
+| `hop terraform/acct-x` | a path that exists jumps straight there, before any matching, even from outside its repo when only one repo has it |
 | `hop /` or `hopr` | `cd` to the repo root |
 | `hop -` | `cd -` |
 | `hopw` | `cd` to the workspace containing `$PWD`, deepest match winning |
@@ -606,6 +606,20 @@ stops at the first one that finds something:
    relative to `$PWD`, `/x` is relative to the repo root first (as `hop /` is), and anything else
    tries `$PWD` and then the root. `-k` doesn't narrow it, since no kind is consulted, and `-w`,
    `-R` and `-p` skip it.
+
+   A path that isn't under `$PWD` or the repo root is looked up in every repo hop knows
+   (`$HOP_REPOS`, or every repo in your workspaces), with or without the repo's name in front, and
+   under every workspace root. It ignores case the same way. So from `~`, both
+   `hop terraform/acct-x` and `hop configuration/terraform/acct-x` land in `configuration`, as long
+   as no other repo has the same path. One match jumps and prints where it was found:
+   `hop: terraform/acct-x -> ~/work/configuration/terraform/acct-x/ (found in configuration)`. Two
+   or more never jump. The picker opens on just those, the repo you visited most recently first,
+   then by path. Inside a repo this happens only when the repo has nothing close to the query, so
+   a match or a typo pick in the repo you're in still wins. The lookup needs a `/` with a name
+   after it, so `hop configuration/` is still matched like any other query. It skips paths
+   starting with `./`, `../`, `/` or `~` and paths with a `.` or `..` segment, and it's off under
+   `-c`, which keeps the search under `$PWD`. It only checks whether the path exists in each repo,
+   so it lists no repo's targets and costs a few milliseconds.
 2. **Exact**: fzf matches the words against the row's name line (name, kind, scope, env and
    region) and its `rel` path, with `--exact`, `-i` and `--tiebreak=begin,chunk`. The picker gets
    the same flags from the same array, so the two always agree on which rows match. Your
@@ -662,9 +676,10 @@ it: hop adds it as a row only when it matches the same query, and J2 is the only
 one. A query using fzf's own syntax (`'`, `^`, `$`, `!` or `|`) gets the exact step alone, with no
 rewrite and no added rows.
 
-Outside a repo, hop resolves the query against your workspaces, and when none matches exactly it
-tries your repos too and keeps the closer result, a tie going to the workspaces. So `hop tf eks`
-from `~` lands on `tf-aws-eks` instead of a workspace that only matched `tf`.
+Outside a repo, a path is looked up in your repos and workspace roots first, as step 1 describes.
+Any other query is resolved against your workspaces, and when none matches exactly hop tries your
+repos too and keeps the closer result, a tie going to the workspaces. So `hop tf eks` from `~`
+lands on `tf-aws-eks` instead of a workspace that only matched `tf`.
 
 `HOP_JUMP` sets how eager this is. `auto` allows every rule above. `unique` allows literal paths,
 J1, J1b and J3, so a query jumps only when it names one target. `never` always opens the picker,
@@ -679,7 +694,8 @@ first line says when the query was rewritten, for example
 `(read as: prod vpc)` for `prod_vpc`, whose words were only split apart. Typing in the picker is
 plain fzf: it searches the paths, but it doesn't correct typos. With no terminal, a pick can't be
 shown, so hop prints how many targets matched, the best three paths, and what would let it jump:
-a narrower query, a spelling fix, or the words it ignored. Then it exits 1.
+a narrower query, a spelling fix, the words it ignored, or the repo name in front of a path
+several repos have. Then it exits 1.
 
 #### Frecency and fuzzy matching
 
