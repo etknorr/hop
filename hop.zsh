@@ -365,7 +365,6 @@ _hop_ws_picker() {
 			_hop_resolve "$query" "$repos" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
 			_hop_res_rank
 			if (( REPLY > wsrank )); then
-				# The repo resolve is handed on, so the repo picker neither re-enumerates nor resolves again.
 				local -i _hop_res_ready=1
 				_hop_repo_picker "$query" "$repos" "$nrepos"
 				return $?

@@ -162,8 +162,8 @@ _hop_literal_target() {
 	return 0
 }
 
-# _hop_vocab_build <rel...> -> _hop_vocab and _hop_segs, the words T2 and T3 may rewrite a query into.
-# - Both are declared by _hop_resolve, so building them once serves every tier and every relaxed term.
+# _hop_vocab_build <rel...> -> _hop_vocab, _hop_vocab_set and _hop_segs, the words T2 and T3 may rewrite a query into.
+# - All three are declared by _hop_resolve, so building them once serves every tier and every relaxed term.
 # - _hop_vocab is every rel token split on / - _ . with 2-char tokens dropped, plus the kind names.
 # - _hop_vocab_set holds the same words as keys, for the whole-word lookups of _hop_compound.
 # - _hop_segs is every whole rel segment, extension stripped, 3 chars or more.
@@ -242,8 +242,8 @@ _hop_prune() {
 
 # _hop_rewrite <query> [wide] -> 0 with reply=(approx effq), the query rewritten into fzf OR groups (T2).
 # - Every token is split out on whitespace and / - _ . and kept as-is when some vocabulary word contains it.
-# - A token no word contains gets typo fixes: zsh's approximate glob, 1 error, or 2 from 8 chars, transposition counted once.
-# - A short env word with no row holding it reads as its long form first; see _HOP_ENV_WORDS.
+# - A short env word no word contains reads as its long form before anything else; see _HOP_ENV_WORDS.
+# - Any other token no word contains gets typo fixes: zsh's approximate glob, 1 error, or 2 from 8 chars, transposition counted once.
 # - A token with neither is split into the words it runs together, else gets the words it abbreviates to.
 # - The split comes first: `externaldns` had abbreviated to extras, and the external-dns rows were never offered.
 # - Typo before abbreviation, and a word the token merely starts with is refused, fixed `rotuemaster`.
