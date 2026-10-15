@@ -192,6 +192,24 @@ t 'the shipped minimum is the one the changelog justifies'
 out=$(_fz_probe '0.74.1' 'print -r -- $HOP_FZF_MIN' 2>&1)
 assert_eq '0.60.3' "$out" 'fzf 0.60.0 added --accept-nth; 0.60.3 fixed it with --select-1'
 
+# --freeze-left keeps the name in view once the path column scrolls, and it is new in fzf 0.67.0.
+# - 0.60.3 exits 2 on it, so passing it below 0.67.0 would kill the picker on every hop.
+# - fzf is a function here once the version is memoized, so the picker's argv is printed, never run.
+t 'the picker passes --freeze-left=1 from fzf 0.67.0 on, and never below it or on an unknown version'
+out=$(_fz_probe '' '
+typeset v
+for v in 0.60.3 0.66.9 0.67.0 0.73.1 unknown; do
+	unset _HOP_FZF_VER
+	HOP_FZF_STUB_OUT=$v _hop_fzf_ver
+	(
+		fzf() { print -rl -- "$@" }
+		HOP_VIM=0 _hop_pick label header < /dev/null | grep -c -- "^--freeze-left=1\$"
+	) | read -r n
+	print -r -- "${v}=${n}"
+done')
+assert_eq $'0.60.3=0\n0.66.9=0\n0.67.0=1\n0.73.1=1\nunknown=0' "$out" \
+	'the gate is 0.67.0, the release that added --freeze-left'
+
 # ---------------------------------------------------------------------------
 # The comparison itself, since every refusal above rests on it.
 # ---------------------------------------------------------------------------

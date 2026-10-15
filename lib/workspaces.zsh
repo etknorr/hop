@@ -132,8 +132,10 @@ _hop_ws_for() {
 # _hop_provider_ws -> one row per configured workspace, with its repo count.
 # - Kept out of _HOP_ALL_KINDS: a workspace is a different scale from a terragrunt unit,
 #   and mixing them into one flat list is what the `:` picker exists to avoid.
+# - No repo root applies, so each row's rel is the ~ form of its path, e.g. ~/src/.
 _hop_provider_ws() {
 	emulate -L zsh
+	local _hop_gen_root=''
 	local -a entries
 	_hop_ws_parse || return 0
 	entries=("${reply[@]}")

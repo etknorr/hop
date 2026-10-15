@@ -49,6 +49,41 @@ _hop_doctor_path() {
 	printf '  %-22s %s %s\n' "$label" "$shown" "$([[ -r $val ]] && print -n '(readable)' || print -n '(MISSING)')"
 }
 
+# _hop_doctor_actions [short] -> HOP_ACTION, HOP_JUMP and HOP_CODE, then whether that launcher reaches VS Code.
+# - An invalid mode is shown with what hop does instead, because its warning only prints inside a hop call.
+# - The reason comes from _hop_code_usable, the same check every code verb runs, so the two cannot disagree.
+# - Short mode withholds a launcher outside the four known names, and a reason that would name a path.
+_hop_doctor_actions() {
+	emulate -L zsh
+	local -i short=${1:-0}
+	local v REPLY
+	v=${HOP_ACTION:-cd}
+	if (( ! ${_HOP_ACTIONS[(Ie)$v]} )); then
+		(( short )) && v='(not a mode, withheld)'
+		v+=', so Enter cds'
+	fi
+	printf '  %-22s %s\n' HOP_ACTION "$v"
+	v=${HOP_JUMP:-auto}
+	if [[ $v != (auto|unique|never) ]]; then
+		(( short )) && v='(not a mode, withheld)'
+		v+=', so hop uses auto'
+	fi
+	printf '  %-22s %s\n' HOP_JUMP "$v"
+	v=${HOP_CODE:-code}
+	(( short )) && [[ $v != (code|cursor|codium|code-insiders) ]] && v='(customised, withheld)'
+	printf '  %-22s %s\n' HOP_CODE "$v"
+	if _hop_code_usable; then
+		v=yes
+	elif (( ! short )) || [[ $REPLY == (*SSH*|*DISPLAY*) ]]; then
+		v="no, ${REPLY}"
+	elif [[ $REPLY == VSCODE_IPC_HOOK_CLI* ]]; then
+		v='no, VSCODE_IPC_HOOK_CLI names no live socket (withheld)'
+	else
+		v='no, the HOP_CODE launcher is not runnable (withheld)'
+	fi
+	printf '  %-22s %s\n' 'VS Code reachable' "$v"
+}
+
 _hop_doctor_body() {
 	emulate -L zsh
 	setopt local_options no_nomatch
@@ -72,6 +107,7 @@ _hop_doctor_body() {
 	_hop_doctor_path HOP_HISTFILE HOP_HISTFILE "${XDG_STATE_HOME:-$HOME/.local/state}/hop/history"
 	printf '  %-22s %s\n' HOP_DEFAULT_KINDS "$HOP_DEFAULT_KINDS"
 	printf '  %-22s %s\n' HOP_VIM "${HOP_VIM:-1 (default)}"
+	_hop_doctor_actions
 	printf '  %-22s %s\n' HOP_HOPRC "${HOP_HOPRC:-unset, .hoprc disabled}"
 	printf '  %-22s %s\n' HOP_REPOS "${HOP_REPOS:-unset, derived from workspaces}"
 	printf '  %-22s %s\n' HOP_DEBUG "${HOP_DEBUG:-unset}"
@@ -119,13 +155,25 @@ _hop_doctor_body() {
 	if [[ -z $root ]]; then
 		print -r -- '  (not in a repo, so nothing to count)'
 	else
-		local k n mark
+		local k n mark out
+		local -a lines legacy
 		for k in "${_HOP_ALL_KINDS[@]}"; do
-			n=$(_hop_generate "$root" "$k" 2>/dev/null | grep -c .)
+			# One child per kind prints its rows and then its legacy count, which _hop_rel_upgrade adds up as it goes.
+			# - The count has to leave the same child the rows came from, since the upgrade runs inside it.
+			out=$(local -i _hop_gen_legacy=0; _hop_generate "$root" "$k" 2>/dev/null; print -r -- "$_hop_gen_legacy")
+			lines=("${(@f)out}")
+			(( ${lines[-1]:-0} )) && legacy+=("${k} (${lines[-1]} rows)")
+			lines=("${(@)lines[1,-2]}")
+			n=${#${lines:#}}
 			if (( ${_HOP_K_DEFAULT[$k]:-0} )); then mark='*'; else mark=' '; fi
 			printf '  %s %-11s %7s  %-8s %s\n' "$mark" "$k" "$n" "${_HOP_K_SHAPE[$k]:-?}" "${_HOP_K_DESC[$k]:-}"
 		done
 		print -r -- '  (* is in the default set)'
+		# A legacy row still works, but it carries a derived dir rel, so a file target there matches as its dir.
+		if (( $#legacy )); then
+			print -r -- "  3-field rows, given a derived rel: ${(j:, :)legacy}"
+			print -r -- '  (print rows with _hop_row, which adds the 4th field; see config.example.zsh)'
+		fi
 	fi
 	print -r -- ''
 
@@ -187,6 +235,7 @@ _hop_doctor_short_body() {
 	_hop_doctor_path HOP_HISTFILE HOP_HISTFILE "${XDG_STATE_HOME:-$HOME/.local/state}/hop/history" 1
 	printf '  %-22s %s\n' HOP_DEFAULT_KINDS "$([[ -n ${HOP_DEFAULT_KINDS:-} ]] && print -n "set (${#${(z)HOP_DEFAULT_KINDS}} kinds)" || print -n unset)"
 	printf '  %-22s %s\n' HOP_VIM "${HOP_VIM:-1 (default)}"
+	_hop_doctor_actions 1
 	printf '  %-22s %s\n' HOP_HOPRC "${HOP_HOPRC:-unset, .hoprc disabled}"
 	printf '  %-22s %s\n' HOP_REPOS "$([[ -n ${HOP_REPOS:-} ]] && print -n "set (${#${(s.:.)HOP_REPOS}} repos, withheld)" || print -n 'unset, derived from workspaces')"
 	printf '  %-22s %s\n' HOP_DEBUG "${HOP_DEBUG:-unset}"

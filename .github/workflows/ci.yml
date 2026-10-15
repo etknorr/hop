@@ -73,6 +73,64 @@ jobs:
           HOP_T_TIMEOUT: '180'
         run: zsh tests/run
 
+  # The test job above gets the LATEST fzf, and fzf's behaviour moves under hop between releases.
+  # - --filter honours --accept-nth on 0.73.1 but ignores it on 0.60.3 and 0.67.0, which broke headless hop on the floor unseen.
+  # - 0.60.3 is HOP_FZF_MIN, and 0.67.0 is the first release that accepts --freeze-left.
+  floor:
+    name: floor (fzf ${{ matrix.fzf }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        fzf: ['0.60.3', '0.67.0']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: |
+          set -euo pipefail
+          # Same removal as the test job above, for the same 403.
+          grep -rl packages.microsoft.com /etc/apt/sources.list.d 2>/dev/null | xargs -r sudo rm -f || true
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Install fzf ${{ matrix.fzf }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FZF_VER: ${{ matrix.fzf }}
+        run: |
+          set -euo pipefail
+          dl=$(mktemp -d)
+          tarball="fzf-${FZF_VER}-linux_amd64.tar.gz"
+          gh release download "v${FZF_VER}" --repo junegunn/fzf --dir "$dl" \
+            --pattern "$tarball" --pattern "fzf_${FZF_VER}_checksums.txt"
+          # grep fails the step when no line names the tarball, so a renamed asset cannot skip the check.
+          line=$(grep -E "^[0-9a-f]{64}  ${tarball}\$" "$dl/fzf_${FZF_VER}_checksums.txt")
+          (cd "$dl" && printf '%s\n' "$line" | sha256sum --check --strict -)
+          tar -xzf "$dl/$tarball" -C "$dl" fzf
+          sudo install -m 0755 "$dl/fzf" /usr/local/bin/fzf
+          rm -rf -- "$dl"
+
+      # A different fzf earlier on PATH would quietly turn this leg into a second copy of the test job.
+      - name: Assert fzf is ${{ matrix.fzf }}
+        env:
+          FZF_VER: ${{ matrix.fzf }}
+        run: |
+          set -euo pipefail
+          got=$(fzf --version)
+          printf '%s\n' "$got"
+          case "$got" in
+            "${FZF_VER} "*) ;;
+            *) echo "expected fzf ${FZF_VER}, got: ${got}" >&2; exit 1 ;;
+          esac
+
+      # tests/run takes ONE pattern, so the suites are one glob alternation.
+      - name: Run the fzf-sensitive suites
+        env:
+          HOP_T_TIMEOUT: '180'
+        run: zsh tests/run 'suite_(nottty|match|actions|integration|keymap|pty_escape).zsh'
+
   lint:
     name: lint (zsh -n)
     runs-on: ubuntu-latest

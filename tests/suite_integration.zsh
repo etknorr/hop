@@ -46,14 +46,15 @@ it_count() {
 	print -r -- $#l
 }
 
-# it_dirs <rows> -> the dir field of every row, which is field 2 of the three.
+# it_dirs <rows> -> the dir field of every row, which is field 2 of the four.
 it_dirs() {
 	emulate -L zsh
-	local -a out
+	local -a out f
 	local row
 	for row in "${(@f)1}"; do
 		[[ -n $row ]] || continue
-		out+=("${${row#*$'\t'}%$'\t'*}")
+		f=("${(@ps:\t:)row}")
+		out+=("${f[2]-}")
 	done
 	print -rl -- "${out[@]}"
 }
@@ -119,27 +120,28 @@ ${code}" 2>"$IT_ERRFILE"
 }
 
 # it_filter <query> <rows-file> -> the rows fzf's exact matcher keeps, one per line.
-# - The flags mirror _hop_pick, so a count here is the count the picker would see.
+# - The flags are _hop_pick's own _HOP_MATCHER_FLAGS, so a count here is the count the picker would see.
+# - A hand-kept copy of them went stale once already, still matching on the display column alone.
 # - --filter never opens a terminal, which is the only reason fzf may be run at all.
 typeset -g IT_FZF=${commands[fzf]:-}
+typeset -ga IT_MF=("${(@f)$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}"')}")
 it_filter() {
 	emulate -L zsh
 	[[ -n $IT_FZF ]] || return 127
-	"$IT_FZF" --filter="$1" --exact --ansi --delimiter=$'\t' --with-nth=1 \
-		--tiebreak=begin,length < "$2"
+	"$IT_FZF" --filter="$1" "${IT_MF[@]}" < "$2"
 }
 
-# it_filter_fuzzy <query> <rows-file> -> the same call with --exact dropped, to price the flag.
+# it_filter_fuzzy <query> <rows-file> -> the same call with --exact turned off, to price the flag.
 it_filter_fuzzy() {
 	emulate -L zsh
 	[[ -n $IT_FZF ]] || return 127
-	"$IT_FZF" --filter="$1" --ansi --delimiter=$'\t' --with-nth=1 \
-		--tiebreak=begin,length < "$2"
+	"$IT_FZF" --filter="$1" "${IT_MF[@]}" --no-exact < "$2"
 }
 
 # it_stub_fzf -> a directory holding a recording fzf, put first on PATH only for the runs that ask.
 # - It writes its argv and its stdin to files, then exits 1, which is fzf's own no-match status.
 # - So hop runs its whole real path and then reports no match, with nothing interactive anywhere.
+# - A --filter call is the resolver, not the picker, so it goes to the real fzf and records nothing.
 typeset -g IT_STUBDIR='' IT_FZF_ARGV='' IT_FZF_STDIN=''
 it_stub_fzf() {
 	emulate -L zsh
@@ -157,6 +159,7 @@ it_stub_fzf() {
 		'# - So the cat below inherited the runners stdin, and on anything without EOF it blocked forever.' \
 		'# - Guarded first, before the records are truncated, so a version query cannot erase the rows.' \
 		'case " $* " in *" --version "*) exit 0 ;; esac' \
+		"$(fixture_fzf_passthrough)" \
 		': > "$HOP_FZF_ARGV"' \
 		'for a in "$@"; do printf "%s\n" "$a" >> "$HOP_FZF_ARGV"; done' \
 		'cat > "$HOP_FZF_STDIN"' \
@@ -287,7 +290,8 @@ done
 assert_empty "$bad" 'a row whose dir field is not an existing absolute path'
 
 # ---------------------------------------------------------------------------
-# --select-1: the fast path, and the single most valuable behaviour in the tool.
+# A unique query jumps: the fast path, and the single most valuable behaviour in the tool.
+# - The resolver's J1 makes that jump before any picker opens; --select-1 is only the empty query's one-row accept.
 # ---------------------------------------------------------------------------
 # A non-unique query would make real fzf try to draw, so uniqueness is asserted BEFORE hop runs.
 if (( HAVE_FZF )); then
@@ -388,8 +392,8 @@ assert_eq 1 ${#${(M)ARGV:#--expect=*}} 'the picker is the call that passes --exp
 t 'the picker passes --exact to fzf'
 assert_eq 1 ${#${(M)ARGV:#--exact}} 'without --exact, fuzzy matching over a ~90-column line overmatches'
 
-t 'the picker passes --select-1, which is what makes a unique query jump'
-assert_eq 1 ${#${(M)ARGV:#--select-1}} 'the fast path is --select-1 and nothing else'
+t 'an empty query passes --select-1, the one-row auto-accept'
+assert_eq 1 ${#${(M)ARGV:#--select-1}} 'with no query, a list of one row has to accept itself, as it always did'
 
 if (( HAVE_FZF )); then
 	typeset -i xn fn

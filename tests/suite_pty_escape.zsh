@@ -21,7 +21,7 @@ typeset -ga ESC_NAMES=(
 	'pty-esc: a long APC payload cannot outlast the guard'
 	'pty-esc: a real b still browses, so the negatives are not vacuous'
 	'pty-esc: a real y still copies, so the negatives are not vacuous'
-	'pty-esc: with the guard off, the same reply DOES reach the browse verb'
+	'pty-esc: with the guard off, the reply reaches browse unless fzf drops it'
 )
 
 # esc_skip_all <why> -> skip every test this suite owns, with one reason.
@@ -311,12 +311,21 @@ pty_close
 # - It is what permanently pins non-vacuity for every negative above, in one picker session.
 # - Without it, a change that stopped the payload reaching fzf at all would turn them ALL green.
 # - Exact values on all three, because that is the whole point of reproducing rather than asserting.
-t 'pty-esc: with the guard off, the same reply DOES reach the browse verb'
+t 'pty-esc: with the guard off, the reply reaches browse unless fzf drops it'
 export HOP_GUARD_WINDOW=0
+# fzf 0.74.5 drops an escape sequence it cannot parse instead of typing the rest (junegunn/fzf#4926).
+# - From there on the negatives above hold with or without the guard, so they prove nothing about it.
+# - CI's floor job runs this suite on fzf 0.60.3 and 0.67.0, which still leak, so the guard stays pinned.
+autoload -Uz is-at-least
+typeset esc_fzf_v=${$(fzf --version </dev/null 2>/dev/null)%% *}
 if esc_case $'\e]11;rgb:1e1e/1e1e/1e1e\e\\'; then
-	assert_eq 'ctrl-g' "$ESC_DISPATCH" 'the harness no longer sees the leak the guard exists to stop'
-	assert_eq 'gh' "$ESC_FIRED" 'the harness no longer sees the verb binary run'
-	assert_nonempty "$ESC_ALIVE" 'the payload no longer makes the picker accept and exit'
+	if is-at-least 0.74.5 "$esc_fzf_v"; then
+		esc_assert_inert "on fzf ${esc_fzf_v}, which drops the reply itself, the OSC 11 reply"
+	else
+		assert_eq 'ctrl-g' "$ESC_DISPATCH" 'the harness no longer sees the leak the guard exists to stop'
+		assert_eq 'gh' "$ESC_FIRED" 'the harness no longer sees the verb binary run'
+		assert_nonempty "$ESC_ALIVE" 'the payload no longer makes the picker accept and exit'
+	fi
 else
 	_hop_t_bad 'esc_case: the picker never reported ready' "$(pty_err)"
 fi

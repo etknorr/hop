@@ -94,7 +94,9 @@ dsl_preview() {
 		[[ -n $r ]] || continue
 		disp=${${r%%$'\t'*}//$'\e['[0-9;]##m/}
 		[[ ${disp%% *} == $want ]] || continue
-		REPLY=${r##*$'\t'}
+		# Field 3 by position, since field 4 is the rel and the preview is no longer the last field.
+		local -a f=("${(@ps:\t:)r}")
+		REPLY=${f[3]-}
 		return 0
 	done
 	REPLY=''

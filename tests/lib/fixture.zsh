@@ -14,6 +14,11 @@ typeset -g  HOP_FIX_LOG=''
 typeset -g  HOP_FIX_HIST=''
 typeset -g  HOP_FIX_CONFIG=''
 
+# The real fzf, resolved before any suite puts a stub named fzf first on PATH.
+# - Every stub execs it for --filter, because the resolver's matching has to be real for a picker test to mean anything.
+# - Without that, the resolver's own filter calls hit the stub, overwrite its argv record, and match nothing.
+typeset -g IT_REAL_FZF=${commands[fzf]:-}
+
 # A path that cannot exist, which is how a probe asks hop.zsh for the SHIPPED presets.
 # - hop.zsh sources $HOP_CONFIG when it is readable, and that file is the USER'S personal one.
 # - Inheriting it would make every kind assertion depend on whose laptop the suite ran on.
@@ -182,7 +187,7 @@ fixture_sources() {
 		enum) specs=('hop.zsh' 'lib/*(.)' 'presets/*(.)' 'bin/*(.)') ;;
 		# Everything `zsh -n` must accept, the test harness included.
 		parseable) specs=('hop.zsh' 'config.example.zsh' 'lib/*(.)' 'presets/*(.)' 'bin/*(.)' \
-			'completions/_*(.)' 'tests/run' 'tests/lib/*(.)' 'tests/suite_*.zsh') ;;
+			'completions/_*(.)' 'tests/run' 'tests/lib/*(.)' 'tests/*.zsh') ;;
 		*) print -ru2 -- "fixture_sources: unknown group: ${1}"; return 2 ;;
 	esac
 	reply=()
@@ -296,6 +301,9 @@ fixture_pin_derived() {
 # - The two FZF_* pins are the ones no scan of hop's own source can find, because FZF reads them.
 # - Measured: FZF_DEFAULT_OPTS='--exact' silently disabled the CONTROL arm of the --exact guard,
 #   so the fuzzy comparison returned one row and the test stopped proving anything.
+# - The last five are what _hop_code_usable reads, and no HOP_ scan finds them either.
+# - Run from a VS Code terminal or over SSH, they would send every code verb to the editor fallback.
+# - DISPLAY is a dummy rather than empty, so a Linux CI runner with no screen still reaches the code stub.
 fixture_pin_settings() {
 	emulate -L zsh
 	local home=$1
@@ -313,8 +321,16 @@ fixture_pin_settings() {
 		'HOP_CLIPBOARD=' \
 		'HOP_HIST_MAX=' \
 		'HOP_GUARD_WINDOW=' \
+		'HOP_JUMP=auto' \
+		'HOP_ACTION=cd' \
+		'HOP_CODE=code' \
 		'FZF_DEFAULT_OPTS=' \
-		'FZF_DEFAULT_COMMAND='
+		'FZF_DEFAULT_COMMAND=' \
+		'VSCODE_IPC_HOOK_CLI=' \
+		'SSH_CONNECTION=' \
+		'SSH_TTY=' \
+		'WAYLAND_DISPLAY=' \
+		'DISPLAY=:hop-tests'
 }
 
 # fixture_pin_pairs <home> -> both lists as `VAR=value`, for the callers that hand pins to `env`.
@@ -381,13 +397,110 @@ source ${(q)HOP_HOME}/hop.zsh || exit 97
 ${code}"
 }
 
+# fixture_fzf_passthrough -> the sh line that hands a --filter call to the real fzf, for any stub fzf.
+fixture_fzf_passthrough() {
+	emulate -L zsh
+	print -r -- "for a in \"\$@\"; do case \$a in --filter=*) exec ${(qq)IT_REAL_FZF} \"\$@\" ;; esac; done"
+}
+
+# stub_fzf_select <key> <n> -> REPLY is a directory whose fzf picks stdin row n as if <key> had been pressed.
+# - --filter goes to the real fzf; anything else is the picker, and draws nothing.
+# - The picker's argv lands in REPLY/argv one per line, and its stdin in REPLY/stdin.
+# - It prints fzf's own accept shape: the --expect key line, then fields 2, 3 and 4 of the chosen row.
+# - --version prints $HOP_FZF_STUB_VER, so a test chooses which version-gated flags the picker gets.
+stub_fzf_select() {
+	emulate -L zsh
+	local key=$1 n=$2
+	fixture_tmpdir fzfselect || return 1
+	local d=$REPLY
+	print -rl -- \
+		'#!/bin/sh' \
+		'# hop test stub: a picker that chooses one row without drawing, so a selection can be tested headlessly.' \
+		"$(fixture_fzf_passthrough)" \
+		'case " $* " in *" --version "*) [ -n "$HOP_FZF_STUB_VER" ] && printf "%s\n" "$HOP_FZF_STUB_VER"; exit 0 ;; esac' \
+		": > ${(qq)d}/argv" \
+		"for a in \"\$@\"; do printf '%s\\n' \"\$a\" >> ${(qq)d}/argv; done" \
+		"cat > ${(qq)d}/stdin" \
+		"printf '%s\\n' ${(qq)key}" \
+		"sed -n ${(qq)n}p ${(qq)d}/stdin | cut -f2-4" \
+		'exit 0' > "$d/fzf" || return 1
+	chmod +x "$d/fzf" || return 1
+	REPLY=$d
+	return 0
+}
+
+# match_fixture -> REPLY is the resolver's fixture repo, with HOP_FIX_CONFIG declaring its kinds.
+# - A slice of a real terraform monorepo, shaped so that every rule in lib/match.zsh has a case needing it.
+# - The tg kind is a real user config's own, --trim included, because J3 reads the trimmed display.
+# - acct-trust-safety-restricted-prod is long on purpose: its scope is clipped, so `trust prod` names one display, and must not jump.
+# - The staging account has no eks, so `eks security` stays the one-row jump it is in the real repo.
+# - cross_account_iam/roles is a real unit, and it is what puts `account` in the T2 vocabulary.
+# - The depth-1 cross_account_iam/terragrunt.hcl beside it is a shared include, which neither layout matches.
+# - raster-catalogue is a word `routemaster` abbreviates, letters in order, so it tempts T2 into an alternative.
+# - The staging account has a README and the prod one has none, so an injected row's preview has both shapes.
+# - acct-l[a]b*# holds pattern characters, which a zsh pattern built from a typed term once failed to match.
+match_fixture() {
+	emulate -L zsh
+	fixture_repo match || return 1
+	local d=$REPLY u
+	local tf='resource "null_resource" "x" {}'
+	local sp=terraform/acct-security-tooling-prod/env-prod/us-east-1
+	local ss=terraform/acct-security-tooling-staging/env-staging/us-east-1
+	local ip=terraform/acct-infrastructure/env-prod/us-east-1
+	fixture_write 'README.md' '# match fixture' || return 1
+	fixture_write 'terraform/acct-security-tooling-prod/terragrunt_aws_account.hcl' 'locals {}' || return 1
+	for u in vpc eks anthropic-compliance-poller; do
+		fixture_write "$sp/$u/terragrunt.hcl" 'include {}' || return 1
+		fixture_write "$sp/$u/main.tf" "$tf" || return 1
+	done
+	for u in vpc upwind; do
+		fixture_write "$ss/$u/terragrunt.hcl" 'include {}' || return 1
+	done
+	fixture_write 'terraform/acct-security-tooling-staging/README.md' '# security tooling staging' || return 1
+	for u in secor secrets vpc routemaster trust active mesos; do
+		fixture_write "$ip/$u/terragrunt.hcl" 'include {}' || return 1
+	done
+	fixture_write 'terraform/acct-infrastructure/env-dev/us-east-1/vpc/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/acct-operations-prod/env-prod/us-east-1/secrets/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/acct-data/env-prod/us-east-1/lake/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/acct-data-platform-prod/env-prod/us-east-1/vpc/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/acct-trust-safety-restricted-prod/env-prod/us-east-1/restricted-storage/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/acct-l[a]b*#/env-prod/us-east-1/widget/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/acct-map-platform-prod/env-prod/us-east-1/raster-catalogue/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/cross_account_iam/terragrunt.hcl' 'locals {}' || return 1
+	fixture_write 'terraform/cross_account_iam/roles/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/modules/aws/aws-config/main.tf' 'variable "x" {}' || return 1
+	fixture_write 'modules/apt/README.md' '# apt' || return 1
+	fixture_write 'mesos/services/routemaster/service.conf' 'name = routemaster' || return 1
+	for u in kube-prometheus-stack external-dns active thanos thanos-legacy; do
+		fixture_write "kubernetes/values/$u/values.yaml" "image: $u" || return 1
+	done
+	for u in kube-prometheus-stack grafana grafana-dashboards; do
+		fixture_write "kubernetes/services/monitoring/$u.yaml" 'kind: Application' || return 1
+	done
+	for u in external-dns active; do
+		fixture_write "kubernetes/services/infrastructure/$u.yaml" 'kind: Application' || return 1
+	done
+	fixture_write 'sandbox/abg/README.md' '# abg' || return 1
+	fixture_write 'sandbox/alpha-beta-gamma/README.md' '# alpha beta gamma' || return 1
+	fixture_commit 'match fixture' || return 1
+	fixture_config \
+		'hop_preset helm terraform-modules dir' \
+		"hop_kind tg --default --marker terragrunt.hcl --under terraform --layout 'scope,env,region,name...' --layout 'scope,name...' --trim 'scope:acct-,env:env-' --preview 'main.tf,*.tf,terragrunt.hcl,README.md' --desc 'terragrunt units'" \
+		"hop_kind mesos --default --dirs mesos/services --scope-literal - --preview service.conf --desc 'mesos services'" \
+		"hop_kind sbx --default --dirs sandbox --desc 'sandbox dirs'" || return 1
+	REPLY=$d
+	return 0
+}
+
 # fzf_filter <query> -> fzf's non-interactive matcher, fed rows on stdin.
 # - --filter is the only fzf mode a test may use, because it never opens a terminal.
-# - The flags mirror the real _hop_pick call, so a match here means a match in the picker.
+# - The flags are read from _HOP_MATCHER_FLAGS, so a match here means a match in the picker.
 fzf_filter() {
 	emulate -L zsh
 	(( ${+commands[fzf]} )) || return 127
-	fzf --filter="$1" --delimiter=$'\t' --with-nth=1 --tiebreak=begin,index
+	local -a mf=("${(@f)$(hop_probe 'print -rl -- "${_HOP_MATCHER_FLAGS[@]}"' </dev/null)}")
+	fzf --filter="$1" "${mf[@]}"
 }
 
 # Last, because the scrub needs every definition above it, HOP_FIX_HOME and _hop_fix_config included.

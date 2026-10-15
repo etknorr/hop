@@ -8,12 +8,23 @@
 # - M-a is omitted when nothing is bound to it, so the picker cannot advertise a dead key.
 # - This is the non-modal legend, used when HOP_VIM=0 or --no-vim turns the modal layer off.
 # - Browse is M-B, not ^G: a bare BEL byte in the terminal's output IS ctrl-g, so ^G ran the verb.
+# - Enter is named by the call's mode, and M-enter appears only when Enter does not already cd.
+# - So the default legend is unchanged, and a longer mode moves ^O and ^T down a line rather than widen one.
 _hop_header() {
 	emulate -L zsh
+	local REPLY
+	_hop_enter_mode
 	local -a lines=(
 		'enter cd · ^O file · ^T folder'
 		'^Y copy · M-y copy file · M-o edit'
 	)
+	if [[ $REPLY != cd ]]; then
+		lines=(
+			"enter ${REPLY} · M-enter cd"
+			'^O file · ^T folder · ^Y copy'
+			'M-y copy file · M-o edit'
+		)
+	fi
 	if [[ -n ${1:-} ]]; then
 		lines+=('M-B github · M-a +conf · M-p preview')
 	else
@@ -58,39 +69,43 @@ _hop_vim_on() {
 # - `: view` is omitted without a root to enumerate kinds from, which is _hop_header's own rule.
 # - The repo and workspace pickers pass no root, so `:` falls through to ignore in both of them.
 # - Those two are the pickers a newcomer meets first, and a legend naming a dead key is worse than none.
+# - Enter is named by the call's mode; the always-cd key (M-enter, c) is named only when that is not cd.
 _hop_vim_header() {
 	emulate -L zsh
-	local mode=$1 menu=${2:-}
+	local mode=$1 menu=${2:-} REPLY
 	local -i cols=${COLUMNS:-80}
 	local -i avail=$cols
 	(( cols >= 120 )) && avail=$(( cols * 45 / 100 ))
 	(( avail = avail - 4 ))
+	_hop_enter_mode
+	local enter="enter ${REPLY}" alt='' c=''
+	[[ $REPLY != cd ]] && alt='  M-enter cd' c='  c cd'
 	local -a lines
 	if [[ $mode == SEARCH ]]; then
-		lines=('SEARCH  type to filter  esc normal  enter cd  ^o code  ^y yank  M-B browse')
+		lines=("SEARCH  type to filter  esc normal  ${enter}${alt}  ^o code  ^y yank  M-B browse")
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'SEARCH  type to filter'
-				'esc normal  enter cd'
+				"esc normal  ${enter}${alt}"
 				'^o code  ^y yank  M-B browse'
 			)
 		fi
 	else
 		local view=''
 		[[ -n $menu ]] && view='  : view'
-		lines=("NORMAL  j/k move  g/G top/bot  / search${view}  ? help  enter cd  q quit")
+		lines=("NORMAL  j/k move  g/G top/bot  / search${view}  ? help  ${enter}${c}  q quit")
 		if (( ${#lines[1]} > avail )); then
 			lines=(
 				'NORMAL  j/k move  g/G top/bot'
 				"/ search${view}  ? help"
-				'enter cd  q quit'
+				"${enter}${c}  q quit"
 			)
 		fi
 	fi
 	print -rn -- "${(pj:\n:)lines}"
 }
 
-# _hop_vim_binds <preview-cmd> <reload> <root> <restore> <query> [drill] [up] [guard]
+# _hop_vim_binds <preview-cmd> <reload> <root> <restore> <query> [drill] [up] [guard] [note]
 # - Appends the whole modal --bind set to `args`, which is local in _hop_pick.
 # - Also fills _hop_vim_prompt, _hop_vim_head, and the four HOP_VIM_* exports declared there.
 # - Dynamic scoping is the established pattern in this file; see _hop_parse_result.
@@ -98,7 +113,7 @@ _hop_vim_header() {
 # - An implicit read would let a probe that forgot it silently test the unguarded keymap instead.
 _hop_vim_binds() {
 	emulate -L zsh
-	local prev_cmd=$1 reload=$2 root=$3 restore=$4 query=$5 drill=${6:-} up=${7:-} guard=${8:-}
+	local prev_cmd=$1 reload=$2 root=$3 restore=$4 query=$5 drill=${6:-} up=${7:-} guard=${8:-} note=${9:-}
 	local kinds_bin="${(q)HOP_HOME}/bin/hop-kinds"
 	local guard_bin="${(q)HOP_HOME}/bin/hop-guard"
 
@@ -113,10 +128,13 @@ _hop_vim_binds() {
 	[[ -n $drill ]] && live+=(l)
 	[[ -n $up ]] && live+=(h)
 	[[ -n $reload ]] && live+=(M-a)
-	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys ${${(j:,:)live}:--}"
+	# The mode rides along so the overlay names what Enter does in this call, as the legend does.
+	local REPLY
+	_hop_enter_mode
+	local help_cmd="${(q)HOP_HOME}/bin/hop-preview --keys ${${(j:,:)live}:--} ${(q)REPLY}"
 
-	# The nine keys whose action leaves the picker, and so the nine the guard has to cover.
-	local -a guard_keys=(o O e y Y b l h q)
+	# The ten keys whose action leaves the picker, and so the ten the guard has to cover.
+	local -a guard_keys=(o O e y Y b c l h q)
 
 	# The alt- keys hop or fzf already owns, which must therefore not become mark binds.
 	# - alt-a reload, alt-p toggle-preview, alt-B browse, and alt-o/alt-y are hop's own --expect verbs.
@@ -173,7 +191,11 @@ _hop_vim_binds() {
 		kind_act="$HOP_VIM_TO_MENU"
 
 		# {2} is the kind name, because hop-kinds menu puts it in field 2 for exactly this.
-		HOP_VIM_PICK_KIND="reload(${kinds_bin} rows ${(q)root} {2})+change-prompt(> )+change-header(${nh})+${prev_restore}+first"
+		# - hop()'s -c dir rides along as --under, so the view you switch to stays inside it.
+		# - HOP_HISTFILE is named for the reason _hop_reload_cmd gives: an unexported one never reaches the child.
+		local under_arg=''
+		[[ -n ${_hop_under:-} ]] && under_arg=" ${(q):---under=${_hop_under}}"
+		HOP_VIM_PICK_KIND="reload(HOP_HISTFILE=${(q)${HOP_HISTFILE:-/dev/null}} ${kinds_bin} rows ${(q)root}${under_arg} {2})+change-prompt(> )+change-header(${nh})+${prev_restore}+first"
 
 		# Esc out of the menu regenerates the view you came from, so cancelling is lossless.
 		[[ -n $restore ]] && HOP_VIM_MENU_BACK="reload(${restore})+change-prompt(> )+change-header(${nh})+${prev_restore}+first"
@@ -188,7 +210,7 @@ _hop_vim_binds() {
 	# Letter verbs ride print()+accept rather than --expect, which unbind cannot touch.
 	# - An --expect key stays live after unbind, so it would accept in SEARCH instead of typing.
 	# - That was probed on this machine, not assumed; see README.
-	# - The name printed is the existing ctrl-/alt- key, so _hop_dispatch needs no new arms.
+	# - The name printed is the ctrl-/alt- key the other mode uses, so one _hop_dispatch arm serves both.
 	local k act
 	for k in "${_HOP_VIM_KEYS[@]}"; do
 		act=''
@@ -205,6 +227,8 @@ _hop_vim_binds() {
 			y) act='print(ctrl-y)+accept' ;;
 			Y) act='print(alt-y)+accept' ;;
 			b) act='print(ctrl-g)+accept' ;;
+			# c always cds, whatever Enter does, and prints the key SEARCH's alt-enter does.
+			c) act='print(alt-enter)+accept' ;;
 			p) act='toggle-preview' ;;
 			q) act='abort' ;;
 			# r re-runs the current view, for when the repo changed under you.
@@ -218,7 +242,7 @@ _hop_vim_binds() {
 			':') act=$kind_act ;;
 		esac
 		# Every action that LEAVES the picker rides the escape guard; nav keys must stay fork-free.
-		# - The fork is free on these nine: each is followed by accept or abort, which spawns anyway.
+		# - The fork is free on these ten: each is followed by accept or abort, which spawns anyway.
 		# - `r` is deliberately NOT here: its action embeds a shell command holding $HOP_HOME and "$@".
 		# - Re-quoting that through a transform body is a real hazard for a verb that only redraws a list.
 		# - An empty act means the key was gated off above, so it stays a plain `ignore` and unguarded.
@@ -227,6 +251,15 @@ _hop_vim_binds() {
 		# - So (I) would have wrapped `?`'s help overlay in the guard and skipped alt-* below.
 		if [[ -n $guard && -n $act ]] && (( ${guard_keys[(Ie)$k]} )); then
 			act="transform:${guard_bin} check ${(q)guard} ${(qq)act}"
+		fi
+		# A `:` menu row's dir field is a kind name, so c there had cd'd into any ./helm that happened to exist.
+		# - The prompt test wraps the guard's own command rather than nesting a transform inside one.
+		if [[ $k == c && -n $root ]]; then
+			if [[ $act == transform:* ]]; then
+				act="transform:case \"\$FZF_PROMPT\" in \": \"*) printf ignore ;; *) ${act#transform:} ;; esac"
+			else
+				act=$_HOP_MENU_CD
+			fi
 		fi
 		args+=(--bind="${k}:${act:-ignore}")
 	done
@@ -256,12 +289,18 @@ _hop_vim_binds() {
 	[[ -n $enter_act ]] && args+=(--bind="enter:${enter_act}")
 
 	# A CLI query means the user is already refining, so SEARCH is the start mode.
-	# - No --disabled in that branch, because --select-1 has to see a FILTERED list.
-	# - Otherwise `hop vpc prod` stops jumping straight to a unique match, hop's best trick.
+	# - No --disabled in that branch, because the typed query has to FILTER the list it opens on.
+	# - A resolver note rides --header, and its start bind skips change-header, which would wipe it.
+	# - The note embeds the query, and a `)` in it would end a change-header(...) action early.
 	if [[ -n $query ]]; then
 		_hop_vim_prompt='/ '
 		_hop_vim_head=$sh
-		args+=(--bind="start:${to_search}")
+		if [[ -n $note ]]; then
+			_hop_vim_head="${note}"$'\n'"${sh}"
+			args+=(--bind="start:${unbind_all}+enable-search+change-prompt(/ )+${prev_restore}")
+		else
+			args+=(--bind="start:${to_search}")
+		fi
 	else
 		_hop_vim_prompt='> '
 		_hop_vim_head=$nh
@@ -271,8 +310,8 @@ _hop_vim_binds() {
 
 # The oldest fzf that can run the picker below, and why it is this exact patch release.
 # - 0.60.0 added `--accept-nth`, which is how a row's dir and preview reach the parent shell.
-# - 0.60.3 made `--accept-nth` work alongside `--select-1`, and _hop_pick passes BOTH every call.
-# - So 0.60.0 would break `hop vpc prod` jumping to a unique match, which is hop's best trick.
+# - 0.60.3 made `--accept-nth` work alongside `--select-1`, and _hop_pick passes BOTH on an empty query.
+# - So 0.60.0 would break the one-row auto-accept of a bare `hop`.
 # - Debian and Ubuntu package 0.44.x, where the picker dies with `unknown option: --accept-nth`.
 # - Sources: fzf CHANGELOG, "Added `--accept-nth`" under 0.60.0, and #4287 under 0.60.3.
 # - Overridable, because a guard that locks out a working fzf is worse than the bug it prevents.
@@ -339,20 +378,41 @@ _hop_fzf_ok() {
 # - Only match-affecting flags belong here. Presentation and key binds stay local to each caller.
 # - --expect is deliberately absent: repeated --expect has ambiguous merge semantics, so it stays built once.
 # - tests/suite_nottty.zsh pins this array's value AND that neither caller hardcodes a matcher flag.
+# - --ansi is match-affecting: without it fzf matches the raw SGR bytes, so `0m` hit every row headless.
+# - --accept-nth is NOT, and lives in _hop_pick: --filter honours it on fzf 0.73.1 but ignores it on 0.60.3 and 0.67.0.
+# - So --filter is never handed it, always prints whole rows, and the headless path splits them itself.
 typeset -ga _HOP_MATCHER_FLAGS=(
+	--ansi
 	--delimiter=$'\t'
-	--with-nth=1
-	--accept-nth='2,3'
+	# Field 4 is the repo-relative path, so `terraform/acct-sec` matches as typed.
+	# - It has to be shown to be searched: --nth indexes the --with-nth output, on 0.60.3 and 0.73.1 alike.
+	# - The absolute dir in field 2 stays out, so a home dir or a mktemp suffix never matches.
+	--with-nth=1,4
 	# Substring, not subsequence, because the display line is ~90 columns wide.
 	# - Measured on a 1k-row repo: a 3-word fuzzy query hit 13 rows where exact hit exactly 1.
 	# - One service name fuzzy-matched 22 rows and exactly 3; 'eks staging' was 16 versus 6.
 	# - fzf's ' prefix still opts one term back into fuzzy, so nothing is actually lost.
 	--exact
-	--tiebreak=begin,length
+	# Case-insensitive rather than smart-case: under smart-case `Vpc` and `TG vpc` matched nothing.
+	-i
+	# These restate fzf's defaults, because a user FZF_DEFAULT_OPTS reaches the picker and would change them.
+	# - --nth=1 there hid the path column, --tac opened an ordered pick worst-first, and --scheme=path reranked it.
+	# - Each comes after the user's defaults, so it wins; J3's own --nth=1 is passed later still.
+	# - --scheme also sets a tiebreak, so it has to come before --tiebreak, or it undoes it.
+	--nth=..
+	--no-tac
+	--scheme=default
+	# begin keeps the exact-name preference, and chunk replaces length.
+	# - The path column makes line length vary, so length was deciding same-name ties the MRU order should.
+	# - chunk dates from fzf 0.32, so the 0.60.3 floor accepts it.
+	--tiebreak=begin,chunk
 )
 
+# The always-cd action, as a no-op while the `:` menu is open; see _hop_vim_binds.
+typeset -g _HOP_MENU_CD='transform:case "$FZF_PROMPT" in ": "*) printf ignore ;; *) printf %s "print(alt-enter)+accept" ;; esac'
+
 # _hop_pick <label> <header> [query] [reload] [root] [drill] [restore] [up]  <targets on stdin
-# - Emits the key line (empty for plain Enter) and then dir<TAB>preview.
+# - Emits the key line (empty for plain Enter) and then dir<TAB>preview<TAB>rel.
 # - Every verb rides --expect or print(), never become(), since only the parent shell can cd.
 # - --preview must name a real executable: fzf spawns it in a fresh $SHELL -c with no functions.
 # - No --exit-0: a typo'd query should open fzf so it can be fixed, not exit 1 with an error.
@@ -371,8 +431,8 @@ _hop_pick() {
 
 	local -a args
 	args=(
-		--ansi
 		"${_HOP_MATCHER_FLAGS[@]}"
+		--accept-nth='2,3,4'
 		--no-multi
 		--layout=reverse
 		--info=inline
@@ -381,7 +441,6 @@ _hop_pick() {
 		--header-first
 		--header-border=bottom
 		--pointer='▸'
-		--select-1
 		--expect="$_hop_expect"
 		--preview="$prev_cmd"
 		--preview-window='right,55%,border-left,wrap,<120(down,50%,border-top,wrap)'
@@ -405,6 +464,10 @@ _hop_pick() {
 		# - The payoff is that a bind can be guarded, where an --expect key structurally cannot be.
 		--bind='ctrl-g:ignore'
 		--bind='alt-B:print(ctrl-g)+accept'
+		# Always a cd, whatever HOP_ACTION makes Enter do; NORMAL's c prints the same key.
+		# - Bound in both modes, since alt-enter is not one of the keys SEARCH unbinds.
+		# - With a root there is a `:` menu, whose rows name kinds and not dirs, so there it does nothing.
+		--bind="alt-enter:${${root:+$_HOP_MENU_CD}:-print(alt-enter)+accept}"
 	)
 	# HOP_FZF_HEIGHT is a real knob: set it EMPTY and fzf takes the whole screen.
 	# - Default-if-unset, not :-, because empty has to stay a distinguishable answer.
@@ -413,11 +476,27 @@ _hop_pick() {
 	local h=${HOP_FZF_HEIGHT-80%}
 	[[ -n $h ]] && args+=(--height="$h" --min-height=18)
 
+	# The path column adds ~55 columns, and freezing field 1 keeps the name in view when the path scrolls.
+	# - fzf 0.60.3 exits 2 on --freeze-left, so it is passed only from 0.67.0, and never on an unknown version.
+	local REPLY
+	_hop_fzf_ver
+	[[ -n $REPLY ]] && ! _hop_ver_lt "$REPLY" 0.67.0 && args+=(--freeze-left=1)
+
 	[[ -n $query ]] && args+=(--query="$query")
 	[[ -n $reload ]] && args+=(--bind="alt-a:reload:$reload")
 
+	# These three are set by _hop_res_pick from the resolve, and read here through dynamic scope.
+	# - --select-1 is today's one-row auto-accept, so it stays the default for a caller that sets nothing.
+	# - A resolver PICK turns it off: one approximate candidate must never accept itself.
+	# - Ordered mode opens with the resolver's best rows first, and fzf's ranking returns at the first keystroke.
+	# - No other change bind exists, so toggle-sort+unbind(change) collides with nothing.
+	local note=${_hop_pick_note:-}
+	(( ${_hop_pick_select1:-1} )) && args+=(--select-1)
+	(( ${_hop_pick_ordered:-0} )) && args+=(--no-sort --bind='change:toggle-sort+unbind(change)')
+
 	# No temp file any more: the view mode lives in $FZF_PROMPT, which fzf exports for us.
 	local _hop_vim_prompt='hop ▸ ' _hop_vim_head=$header
+	[[ -n $note ]] && _hop_vim_head="${note}"$'\n'"${header}"
 	local -x HOP_VIM_TO_NORMAL='' HOP_VIM_HELP_ON='' HOP_VIM_HELP_OFF=''
 	local -x HOP_VIM_TO_MENU='' HOP_VIM_PICK_KIND='' HOP_VIM_MENU_BACK=''
 
@@ -447,7 +526,7 @@ _hop_pick() {
 			guard_f="${guard_dir}/mark"
 			trap "rm -rf -- ${(q)guard_dir} 2>/dev/null" EXIT HUP TERM
 		fi
-		_hop_vim_binds "$prev_cmd" "$reload" "$root" "$restore" "$query" "$drill" "$up" "$guard_f"
+		_hop_vim_binds "$prev_cmd" "$reload" "$root" "$restore" "$query" "$drill" "$up" "$guard_f" "$note"
 	fi
 	args+=(--prompt="$_hop_vim_prompt" --header="$_hop_vim_head")
 
@@ -455,22 +534,25 @@ _hop_pick() {
 	return $?
 }
 
-# _hop_reload_cmd <root> <kind...> -> a shell command string that regenerates the list.
+# _hop_reload_cmd <root> <under|''> <kind...> -> a shell command string that regenerates the list.
 # - alt-a's reload runs in a fresh shell, so it re-sources hop.zsh instead of calling a function.
 # - Sourcing hop.zsh and not just providers.zsh is what gives the child the same kind registry.
-# - `zsh -f` skips rc files; the args after the script become $1.. for _hop_generate.
+# - `zsh -f` skips rc files; the args after the script become $1.. for _hop_rows.
 # - `-f` is NOT optional: without it this child would source the user's rc files on every reload.
 # - So every variable the child needs is named here, one at a time, rather than let rc loading back in.
 # - HOP_CONFIG is what decides the child's kind registry, and forwarding it is the whole point.
 # - Passing the LIVE value also covers a HOP_CONFIG assigned after hop.zsh was sourced.
 # - Without it the child fell back to the shipped presets and rejected the user's own kinds.
+# - HOP_HISTFILE is forwarded for the same reason, so the reloaded rows keep the MRU order of the first list.
+# - An empty one goes as /dev/null, because the child's own default would otherwise turn history back on.
 _hop_reload_cmd() {
 	emulate -L zsh
-	local root=$1
-	shift
-	local script='source "$HOP_HOME/hop.zsh"; _hop_generate "$@"'
+	local root=$1 under=$2
+	shift 2
+	local script='source "$HOP_HOME/hop.zsh"; _hop_rows "$@"'
 	local cmd="HOP_HOME=${(qq)HOP_HOME} HOP_CONFIG=${(qq)HOP_CONFIG}"
-	cmd+=" HOP_HOPRC=${(qq)${HOP_HOPRC:-}} zsh -f -c ${(qq)script} hop ${(qq)root}"
+	cmd+=" HOP_HOPRC=${(qq)${HOP_HOPRC:-}} HOP_HISTFILE=${(qq)${HOP_HISTFILE:-/dev/null}}"
+	cmd+=" zsh -f -c ${(qq)script} hop ${(qq)root} ${(qq)under}"
 	local k
 	for k in "$@"; do
 		cmd+=" ${(qq)k}"
@@ -478,16 +560,19 @@ _hop_reload_cmd() {
 	print -r -- "$cmd"
 }
 
-# _hop_parse_result <fzf-output> -> fills _hop_key, _hop_dir, _hop_preview.
-# - Those three are `local` in _hop_run; zsh's dynamic scoping makes them writable here.
+# _hop_parse_result <fzf-output> -> fills _hop_key, _hop_dir, _hop_preview, _hop_rel.
+# - Those four are `local` in _hop_run; zsh's dynamic scoping makes them writable here.
 # - Assigning rather than `typeset -g` keeps hop from leaving state in the interactive shell.
 # - The LAST line is always the --accept-nth fields; the lines before it are key lines.
 # - A NORMAL-mode letter verb produces two of those, because --expect emits its own empty line.
 # - So the real key is the first non-empty line, which also covers the plain two-line case.
+# - The fields are split by _hop_row_split, because `IFS=$'\t' read` merges an empty preview into the rel.
+# - rel arrives dimmed in the row, so its SGR is stripped whether or not fzf already did.
 _hop_parse_result() {
 	emulate -L zsh
+	setopt local_options extended_glob
 	local out=$1
-	_hop_key='' _hop_dir='' _hop_preview=''
+	_hop_key='' _hop_dir='' _hop_preview='' _hop_rel=''
 	local -a lines=("${(@f)out}")
 	(( $#lines )) || return 1
 	local l
@@ -497,7 +582,10 @@ _hop_parse_result() {
 			break
 		fi
 	done
-	IFS=$'\t' read -r _hop_dir _hop_preview <<< "${lines[-1]}"
+	local -a reply
+	_hop_row_split "${lines[-1]}"
+	_hop_dir=${reply[1]-} _hop_preview=${reply[2]-} _hop_rel=${reply[3]-}
+	_hop_rel=${_hop_rel//$'\e['[0-9;]#m/}
 	[[ -n $_hop_preview ]] || _hop_preview=$_hop_dir
 	[[ -n $_hop_dir ]]
 }

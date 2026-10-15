@@ -30,7 +30,17 @@ if [[ $dir == '--keys' ]]; then
 	# - An overlay naming a key bound to `ignore` teaches a keystroke that silently does nothing.
 	# - The repo picker (hop -R) binds only h and the workspace picker (hop -w) only l.
 	# - `-` means none are live, and an ABSENT argument means all, which is the by-hand documentation case.
+	# $3 is what Enter does in the calling picker, so the overlay agrees with the legend; absent is cd.
 	typeset -a live
+	typeset enter=${3:-cd} enter_says
+	case $enter in
+		cd) enter_says='cd to the dir' ;;
+		open) enter_says='open in VS Code' ;;
+		reveal) enter_says='reveal in the VS Code explorer' ;;
+		cd+open) enter_says='cd, then open in VS Code' ;;
+		cd+reveal) enter_says='cd, then reveal in VS Code' ;;
+		*) enter=cd enter_says='cd to the dir' ;;
+	esac
 	if (( $# < 2 )); then
 		live=(r ':' l h M-a)
 	elif [[ $target == '-' ]]; then
@@ -52,9 +62,11 @@ if [[ $dir == '--keys' ]]; then
 		"  ${KEY}j${OFF} / ${KEY}k${OFF}          down / up" \
 		"  ${KEY}g${OFF} / ${KEY}G${OFF}          first / last row" \
 		"  ${KEY}^d${OFF} / ${KEY}^u${OFF}        half page down / up" \
-		"  ${KEY}enter${OFF}          cd to the dir" \
+		"  ${KEY}enter${OFF}          ${enter_says}"
+	[[ $enter == cd ]] || print -r -- "  ${KEY}c${OFF}              cd to the dir"
+	print -rl -- \
 		"  ${KEY}o${OFF}              code -r the preview file" \
-		"  ${KEY}O${OFF}              code the dir as a folder" \
+		"  ${KEY}O${OFF}              code -n the dir as a folder" \
 		"  ${KEY}e${OFF}              \$EDITOR the preview file" \
 		"  ${KEY}y${OFF} / ${KEY}Y${OFF}          copy dir / preview file" \
 		"  ${KEY}b${OFF}              gh browse"
@@ -77,7 +89,9 @@ if [[ $dir == '--keys' ]]; then
 	print -r -- "${HDR}SEARCH${OFF}${SUB}  (every key types)${OFF}"
 	print -rl -- \
 		"  ${KEY}esc${OFF}            back to NORMAL, clears query" \
-		"  ${KEY}enter${OFF}          cd to the dir" \
+		"  ${KEY}enter${OFF}          ${enter_says}"
+	[[ $enter == cd ]] || print -r -- "  ${KEY}M-enter${OFF}        cd to the dir"
+	print -rl -- \
 		"  ${KEY}^o${OFF} / ${KEY}^t${OFF}        code file / code dir" \
 		"  ${KEY}^y${OFF} / ${KEY}M-y${OFF}       copy dir / preview file" \
 		"  ${KEY}M-o${OFF}            \$EDITOR the preview file" \

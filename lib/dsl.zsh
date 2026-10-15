@@ -355,7 +355,7 @@ _hop_dsl_files() {
 		fi
 		# :h of the ABSOLUTE path, because :h of a root-level relative path is '.'.
 		_hop_row "$kind" "${lit:-${reply[1]}}" "${reply[2]}" "${reply[3]}" "${reply[4]}" \
-			"${abs:h}" "$abs"
+			"${abs:h}" "$abs" f
 	done
 }
 

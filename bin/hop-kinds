@@ -4,8 +4,10 @@
 # - HOP_HOME comes from this file's own path so nothing depends on the parent directory.
 #
 # Two subcommands, both pure stdout. NEITHER runs fzf.
-#   hop-kinds menu <root>            rows for the kind menu itself
-#   hop-kinds rows <root> <kind>...  rows for those kinds, the view you switched to
+#   hop-kinds menu <root>                          rows for the kind menu itself
+#   hop-kinds rows <root> [--under=DIR] <kind>...  rows for those kinds, the view you switched to
+#
+# rows goes through _hop_rows, so the view you switch to keeps the MRU order and hop -c's subtree.
 #
 # An earlier version ran a NESTED fzf inside execute(). That is the most terminal-fragile thing
 # fzf can be asked to do, it could not be tested without a real tty, and it was the reported bug.
@@ -22,13 +24,18 @@ typeset mode=${1:-} root=${2:-}
 (( $# >= 2 )) && shift 2
 
 if [[ -z $mode || -z $root ]]; then
-	print -ru2 -- 'hop-kinds: usage: hop-kinds menu <root> | hop-kinds rows <root> <kind>...'
+	print -ru2 -- 'hop-kinds: usage: hop-kinds menu <root> | hop-kinds rows <root> [--under=DIR] <kind>...'
 	exit 2
 fi
 
 if [[ $mode == rows ]]; then
+	typeset under=''
+	if [[ ${1:-} == --under=* ]]; then
+		under=${1#--under=}
+		shift
+	fi
 	(( $# )) || exit 0
-	_hop_generate "$root" "$@"
+	_hop_rows "$root" "$under" "$@"
 	exit 0
 fi
 
