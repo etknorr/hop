@@ -40,6 +40,9 @@ type FZF struct {
 	Bin    string
 	Stderr io.Writer
 	Calls  int
+
+	ver    string
+	verSet bool
 }
 
 // New finds fzf on PATH.
@@ -104,8 +107,15 @@ func Lines(s string) []string {
 
 var verRe = regexp.MustCompile(`^[0-9]+\.[0-9]+(\.[0-9]+)?`)
 
-// Version is _hop_fzf_ver: the leading dotted number of `fzf --version`, or "" when it can't tell.
+// Version is _hop_fzf_ver: the leading dotted number of `fzf --version`, or "" when it can't tell. It forks once per FZF.
 func (f *FZF) Version() string {
+	if !f.verSet {
+		f.ver, f.verSet = f.version(), true
+	}
+	return f.ver
+}
+
+func (f *FZF) version() string {
 	out, err := exec.Command(f.Bin, "--version").Output()
 	if err != nil {
 		return ""

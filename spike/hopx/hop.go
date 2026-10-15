@@ -17,8 +17,10 @@ import (
 	"github.com/etknorr/hop/spike/hopx/internal/kinds"
 	"github.com/etknorr/hop/spike/hopx/internal/match"
 	"github.com/etknorr/hop/spike/hopx/internal/mru"
+	"github.com/etknorr/hop/spike/hopx/internal/pick"
 	"github.com/etknorr/hop/spike/hopx/internal/resolve"
 	"github.com/etknorr/hop/spike/hopx/internal/rows"
+	"github.com/etknorr/hop/spike/hopx/internal/tty"
 	"github.com/etknorr/hop/spike/hopx/internal/workspace"
 )
 
@@ -147,15 +149,6 @@ func gitToplevel() string {
 	return strings.TrimRight(string(out), "\n")
 }
 
-func ttyOK() bool {
-	f, err := os.Open("/dev/tty")
-	if err != nil {
-		return false
-	}
-	f.Close()
-	return true
-}
-
 func renderAll(rs []rows.Row, root string) []string {
 	out := make([]string, len(rs))
 	for i, r := range rs {
@@ -172,39 +165,86 @@ type session struct {
 	mode, jump     string
 }
 
+// level is one picker's targets and what its keys can reach: _hop_run's and _hop_res_pick's arguments.
+// - root is set only on the kinds level, which is what enables the alt-k menu; folder marks workspace and repo rows.
+type level struct {
+	label, root, under string
+	targets            []string
+	kinds, reload      []string
+	folder             bool
+}
+
 func (s *session) resolver(root, under string) *resolve.Resolver {
 	return &resolve.Resolver{Match: s.fzf, Root: root, Action: s.mode, Jump: s.jump, Under: under, Kinds: s.cfg.AllKinds()}
 }
 
-// dispatch is _hop_dispatch for plain Enter; phase 2 carries out cd only.
-func (s *session) dispatch(t resolve.Target) int {
-	if !strings.HasPrefix(t.Dir, "/") {
-		fmt.Fprintln(s.stderr, "hop: not a target directory:", t.Dir)
-		return 1
+func (s *session) actor(folder bool) *act.Actor {
+	set := s.cfg.Settings
+	return &act.Actor{
+		Mode: s.mode, Folder: folder, Code: set.Code, Clipboard: set.Clipboard, Hist: set.HistFile, HistMax: set.HistMax,
+		Stdout: s.stdout, Stderr: s.stderr, Exec: act.ExecEditor, Terminal: act.DefaultTerminal,
 	}
-	if s.mode != "cd" {
-		fmt.Fprintf(s.stderr, "hopx: --action=%s is not built yet (phase 3); the target is %s\n", s.mode, t.Dir)
-		return 2
-	}
-	return act.CD(t.Dir, s.stdout, s.stderr, s.cfg.Settings.HistFile, s.cfg.Settings.HistMax)
 }
 
-// pick is _hop_res_pick without the picker: a jump jumps, and anything else is the headless report.
-func (s *session) pick(res resolve.Result, query string) int {
+// pick is _hop_res_pick then _hop_dispatch: a jump jumps, no terminal reports, and anything else opens fzf.
+// - A resolver pick opens ordered, best rows first, and never with --select-1, so one approximate candidate can't accept itself.
+// - 130 is a cancel and stays silent; hop returns 0 there, the spec's cd protocol says 130.
+func (s *session) pick(res resolve.Result, query string, lv level) int {
+	a := s.actor(lv.folder)
 	if res.Verdict == "jump" {
 		if res.Note != "" {
 			fmt.Fprintln(s.stderr, res.Note)
 		}
-		return s.dispatch(res.Target)
+		t := res.Target
+		return a.Dispatch("", t.Dir, t.Preview, t.Rel)
 	}
-	if ttyOK() {
-		fmt.Fprintln(s.stderr, "hopx: the picker arrives in phase 3, so this reports as if there were no terminal.")
+	if !tty.Available() {
+		accept, rc := resolve.Report(s.stderr, res, query, s.jump)
+		if accept {
+			t := res.Target
+			return a.Dispatch("", t.Dir, t.Preview, t.Rel)
+		}
+		return rc
 	}
-	accept, rc := resolve.Report(s.stderr, res, query, s.jump)
-	if accept {
-		return s.dispatch(res.Target)
+	o := pick.Opts{
+		Self: self(), Label: lv.label, Note: res.Note, Query: res.Query, Height: *s.cfg.Settings.FzfHeight, Reload: lv.reload,
+		Legend: pick.Legend(s.mode, lv.folder, len(lv.reload) > 0, lv.root != ""), Menu: lv.root != "",
 	}
-	return rc
+	if v := s.fzf.Version(); v != "" && !match.Less(v, "0.67.0") {
+		o.FreezeLeft = true
+	}
+	input := lv.targets
+	switch res.Verdict {
+	case "pick":
+		o.Ordered = true
+		input = res.Input(lv.targets)
+	case "empty":
+		o.Select1 = s.jump != "never"
+	}
+	sess := &pick.Session{Root: lv.root, Under: lv.under, Kinds: lv.kinds, All: s.cfg.AllKinds(), Header: o.Header()}
+	out, st, err := pick.Run(s.fzf.Bin, o, sess, input, s.stderr)
+	switch {
+	case err != nil:
+		fmt.Fprintln(s.stderr, "hopx: fzf:", err)
+		return 2
+	case st == 130:
+		return 130
+	case st == 1:
+		if query != "" {
+			fmt.Fprintln(s.stderr, "hop: no match for:", query)
+		} else {
+			fmt.Fprintln(s.stderr, "hop: no match")
+		}
+		return 1
+	case st != 0:
+		fmt.Fprintf(s.stderr, "hop: fzf exited with status %d\n", st)
+		return st
+	}
+	r, ok := pick.Parse(out)
+	if !ok {
+		return 0
+	}
+	return a.Dispatch(r.Key, r.Dir, r.Preview, r.Rel)
 }
 
 func (s *session) repoRows() []string {
@@ -225,11 +265,15 @@ func (s *session) wsLevel(query string, fallback bool) int {
 		if repos := s.repoRows(); len(repos) > 0 {
 			rr := s.resolver("", "").Resolve(query, repos)
 			if rr.Rank() > res.Rank() {
-				return s.pick(rr, query)
+				return s.pick(rr, query, repoLevel(repos))
 			}
 		}
 	}
-	return s.pick(res, query)
+	return s.pick(res, query, level{label: fmt.Sprintf("workspaces  %d", len(targets)), targets: targets, folder: true})
+}
+
+func repoLevel(repos []string) level {
+	return level{label: fmt.Sprintf("repos  %d found", len(repos)), targets: repos, folder: true}
 }
 
 func (s *session) repoLevel(query string) int {
@@ -238,7 +282,7 @@ func (s *session) repoLevel(query string) int {
 		fmt.Fprintln(s.stderr, "hop: not in a git repository, and no repos found (set $HOP_REPOS)")
 		return 1
 	}
-	return s.pick(s.resolver("", "").Resolve(query, repos), query)
+	return s.pick(s.resolver("", "").Resolve(query, repos), query, repoLevel(repos))
 }
 
 // cmdHop is hop() (hop.zsh:439) up to the picker: T0, then enumerate, rank, resolve, and jump or report.
@@ -248,7 +292,7 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		return rc
 	}
 	if o.mode == "-" {
-		fmt.Fprintln(stderr, "hopx: `hopx -` is the shell function's own cd -, so the binary has nothing to do")
+		fmt.Fprintln(stderr, "hopx: `hopx -` is the shell function's own cd -; run `eval \"$(hopx init zsh)\"` or your shell's equivalent")
 		return 2
 	}
 	cfg, err := load(stderr)
@@ -274,7 +318,7 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 	// T0: a typed path is a filesystem fact, so it jumps before fzf or any enumeration is paid for.
 	if !o.wss && !o.repos && len(o.words) == 1 && s.jump != "never" {
 		if t, ok := resolve.Literal(o.words[0], root, pwd); ok {
-			return s.dispatch(t)
+			return s.actor(false).Dispatch("", t.Dir, t.Preview, t.Rel)
 		}
 	}
 
@@ -332,7 +376,10 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 	if err := r.Err(); err != nil {
 		fmt.Fprintln(stderr, "hopx:", err)
 	}
-	return s.pick(res, query)
+	return s.pick(res, query, level{
+		label: fmt.Sprintf("%s  %d targets  %s", filepath.Base(root), len(all), strings.Join(names, ",")),
+		root:  root, under: under, targets: all, kinds: names, reload: cfg.AllKinds(),
+	})
 }
 
 func uniqStrings(ss []string) []string {

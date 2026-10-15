@@ -9,11 +9,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/etknorr/hop/spike/hopx/internal/config"
 	"github.com/etknorr/hop/spike/hopx/internal/importer"
 	"github.com/etknorr/hop/spike/hopx/internal/kinds"
+	"github.com/etknorr/hop/spike/hopx/internal/pick"
 	"github.com/etknorr/hop/spike/hopx/internal/rows"
 	"github.com/etknorr/hop/spike/hopx/internal/workspace"
 )
@@ -25,7 +27,8 @@ const usage = `usage: hopx [-a | -k KINDS] [-c] [-p] [--cd] [-o | -e | --action=
        hopx / | -
        hopx <command> [args]
 
-  hopx [query...]                          resolve the query and jump; with no picker yet, a non-jump is reported
+  hopx [query...]                          jump on a clear match, else pick in fzf; with no terminal, report
+  hopx init zsh|bash|fish|pwsh [--cmd NAME] print the shell function, widget and completion
   hopx rows [-k KINDS] [--root DIR] [-a]   print the rows hop's list would hold, unranked
   hopx rows -w                             workspace rows
   hopx rows -R                             repo rows
@@ -59,16 +62,33 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case errors.Is(err, errNoRows):
 		return 1
 	}
+	var ec exitCode
+	if errors.As(err, &ec) {
+		return int(ec)
+	}
 	fmt.Fprintln(stderr, "hopx:", err)
 	return 1
 }
 
 var errNoRows = errors.New("no rows")
 
+// exitCode is a callback's own status, passed through as it is; 0 is success.
+type exitCode int
+
+func (e exitCode) Error() string { return fmt.Sprintf("exit %d", int(e)) }
+
+func argAt(a []string, i int) string {
+	if i < len(a) {
+		return a[i]
+	}
+	return ""
+}
+
 // subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hopx -- rows`.
 var subcommands = map[string]bool{
-	"-h": true, "--help": true, "help": true, "-V": true, "--version": true,
-	"rows": true, "__rows": true, "__resolve-dump": true, "kinds": true, "config": true,
+	"-h": true, "--help": true, "help": true, "-V": true, "--version": true, "init": true,
+	"rows": true, "kinds": true, "config": true, "__rows": true, "__resolve-dump": true,
+	"__sh": true, "__preview": true, "__menu": true, "__key": true, "__header": true, "__complete": true,
 }
 
 func dispatch(args []string, stdout, stderr io.Writer) error {
@@ -88,6 +108,34 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 		return cmdRowsHidden(args[1:], stdout, stderr)
 	case "__resolve-dump":
 		return cmdResolveDump(args[1:], stdout, stderr)
+	case "init":
+		return cmdInit(args[1:], stdout)
+	case "__sh":
+		if len(args) != 2 {
+			return errUsage
+		}
+		return exitCode(pick.Shim(args[1], func(a []string) int { return run(a, stdout, stderr) }, stdout, stderr))
+	case "__preview":
+		pick.Preview(stdout, argAt(args, 1), argAt(args, 2))
+		return nil
+	case "__menu":
+		return cmdMenu(stdout, stderr)
+	case "__key":
+		s, err := pick.Load()
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(stdout, pick.Key(s, argAt(args, 1), argAt(args, 2)))
+		return err
+	case "__header":
+		s, err := pick.Load()
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(stdout, s.Header)
+		return err
+	case "__complete":
+		return cmdComplete(args[1:], stdout, stderr)
 	case "kinds":
 		return cmdKinds(stdout, stderr)
 	case "config":
@@ -181,8 +229,13 @@ func cmdRows(args []string, stdout, stderr io.Writer) error {
 	return writeRows(stdout, rs, *root)
 }
 
-// cmdRowsHidden is `hopx __rows <root> <kind...>`, the form an fzf reload calls, with no flag parsing.
+// cmdRowsHidden is `hopx __rows`, with no flag parsing, in two forms.
+// - `__rows <root> <kind...>` is the plain enumeration the parity harness compares, unranked.
+// - `__rows [kind...]` inside a picker reads the root and -c dir from the session, and ranks, as _hop_rows does for a reload.
 func cmdRowsHidden(args []string, stdout, stderr io.Writer) error {
+	if os.Getenv("HOPX_SESSION") != "" && (len(args) == 0 || !filepath.IsAbs(args[0])) {
+		return cmdRowsSession(args, stdout, stderr)
+	}
 	if len(args) < 1 || args[0] == "" {
 		return errUsage
 	}
