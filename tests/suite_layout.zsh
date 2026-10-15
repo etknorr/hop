@@ -273,3 +273,18 @@ assert_eq 'we?ird dir sc' "${(j: :)${=REPLY}}" 'the part after the separator lan
 lay_shapes 3 "$LY_OUT"
 rows=(${(f)REPLY})
 assert_eq 1 $#rows "rows drawn at more than one shape: ${(j:; :)rows}"
+
+t 'layout: a dir row added to a tg-only list shows its kind whole, not as d…'
+LY_OUT=$(hop_probe "typeset _hop_gen_raw=1 rows REPLY
+rows=\$(_hop_row tg a prod us-east-1 one /r/one /r/one; _hop_row tg bb - - two /r/two /r/two)
+unset _hop_gen_raw
+_hop_layout \"\$rows\"
+typeset _hop_row_like=\${REPLY%%\$'\\n'*}
+print -r -- \"\$_hop_row_like\"
+_hop_row dir a - - three /r/three /r/three")
+rows=(${(f)LY_OUT})
+lay_plain "${rows[2]}"
+assert_eq 'three dir a - -' "${(j: :)${=REPLY}}"
+lay_shapes 5 "$LY_OUT"
+rows=(${(f)REPLY})
+assert_eq 1 $#rows "the added row is out of line with the list: ${(j:; :)rows}"

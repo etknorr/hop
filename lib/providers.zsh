@@ -23,9 +23,11 @@ typeset -g _HOP_C_ENV=$'\e[35m'
 # - It also makes --tiebreak=begin reward a name-prefix match instead of a kind-prefix match.
 # - Each width below is a cap: a list's column is as wide as its longest value, up to that cap.
 # - The name also has a floor, so a list of short names is not crammed against the kind column.
+# - The kind floor fits dir, file and helm, so a dir row the resolver adds to a tg-only list is not cut to `d…`.
 typeset -g _HOP_W_NAME=56
 typeset -g _HOP_W_NAME_MIN=20
 typeset -g _HOP_W_KIND=5
+typeset -g _HOP_W_KIND_MIN=4
 typeset -g _HOP_W_SCOPE=22
 typeset -g _HOP_W_ENV=9
 typeset -g _HOP_W_REGION=14
@@ -122,6 +124,7 @@ _hop_layout() {
 				n=${#v[1]}
 			fi
 			(( c == 1 && n < _HOP_W_NAME_MIN )) && n=_HOP_W_NAME_MIN
+			(( c == 2 && n < _HOP_W_KIND_MIN )) && n=_HOP_W_KIND_MIN
 		fi
 		(( n )) || continue
 		# A value wider than its column is clipped with an ellipsis, since an overflow shifts every later column.
