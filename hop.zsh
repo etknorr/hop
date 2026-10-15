@@ -64,7 +64,8 @@ _hop_usage() {
 	print -r -- '  hop -k tg,helm      restrict to specific kinds'
 	print -r -- '  hop -c, --cwd       only targets under $PWD, for any kind'
 	print -r -- '  hop -k file x.yml   find a tracked FILE by name (opt-in: it is every file)'
-	print -r -- '  hop file x.yml      the same: a first word naming a kind outside the defaults is -k'
+	print -r -- '  hop file x.yml      the same: a first word naming a kind outside the defaults is -k,'
+	print -r -- '                      when it has targets here and no default target holds the word'
 	print -r -- '  hop -c -k file x    find a file in just this subtree'
 	print -r -- '  hop /   hopr        cd to the repo root'
 	print -r -- '  hop -               cd -'
@@ -673,32 +674,33 @@ hop() {
 		[[ $hdir != "$hroot" ]] && _hop_under=$hdir
 	fi
 
-	# A first word naming a kind outside the active set, which no row this call would match reads, is that kind.
+	# A first word naming a kind outside the active set, which no row here holds as a whole word, is that kind.
 	# - So `hop file x` is `hop -k file x`, while tg vpc, a dir named puppet, and every later word stay plain words.
 	# - It runs before T0, so the rest of the query is what T0 and the resolver see, exactly as after a typed -k.
-	# - The rows are generated only when the word is such a kind, and in a repo they are kept for the resolve below.
+	# - In a repo the word is a kind only when that kind has rows here, and both lists are kept for the resolve below.
+	# - Outside a repo no kind is listed, so it is read only before a path, which it frees for T0 and the other repos.
+	# - -w and -R list no kinds at all, so there it is always a plain word.
 	local _hop_kword='' pre=''
 	local -i pre_st=-1
 	local w1=${(L)words[1]-}
-	if (( ! kgiven && ! all && $#words && ${+commands[fzf]} )) && (( ${_HOP_ALL_KINDS[(Ie)$w1]} && ! ${kinds[(Ie)$w1]} )); then
-		local lrows=''
-		if (( wspick )); then
-			lrows=$(_hop_provider_ws)
-		elif (( repopick )) || [[ -z $root ]]; then
-			# Assigned, because a bare `local REPLY` over the one declared above prints it to stdout.
-			local -a reply=()
-			local REPLY=''
-			(( ! repopick )) && _hop_ws_parse && lrows=$(_hop_provider_ws)
-			_hop_repo_targets && lrows+=$'\n'$REPLY
+	if (( ! kgiven && ! all && ! wspick && ! repopick && $#words && ${+commands[fzf]} )) && (( ${_HOP_ALL_KINDS[(Ie)$w1]} && ! ${kinds[(Ie)$w1]} )); then
+		if [[ -z $root ]]; then
+			(( $#words == 2 )) && [[ ${words[2]} == */* || ${words[2]} == '~'* || ${words[2]} == (.|..) ]] && _hop_kword=$w1
 		else
 			_hop_dbg "generate root=${root} kinds=${(j:,:)${(@u)kinds}}"
 			pre=$(_hop_rows "$root" "$_hop_under" "${(@u)kinds}")
 			pre_st=$?
-			lrows=$pre
+			if _hop_word_unread "${words[1]}" "$pre"; then
+				local krows
+				_hop_dbg "generate root=${root} kinds=${w1}"
+				if krows=$(_hop_rows "$root" "$_hop_under" "$w1") && [[ -n $krows ]]; then
+					_hop_kword=$w1 pre=$krows pre_st=0
+				fi
+			fi
 		fi
-		if _hop_word_unread "${words[1]}" "$lrows"; then
+		if [[ -n $_hop_kword ]]; then
 			print -ru2 -- "hop: reading \"${words[1]}\" as -k ${w1}"
-			kinds=("$w1") words=("${(@)words[2,-1]}") _hop_kword=$w1 pre_st=-1
+			kinds=("$w1") words=("${(@)words[2,-1]}")
 		fi
 	fi
 

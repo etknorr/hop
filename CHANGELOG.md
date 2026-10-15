@@ -8,9 +8,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Added
 
-- A first word that names a kind outside your default set is read as `-k` when no default target matches it.
+- A first word that names a kind outside your default set is read as `-k` when that kind has targets in the repo and no default target holds the word as a whole word.
   `hop file aeraki.yaml` is `hop -k file aeraki.yaml`, and hop says `hop: reading "file" as -k file`.
-  `hop puppet` is unchanged in a repo with a top-level `puppet/` dir, because a default target matches it.
+  `hop puppet` is unchanged in a repo with a top-level `puppet/` dir, because a default target holds it.
+  Outside a repo it's read only before a path, which then reaches the lookup in other repos, and `-w` and `-R` never read it.
   A kind name after the first word is never read as `-k`, and a kind word alone opens the picker on that kind even when it holds one target.
 
 ### Changed

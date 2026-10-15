@@ -1201,13 +1201,11 @@ assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
 assert_contains "$MT_RUN" 'targets matched, and picking one needs a terminal.'
 assert_contains "$MT_RUN" "st=1 PWD=$MT_KW"
 
-t 'kind word: a kind with one row, or one workspace, alone still waits for a pick'
+t 'kind word: a kind with one row alone still waits for a pick'
 MT_RUN=$(mt_kw "$MT_KW" solo)
 assert_contains "$MT_RUN" 'hop: reading "solo" as -k solo'
 assert_contains "$MT_RUN" "st=1 PWD=$MT_KW" 'the one networking row auto-accepted'
 assert_contains "$MT_RUN" 'picking one needs a terminal'
-MT_RUN=$(mt_kw "$MT_KW" '-w file' "HOP_WORKSPACES=strava-ws=$MT_WSH/strava")
-assert_contains "$MT_RUN" "st=1 PWD=$MT_KW" 'the one workspace auto-accepted'
 stub_fzf_select '' 1
 MT_STUB=$REPLY
 mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_KW}; hop solo" "HOP_CONFIG=$MT_KWCFG" >/dev/null
@@ -1240,19 +1238,27 @@ t 'kind word: a kind that is only part of a word some row holds is still read as
 MT_RUN=$(mt_kw "$MT_KW" net)
 assert_contains "$MT_RUN" 'hop: reading "net" as -k net' 'net is inside kubernetes, but no row holds net as a word'
 
+t 'kind word: a kind with no rows in this repo stays a plain word'
+MT_RUN=$(mt_kw "$MT_KW" ghost "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading'
+assert_contains "$MT_RUN" 'nothing matched the query: ghost, so'
+
 t 'kind word: a typed -k whose kind has no rows here still finds a path in another repo'
 MT_RUN=$(mt_kw "$MT_KW" '-k ghost wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/wvlomp/qarnix"
 assert_not_contains "$MT_RUN" 'no targets'
 
-t 'kind word: -w, -R and outside a repo read it exactly as a typed -k, which those levels ignore'
+t 'kind word: -w and -R keep it a plain word, and outside a repo it is read only before a path'
 MT_RUN=$(mt_kw "$MT_WSH" 'file strava' "HOP_WORKSPACES=$MT_WS")
-assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_not_contains "$MT_RUN" 'reading' 'outside a repo no kind is listed, so -k would only drop the word'
 assert_not_contains "$MT_RUN" 'REPLY=' 'a redeclared local printed itself to stdout'
-assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava"
+MT_RUN=$(mt_kw "$MT_WSH" puppet "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_WSH" "file $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'the path reaches the lookup in other repos, as after a typed -k'
 MT_RUN=$(mt_kw "$MT_KW" '-w file strava' "HOP_WORKSPACES=$MT_WS")
-assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
-assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava"
-MT_RUN=$(mt_kw "$MT_KW" '-R file strava/conf' "HOP_WORKSPACES=$MT_WS")
-assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
-assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" '-R file' "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading'
+assert_contains "$MT_RUN" 'nothing matched the query: file, so'

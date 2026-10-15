@@ -675,16 +675,18 @@ stops at the first one that finds something:
 6. **Nothing close**: the picker opens on your query with no rows, ready to edit.
 
 Before any of these, a first word that names a registered kind outside your default set is read
-as `-k` when no default target matches it, not even as a typo fix or a loose match. So with `file`
-not a default kind, `hop file aeraki.yaml` is `hop -k file aeraki.yaml`, and hop prints
-`hop: reading "file" as -k file`. `hop file` alone opens the picker on that kind, even when it
-holds one target. A default kind such as `tg`, a kind name after the first word, and a word some
-default target matches all stay plain words, so `hop puppet` in a repo with a top-level `puppet/`
-still goes to that dir. Nothing is read as `-k` when you pass `-k` or `-a`. With `-w`, `-R` or
-outside a repo it's read the same way, and since those levels ignore `-k`, the word is only
-dropped from the query. When it fires in a repo, the default kinds are listed once to check the
-word, and with no terminal a rest that matches nothing is reported as
-`nothing matched the query: zzqx with -k file`.
+as `-k` when that kind has targets in this repo and no default target holds the word as a whole
+word of its name line or its path. So with `file` not a default kind, `hop file aeraki.yaml` is
+`hop -k file aeraki.yaml`, and hop prints `hop: reading "file" as -k file`. `hop file` alone opens
+the picker on that kind, even when it holds one target. A default kind such as `tg`, a kind name
+after the first word, a kind with no targets here, and a word some default target holds all stay
+plain words, so `hop puppet` in a repo with a top-level `puppet/` still goes to that dir. A kind
+name that's only part of a word, as `conf` is of `aws-config`, doesn't count as held. Nothing is
+read as `-k` when you pass `-k` or `-a`, or under `-w` or `-R`, which list no kinds. Outside a repo
+it's read only before a path, so `hop file terraform/x` from `~` looks the path up in your repos as
+`hop -k file terraform/x` does, while `hop puppet` from `~` stays a workspace query. When it fires
+in a repo, the default kinds are listed once to check the word, and with no terminal a rest that
+matches nothing is reported as `nothing matched the query: zzqx with -k file`.
 
 #### Jump rules
 
