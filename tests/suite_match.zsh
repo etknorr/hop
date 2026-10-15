@@ -107,7 +107,7 @@ for q in \
 	terraform/acct-security-tooling-prod/env-prod/us-east-1/vpc kubernetes/services/monitoring/grafana.yaml \
 	./sandbox/abg terraform/nope/x acct-security-tooling-prod/env-prod curity-tooling-prod/env-pr \
 	security-tooling-prod Security-Tooling-Prod security_tooling_prod 'acct sec prod' terraform/account-security \
-	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr kps kpstack kubeprom \
+	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
 	'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
 	"${MT_NONSENSE[@]}"; do
@@ -271,6 +271,9 @@ for w in routemaxter rotuemaster routemastr; do
 	mt_get "$w"
 	assert_eq routemaster "${reply[15]}" 'typo first, abbreviation only when there is no typo fix'
 done
+mt_jump 'jump T2a single' "$IP/routemaster/" routemaster-prod
+mt_get routemaster-prod
+assert_eq 'routemaster prod' "${reply[15]}" 'a word the rows already hold is never abbreviated, so raster-catalogue is not offered'
 for w in kps kpstack kubeprom; do
 	mt_pick T3 2 kubernetes/values/kube-prometheus-stack/ "$w"
 done

@@ -163,12 +163,30 @@ _hop_vocab_build() {
 	_hop_segs=(${_hop_segs:#(|?|??)})
 }
 
-# _hop_rewrite <query> -> 0 with reply=(approx effq), the query rewritten into fzf OR groups (T2).
+# _hop_abbrevs <word> -> reply is every vocabulary word the word abbreviates to, letters in order: account -> acct.
+# - From 6 chars, and the short form has to be at least half the word and not merely a prefix of it.
+_hop_abbrevs() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local w=$1 v pat
+	reply=()
+	(( ${#w} >= 6 )) || return 1
+	for v in ${(M)_hop_vocab:#${w[1]}*}; do
+		(( ${#v} >= 3 && ${#v} < ${#w} && ${#v} * 2 >= ${#w} )) || continue
+		pat="${(j:*:)${(@b)${(s::)v}}}*"
+		[[ $w == ${~pat} && $w != "$v"* ]] && reply+=("$v")
+	done
+	(( $#reply ))
+}
+
+# _hop_rewrite <query> [wide] -> 0 with reply=(approx effq), the query rewritten into fzf OR groups (T2).
 # - Every token is split out on whitespace and / - _ . and kept as-is when some vocabulary word contains it.
 # - A token no word contains gets typo fixes: zsh's approximate glob, 1 error, or 2 from 8 chars, transposition counted once.
-# - From 6 chars, and only when there was no typo fix, a word the token abbreviates is offered too.
+# - A token with neither gets the words it abbreviates to; see _hop_abbrevs.
 # - Typo before abbreviation, and a word the token merely starts with is refused, fixed `rotuemaster`.
 # - That had read as roster|raster, and `routemastr` as route.
+# - Only wide abbreviates a token some word already contains, so `routemaster-prod` stays T2a instead of gaining raster.
+# - _hop_resolve asks for wide only when the narrow rewrite matched nothing, which is what keeps `account -> acct`.
 # - A token nothing explains fails the whole rewrite, so a nonsense word is never invented into a match.
 # - approx is 0 when every token survived unchanged, which is T2a: a separator or case change only.
 _hop_rewrite() {
@@ -176,27 +194,26 @@ _hop_rewrite() {
 	setopt local_options extended_glob
 	local IFS=' '
 	local q=${(L)1}
+	local -i wide=${2:-0}
 	local -a toks=(${=${q//[\/_.-]/ }}) groups alts typo
-	local tok v pat
-	local -i n approx=0
+	local tok
+	local -i n approx=0 exact
 	for tok in "${toks[@]}"; do
 		if (( ${#tok} < 3 )); then
 			groups+=("$tok")
 			continue
 		fi
-		alts=() typo=()
-		(( ${_hop_vocab[(I)*${(b)tok}*]} )) && alts+=("$tok")
-		if (( ! $#alts && ${#tok} >= 4 )); then
+		alts=() typo=() exact=0
+		if (( ${_hop_vocab[(I)*${(b)tok}*]} )); then
+			exact=1
+			alts+=("$tok")
+		elif (( ${#tok} >= 4 )); then
 			n=$(( ${#tok} >= 8 ? 2 : 1 ))
 			typo=(${(M)_hop_vocab:#(#a${n})${tok}})
 			alts+=("${typo[@]}")
 		fi
-		if (( ! $#typo && ${#tok} >= 6 )); then
-			for v in ${(M)_hop_vocab:#${tok[1]}*}; do
-				(( ${#v} >= 3 && ${#v} < ${#tok} && ${#v} * 2 >= ${#tok} )) || continue
-				pat="${(j:*:)${(@b)${(s::)v}}}*"
-				[[ $tok == ${~pat} && $tok != "$v"* ]] && alts+=("$v")
-			done
+		if (( ! $#typo && ( ! exact || wide ) )); then
+			_hop_abbrevs "$tok" && alts+=("${reply[@]}")
 		fi
 		alts=("${(@u)alts}")
 		(( $#alts )) || return 1
@@ -554,21 +571,23 @@ _hop_resolve() {
 	_hop_rels_of "${all[@]}"
 	_hop_vocab_build "${reply[@]}"
 
-	local eq
-	local -i approx
-	if _hop_rewrite "$q"; then
+	local eq tried=''
+	local -i approx wide
+	for wide in 0 1; do
+		_hop_rewrite "$q" "$wide" || continue
 		approx=${reply[1]} eq=${reply[2]}
-		if _hop_match "$eq" "$rows"; then
-			if (( approx )); then
-				_hop_decide T2 "$eq" 1 "${reply[@]}"
-				_hop_res_note="no exact match for: ${q} (showing: ${eq})"
-			else
-				_hop_decide T2a "$eq" 0 "${reply[@]}"
-			fi
-			_hop_resolve_log "$q" "$t0"
-			return 0
+		[[ $eq != "$tried" ]] || continue
+		tried=$eq
+		_hop_match "$eq" "$rows" || continue
+		if (( approx )); then
+			_hop_decide T2 "$eq" 1 "${reply[@]}"
+			_hop_res_note="no exact match for: ${q} (showing: ${eq})"
+		else
+			_hop_decide T2a "$eq" 0 "${reply[@]}"
 		fi
-	fi
+		_hop_resolve_log "$q" "$t0"
+		return 0
+	done
 	if _hop_loose "$q"; then
 		eq=$REPLY
 		if _hop_match "$eq" "$rows"; then
@@ -586,6 +605,7 @@ _hop_resolve() {
 		for t in "${terms[@]}"; do
 			if _hop_match "$t" "$rows" \
 				|| { _hop_rewrite "$t" && _hop_match "${reply[2]}" "$rows" } \
+				|| { _hop_rewrite "$t" 1 && _hop_match "${reply[2]}" "$rows" } \
 				|| { _hop_loose "$t" && _hop_match "$REPLY" "$rows" }; then
 				keep+=("$t")
 			else
@@ -595,7 +615,8 @@ _hop_resolve() {
 		if (( $#keep && $#drop )); then
 			eq="${(j: :)keep}"
 			if _hop_match "$eq" "$rows" \
-				|| { _hop_rewrite "$eq" && eq=${reply[2]} && _hop_match "$eq" "$rows" }; then
+				|| { _hop_rewrite "$eq" && eq=${reply[2]} && _hop_match "$eq" "$rows" } \
+				|| { _hop_rewrite "${(j: :)keep}" 1 && eq=${reply[2]} && _hop_match "$eq" "$rows" }; then
 				_hop_decide relaxed "$eq" 1 "${reply[@]}"
 				_hop_res_note="ignored: ${(j: :)drop}"
 				_hop_resolve_log "$q" "$t0"

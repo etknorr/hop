@@ -436,6 +436,7 @@ stub_fzf_select() {
 # - The staging account has no eks, so `eks security` stays the one-row jump it is in the real repo.
 # - cross_account_iam/roles is a real unit, and it is what puts `account` in the T2 vocabulary.
 # - The depth-1 cross_account_iam/terragrunt.hcl beside it is a shared include, which neither layout matches.
+# - raster-catalogue is a word `routemaster` abbreviates, letters in order, so it tempts T2 into an alternative.
 # - acct-l[a]b*# holds pattern characters, which a zsh pattern built from a typed term once failed to match.
 match_fixture() {
 	emulate -L zsh
@@ -463,6 +464,7 @@ match_fixture() {
 	fixture_write 'terraform/acct-data-platform-prod/env-prod/us-east-1/vpc/terragrunt.hcl' 'include {}' || return 1
 	fixture_write 'terraform/acct-trust-safety-restricted-prod/env-prod/us-east-1/restricted-storage/terragrunt.hcl' 'include {}' || return 1
 	fixture_write 'terraform/acct-l[a]b*#/env-prod/us-east-1/widget/terragrunt.hcl' 'include {}' || return 1
+	fixture_write 'terraform/acct-map-platform-prod/env-prod/us-east-1/raster-catalogue/terragrunt.hcl' 'include {}' || return 1
 	fixture_write 'terraform/cross_account_iam/terragrunt.hcl' 'locals {}' || return 1
 	fixture_write 'terraform/cross_account_iam/roles/terragrunt.hcl' 'include {}' || return 1
 	fixture_write 'terraform/modules/aws/aws-config/main.tf' 'variable "x" {}' || return 1
