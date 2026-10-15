@@ -189,21 +189,24 @@ t '? toggles the keys overlay, reading its own state from FZF_PREVIEW_LABEL'
 assert_eq 'transform:if [ -n "$FZF_PREVIEW_LABEL" ]; then printf %s "$HOP_VIM_HELP_OFF"; else printf %s "$HOP_VIM_HELP_ON"; fi' \
 	"$(_km_bind_action "$KM_FULL" '?')"
 
-t 'esc resolves from FZF_PROMPT and FZF_INPUT_STATE, never a file'
+t 'esc resolves from FZF_PROMPT and FZF_QUERY, never a file'
 typeset esc_bind
 esc_bind=$(_km_bind_action "$KM_FULL" esc)
-assert_eq 'clear-query+search()+transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; *) if [ "$FZF_INPUT_STATE" = disabled ]; then printf abort; else printf %s "$HOP_VIM_TO_NORMAL"; fi ;; esac' \
+assert_eq 'transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; "/ "*) printf %s "$HOP_VIM_TO_NORMAL" ;; *) if [ -n "$FZF_QUERY" ]; then printf clear-query; else printf abort; fi ;; esac' \
 	"$esc_bind"
 
 # Named separately from the equality above, so a regression says WHICH property broke.
-t 'esc re-matches from a STATIC prefix, because fzf ignores search() from a transform'
-assert_eq 'clear-query+search()+' "${esc_bind%%transform:*}" 'clear-query then search() must run BEFORE the transform, statically'
-assert_not_contains "${esc_bind#*transform:}" 'search()' 'a search() inside the transform body is silently ignored by fzf'
+# - A query kept in NORMAL is only re-matched after esc's clear-query while search is on.
+# - disable-search in HOP_VIM_TO_NORMAL is the edit that brings the dead empty list back.
+t 'esc back to NORMAL keeps search on, so a cleared query re-filters'
+assert_not_contains "$(_km_dump_get "$KM_FULL" 'KM_TO_NORMAL=')" 'disable-search' 'NORMAL must keep filtering on its kept query'
+assert_not_contains "$esc_bind" 'search()' 'search() is not needed while search stays on'
 
 t '/ switches to SEARCH: unbinds the vim keys, enables search, re-prompts'
 typeset slash
 slash=$(_km_bind_action "$KM_FULL" /)
 assert_contains "$slash" 'enable-search'
+assert_contains "$slash" 'end-of-line'
 assert_contains "$slash" 'change-prompt(/ )'
 assert_contains "$slash" 'unbind('
 
@@ -211,6 +214,7 @@ t ': switches to the kind menu in place, reloading from hop-kinds'
 typeset colon
 colon=$(_km_bind_action "$KM_FULL" :)
 assert_contains "$colon" 'change-prompt(: )'
+assert_eq 'clear-query+' "${colon%%change-prompt*}" 'a query kept from SEARCH would filter the kind list'
 assert_contains "$colon" 'reload('
 assert_contains "$colon" '/some/root'
 
@@ -760,9 +764,8 @@ _km_transform_probe() {
 		_hop_pick "label" "header" "" "reloadcmd" "/some/root" "1" "restorecmd" "1"
 		local esc_body enter_body help_body a
 		for a in "${KM_CAPTURED[@]}"; do
-			# Strip UP TO transform:, never from position 0: esc carries static actions in front of it.
-			# - esc is clear-query+search()+transform:..., because fzf ignores search() from a transform.
-			# - Assuming position 0 left every esc body EMPTY, and an empty body still passed 3 tests.
+			# Strip UP TO transform:, never from position 0, in case a static action is ever chained in front.
+			# - esc once carried one, and assuming position 0 then left every esc body EMPTY yet still passing.
 			case $a in
 				--bind=esc:*transform:*) esc_body=${a#*transform:} ;;
 				--bind=enter:*transform:*) enter_body=${a#*transform:} ;;
@@ -772,9 +775,11 @@ _km_transform_probe() {
 		export HOP_VIM_TO_NORMAL=$KM_TO_NORMAL HOP_VIM_MENU_BACK=$KM_MENU_BACK
 		export HOP_VIM_PICK_KIND=$KM_PICK_KIND HOP_VIM_HELP_ON=$KM_HELP_ON HOP_VIM_HELP_OFF=$KM_HELP_OFF
 		local -a out=()
-		out+=("ESC_MENU=$(FZF_PROMPT=": " FZF_INPUT_STATE=disabled sh -c "$esc_body")")
-		out+=("ESC_SEARCH=$(FZF_PROMPT="/ " FZF_INPUT_STATE=enabled sh -c "$esc_body")")
-		out+=("ESC_NORMAL=$(FZF_PROMPT="> " FZF_INPUT_STATE=disabled sh -c "$esc_body")")
+		out+=("ESC_MENU=$(FZF_PROMPT=": " FZF_QUERY="" sh -c "$esc_body")")
+		out+=("ESC_SEARCH=$(FZF_PROMPT="/ " FZF_QUERY="vpc" sh -c "$esc_body")")
+		out+=("ESC_SEARCH_EMPTY=$(FZF_PROMPT="/ " FZF_QUERY="" sh -c "$esc_body")")
+		out+=("ESC_NORMAL_QUERY=$(FZF_PROMPT="> " FZF_QUERY="vpc" sh -c "$esc_body")")
+		out+=("ESC_NORMAL=$(FZF_PROMPT="> " FZF_QUERY="" sh -c "$esc_body")")
 		out+=("ENTER_MENU=$(FZF_PROMPT=": " sh -c "$enter_body")")
 		out+=("ENTER_NORMAL=$(FZF_PROMPT="> " sh -c "$enter_body")")
 		out+=("HELP_ON=$(FZF_PREVIEW_LABEL="" sh -c "$help_body")")
@@ -816,11 +821,18 @@ t 'esc in the kind menu goes back to the view you came from'
 assert_nonempty "$(_km_dump_get "$KM_TF" 'EXPECT_MENU_BACK=')" 'HOP_VIM_MENU_BACK is empty, so this comparison proves nothing'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_MENU_BACK=')" "$(_km_dump_get "$KM_TF" 'ESC_MENU=')"
 
-t 'esc in SEARCH (input enabled) returns to NORMAL and drops the filter'
+t 'esc in SEARCH returns to NORMAL with the query kept'
 assert_nonempty "$(_km_dump_get "$KM_TF" 'EXPECT_TO_NORMAL=')" 'HOP_VIM_TO_NORMAL is empty, so this comparison proves nothing'
 assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_TO_NORMAL=')" "$(_km_dump_get "$KM_TF" 'ESC_SEARCH=')"
+assert_not_contains "$(_km_dump_get "$KM_TF" 'ESC_SEARCH=')" 'clear-query' 'esc out of SEARCH must keep the query'
 
-t 'esc in NORMAL (input disabled) quits'
+t 'esc in SEARCH on an empty query still returns to NORMAL rather than quitting'
+assert_eq "$(_km_dump_get "$KM_TF" 'EXPECT_TO_NORMAL=')" "$(_km_dump_get "$KM_TF" 'ESC_SEARCH_EMPTY=')"
+
+t 'esc in NORMAL with a query clears it and stays in NORMAL'
+assert_eq 'clear-query' "$(_km_dump_get "$KM_TF" 'ESC_NORMAL_QUERY=')"
+
+t 'esc in NORMAL with no query quits'
 assert_eq 'abort' "$(_km_dump_get "$KM_TF" 'ESC_NORMAL=')"
 
 t 'enter in the kind menu switches to the picked kind'

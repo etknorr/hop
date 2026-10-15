@@ -57,7 +57,7 @@ if [[ $dir == '--keys' ]]; then
 
 	print -r -- "${HDR}hop keys${OFF}"
 	print -r -- "${RULE}──────────────────────────────────────────${OFF}"
-	print -r -- "${HDR}NORMAL${OFF}${SUB}  (search off, letters are verbs)${OFF}"
+	print -r -- "${HDR}NORMAL${OFF}${SUB}  (letters are verbs)${OFF}"
 	print -rl -- \
 		"  ${KEY}j${OFF} / ${KEY}k${OFF}          down / up" \
 		"  ${KEY}g${OFF} / ${KEY}G${OFF}          first / last row" \
@@ -84,11 +84,12 @@ if [[ $dir == '--keys' ]]; then
 	hop_live ':' && print -r -- "  ${KEY}:${OFF}              switch view, enter picks, esc back"
 	print -rl -- \
 		"  ${KEY}?${OFF}              this help" \
-		"  ${KEY}q${OFF} / ${KEY}esc${OFF}        quit"
+		"  ${KEY}esc${OFF}            clear the query, else quit" \
+		"  ${KEY}q${OFF}              quit"
 	print -r -- ''
 	print -r -- "${HDR}SEARCH${OFF}${SUB}  (every key types)${OFF}"
 	print -rl -- \
-		"  ${KEY}esc${OFF}            back to NORMAL, clears query" \
+		"  ${KEY}esc${OFF}            back to NORMAL, keeps query" \
 		"  ${KEY}enter${OFF}          ${enter_says}"
 	[[ $enter == cd ]] || print -r -- "  ${KEY}M-enter${OFF}        cd to the dir"
 	print -rl -- \

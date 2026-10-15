@@ -18,8 +18,8 @@ if ! pty_supported; then
 	skip 'pty: o on a dir-preview row opens a new window, never code -r' 'zsh/zpty is not available'
 	skip 'pty: enter cds to the focused row' 'zsh/zpty is not available'
 	skip 'pty: / enters SEARCH and letters type' 'zsh/zpty is not available'
-	skip 'pty: esc returns to NORMAL and clears the query' 'zsh/zpty is not available'
-	skip 'pty: j moves again after the SEARCH round trip' 'zsh/zpty is not available'
+	skip 'pty: esc returns to NORMAL and keeps the filter' 'zsh/zpty is not available'
+	skip 'pty: a query matching nothing survives two escs' 'zsh/zpty is not available'
 	skip 'pty: the : view menu comes back with esc' 'zsh/zpty is not available'
 	return 0
 fi
@@ -37,8 +37,8 @@ if (( ! PTY_OK )) && [[ -z ${CI:-} ]]; then
 	skip 'pty: o on a dir-preview row opens a new window, never code -r' 'no pty capability on this machine'
 	skip 'pty: enter cds to the focused row' 'no pty capability on this machine'
 	skip 'pty: / enters SEARCH and letters type' 'no pty capability on this machine'
-	skip 'pty: esc returns to NORMAL and clears the query' 'no pty capability on this machine'
-	skip 'pty: j moves again after the SEARCH round trip' 'no pty capability on this machine'
+	skip 'pty: esc returns to NORMAL and keeps the filter' 'no pty capability on this machine'
+	skip 'pty: a query matching nothing survives two escs' 'no pty capability on this machine'
 	skip 'pty: the : view menu comes back with esc' 'no pty capability on this machine'
 	return 0
 fi
@@ -153,17 +153,20 @@ pty_close
 # ---------------------------------------------------------------------------
 # 6. The mode boundary, back.
 # ---------------------------------------------------------------------------
-# esc has three meanings, resolved inside fzf from $FZF_PROMPT and $FZF_INPUT_STATE alone.
-# - Getting NORMAL's state back is what makes the NEXT esc quit instead of looping here.
-t 'pty: esc returns to NORMAL and clears the query'
+# esc out of SEARCH keeps the query, so NORMAL walks the filtered rows rather than the whole list.
+# - `a/` matches alpha and delta only, so a count of 2 is the filter still applying in NORMAL.
+# - The prompt change fires no fzf event, so j is what makes the trace report the NORMAL state.
+t 'pty: esc returns to NORMAL and keeps the filter'
 if pty_open 'hop -k tg'; then
 	pty_key_ev '/'
-	pty_key_ev b
-	pty_key_ev r
-	pty_key_ev esc
+	pty_key_ev a
+	pty_key_ev '/'
+	pty_key esc
+	pty_key_ev j
 	assert_eq '> ' "$(pty_get prompt)" 'esc did not restore the NORMAL prompt'
-	assert_eq '' "$(pty_get query)" 'esc left the query in place'
-	assert_eq 'disabled' "$(pty_get state)" 'esc left filtering on, so the next esc would not quit'
+	assert_eq 'a/' "$(pty_get query)" 'esc dropped the query instead of keeping it'
+	assert_eq '2' "$(pty_get count)" 'NORMAL stopped filtering on the kept query'
+	assert_eq '2' "$(pty_get pos)" 'j did not move within the filtered rows'
 	assert_empty "$(pty_pwd)" 'esc quit the picker instead of returning to NORMAL'
 else
 	_hop_t_bad 'pty_open: the picker never reported ready' "$(pty_err)"
@@ -174,20 +177,26 @@ pty_close
 # 7. The unbind/rebind round trip, and the regression that once made it worthless.
 # ---------------------------------------------------------------------------
 # `zzz` matches nothing ON PURPOSE, because that is the case that used to leave a DEAD list.
-# - disable-search stops future matching but never re-filters, so clear-query had no effect.
-# - The match set stayed frozen empty, every navigation key did nothing, and o accepted nothing.
-# - `search()` after `clear-query` forces the re-filter, and that ordering is load-bearing.
+# - NORMAL used to be search-off, and a cleared query was never re-matched, so the list froze empty.
+# - Search now stays on in NORMAL, so the second esc's clear-query re-filters by itself.
+# - r is a reload, which fires the result event the bare prompt change does not.
 # - The non-empty accepted path is the assertion the original bug report turned on.
-t 'pty: j moves again after the SEARCH round trip'
+t 'pty: a query matching nothing survives two escs'
 if pty_open 'hop -k tg'; then
 	pty_key_ev '/'
 	pty_key_ev z
 	pty_key_ev z
 	pty_key_ev z
-	pty_key_ev esc
+	pty_key esc
+	pty_key_ev r
 	assert_eq '> ' "$(pty_get prompt)" 'esc did not restore the NORMAL prompt'
-	assert_eq '' "$(pty_get query)" 'esc left the query in place'
+	assert_eq 'zzz' "$(pty_get query)" 'the first esc dropped the query'
+	assert_eq '0' "$(pty_get count R)" 'NORMAL should show the empty filtered list'
+	pty_key_ev esc
+	assert_eq '> ' "$(pty_get prompt)" 'the second esc left NORMAL'
+	assert_eq '' "$(pty_get query)" 'the second esc left the query in place'
 	assert_eq '4' "$(pty_get count R)" 'the match set stayed frozen: NORMAL got a dead list'
+	assert_empty "$(pty_pwd)" 'the second esc quit instead of clearing the query'
 	assert_eq '1' "$(pty_get pos)" 'the round trip did not leave the cursor on row 1'
 	pty_key_ev j
 	assert_eq '2' "$(pty_get pos)" 'j typed instead of moving: the rebind did not restore it'
