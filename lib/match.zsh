@@ -4,6 +4,8 @@
 # - "Clear enough to jump" is structural, never a score: fzf exposes no scores, and a margin made real false jumps.
 # - Only T0, T1 and T2a (a rewrite of separators or case alone) may jump; every approximate tier opens the picker.
 # - fzf stays the only matcher, through _hop_filter, so the picker and this file agree on every row.
+# - A plain ${t} in a pattern is already literal here, so (b) belongs only where the text is re-parsed: subscripts and ${~...}.
+# - Elsewhere (b) adds real backslashes, and a name holding [ * # or ? then never matched.
 
 # Above this many rows T2 and T3 are skipped, because the vocabulary pass grows with the row count.
 # - Measured: T2 took 177ms at 6041 rows, against a 100ms budget.
@@ -184,11 +186,11 @@ _hop_rewrite() {
 		(( ${_hop_vocab[(I)*${(b)tok}*]} )) && alts+=("$tok")
 		if (( ! $#alts && ${#tok} >= 4 )); then
 			n=$(( ${#tok} >= 8 ? 2 : 1 ))
-			typo=(${(M)_hop_vocab:#(#a${n})${(b)tok}})
+			typo=(${(M)_hop_vocab:#(#a${n})${tok}})
 			alts+=("${typo[@]}")
 		fi
 		if (( ! $#typo && ${#tok} >= 6 )); then
-			for v in ${(M)_hop_vocab:#${(b)tok[1]}*}; do
+			for v in ${(M)_hop_vocab:#${tok[1]}*}; do
 				(( ${#v} >= 3 && ${#v} < ${#tok} && ${#v} * 2 >= ${#tok} )) || continue
 				pat="${(j:*:)${(@b)${(s::)v}}}*"
 				[[ $tok == ${~pat} && $tok != "$v"* ]] && alts+=("$v")
@@ -280,7 +282,7 @@ _hop_ancestors() {
 	done
 	anc=(${(u)anc})
 	anc=(${anc:|have})
-	[[ -n $under ]] && anc=(${(M)anc:#${(b)under}/*})
+	[[ -n $under ]] && anc=(${(M)anc:#${under}/*})
 	reply=("${anc[@]}")
 }
 
@@ -295,8 +297,8 @@ _hop_aligned() {
 	local -i last=0
 	for t in "$@"; do
 		t=${${t#/}%/}
-		[[ $x == *[/_.-]${(b)t}[/_.-]* ]] || return 1
-		[[ $x == *[/_.-]${(b)t}/ ]] && last=1
+		[[ $x == *[/_.-]${t}[/_.-]* ]] || return 1
+		[[ $x == *[/_.-]${t}/ ]] && last=1
 	done
 	(( last ))
 }
@@ -341,7 +343,7 @@ _hop_coherence() {
 			c=0
 			for p in "${pats[@]}"; do
 				for a in "${(@s:|:)p}"; do
-					if [[ $seg == *${(b)a}* ]]; then
+					if [[ $seg == *${a}* ]]; then
 						(( c++ ))
 						break
 					fi
@@ -469,7 +471,7 @@ _hop_decide_jump() {
 	(( $#X == 1 && ! opq )) && [[ -n $root ]] || return 0
 	# An intermediate array, because inside (( )) a nested ${...:#pat} is joined, so ${#...} counted characters.
 	local -a outside=("${srels[@]}" "${R[@]}")
-	outside=(${outside:#${(b)X[1]}*})
+	outside=(${outside:#${X[1]}*})
 	(( $#outside == 0 )) || return 0
 	local IFS=$' \t'
 	local -a terms=(${=${(L)eq}})

@@ -125,6 +125,8 @@ mt_case terraform/acct-security-tooling-prod . cd never
 mt_case vpc terraform/acct-infrastructure cd auto c
 mt_case infrastructure terraform/acct-infrastructure/env-prod cd auto c
 mt_case infrastructure terraform/acct-infrastructure/env-prod
+mt_case 'acct-l[a]b*#/env-prod'
+mt_case env-prod 'terraform/acct-l[a]b*#' cd auto c
 
 print -rl -- "${MT_CASES[@]}" > "$MT_WORK/cases"
 export MT_REPO MT_WORK
@@ -333,6 +335,12 @@ done
 mt_get infrastructure terraform/acct-infrastructure/env-prod
 MT_C=("${(@s:,:)reply[14]}")
 assert_ne 0 ${MT_C[(Ie)terraform/acct-infrastructure/]} "the control: without -c the account dir above \$PWD is offered: ${(j:, :)MT_C}"
+
+# A typed term holding [ ] * # is still literal text, both in the J2 tests and in the -c ancestor filter.
+mt_jump 'jump T1 dir' 'terraform/acct-l[a]b*#/env-prod/' 'acct-l[a]b*#/env-prod'
+mt_jump 'jump T1 dir' 'terraform/acct-l[a]b*#/env-prod/' env-prod 'terraform/acct-l[a]b*#' cd auto c
+mt_get env-prod 'terraform/acct-l[a]b*#' cd auto c
+assert_eq 1 "${reply[13]}" 'the env dir under a -c dir named with [ ] * # is the injected ancestor'
 
 t '_hop_ancestors walks every strict ancestor, drops dirs already matched, and honours the -c subtree'
 assert_eq 'k t/a|t/a' "$(hop_probe '
