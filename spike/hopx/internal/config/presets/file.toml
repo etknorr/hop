@@ -1,0 +1,5 @@
+# Opt-in on purpose: a large repo tracks tens of thousands of files.
+[[kind]]
+name = "file"
+desc = "every tracked file"
+files = ["**"]

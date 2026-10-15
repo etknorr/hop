@@ -1,0 +1,5 @@
+[[kind]]
+name = "puppet"
+desc = "puppet modules"
+dirs = ["modules"]
+preview = ["README.md", "README", "CLAUDE.md"]

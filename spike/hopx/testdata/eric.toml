@@ -1,0 +1,32 @@
+# hopx config, imported from ~/.config/hop/config.zsh by `hopx config import`.
+version = 1
+presets = ['terragrunt', 'terraform-modules', 'helm', 'serverless', 'puppet', 'backstage', 'dir', 'file']
+
+[[kind]]
+name = 'tg'
+extend = true
+trim = { scope = 'acct-', env = 'env-' }
+
+[[kind]]
+name = 'mesos'
+desc = 'mesos services'
+default = true
+dirs = ['mesos/services']
+scope = '-'
+preview = ['service.conf', 'conf/base.conf', 'conf/service-base.conf', 'playbook/*.md', 'dashboards/*']
+
+[[kind]]
+name = 'conf'
+desc = 'per-role conf files'
+files = ['mesos/services/*/conf/*/*.conf']
+under = 'mesos/services'
+layout = ['scope,-,name,env']
+strip_ext = true
+
+[[kind]]
+name = 'rules'
+desc = 'prometheus rules'
+files = ['kubernetes/charts/service-rules/*/*/rules.yaml']
+under = 'kubernetes/charts/service-rules'
+layout = ['scope,env,-']
+name_template = '{scope}/{env}'

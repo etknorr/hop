@@ -1,0 +1,81 @@
+# hopx config, imported from @TESTDATA@/fixture.zsh by `hopx config import`.
+version = 1
+presets = ['dir', 'file', 'helm', 'backstage']
+
+[[kind]]
+name = 'tg'
+desc = 'units'
+default = true
+marker = 'terragrunt.hcl'
+under = 'infra'
+layout = ['scope,env,region,name...', 'scope,name...']
+trim = { scope = ['acct-', 'a'], env = 'env-' }
+preview = ['main.tf', '*.tf', 'terragrunt.hcl']
+preview_skip = ['provider_*.tf']
+
+[[kind]]
+name = 'tgx'
+desc = 'excl'
+marker = 'terragrunt.hcl'
+layout = ['scope,name...']
+name_template = '{scope}:{env}:{name}'
+exclude = ['*/shared/*', 'infra/acct-b*']
+
+[[kind]]
+name = 'tgroot'
+desc = 'no layout, no under'
+marker = 'terragrunt.hcl'
+
+[[kind]]
+name = 'tie'
+desc = 'equal width'
+marker = 'terragrunt.hcl'
+under = 'infra'
+layout = ['scope,env', 'scope,name...']
+
+[[kind]]
+name = 'svc'
+desc = 'dirs'
+dirs = ['svc', 'nope']
+preview = ['README.md', '**/*.md', 'f']
+
+[[kind]]
+name = 'svc2'
+desc = 'depth2'
+dirs = ['svc']
+depth = 2
+scope = 'LIT'
+
+[[kind]]
+name = 'cfg'
+desc = 'files'
+files = ['cfg/*/conf/*/*']
+under = 'cfg'
+layout = ['scope,-,name,env']
+strip_ext = true
+
+[[kind]]
+name = 'cfgnl'
+desc = 'files, no layout'
+files = ['cfg/**']
+trim = { name = 'p' }
+name_template = '{scope}!'
+strip_ext = true
+
+[[kind]]
+name = 'ents'
+desc = 'entities'
+files = ['ents/*']
+name_from = 'yaml:metadata.name'
+scope = 'E'
+
+[[kind]]
+name = 'odd'
+desc = 'odd names'
+files = ['odd/**', '[.]rootdot']
+exclude = ['odd/skip*']
+
+[[kind]]
+name = 'fx'
+desc = 'a user provider'
+exec = ['zsh', '-fc', 'source "$HOPX_COMPAT" && source "$1" && "$2" "$HOP_ROOT"', 'hopx-compat', '@TESTDATA@/fixture.zsh', '_hop_provider_fx']
