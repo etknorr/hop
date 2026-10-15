@@ -559,10 +559,19 @@ _hop_decide_jump() {
 		fi
 	fi
 	# J3: whatever the display-only matcher hop shipped with jumped to, it still jumps to.
+	# - Unless another match has a clipped column: its display only hid the words, so one display hit is not one target.
+	# - `security vpc` had jumped into the prod vpc, because the staging scope showed as …urity-tooling-staging.
 	if _hop_match "$eq" "${(F)M}" --nth=1 && (( $#reply == 1 )); then
-		_hop_res_fields "${reply[1]}"
-		_hop_res_verdict=jump _hop_res_rule=display _hop_res_target=${(pj:\t:)reply}
-		return 0
+		local hit=${reply[1]} m
+		local -i clipped=0
+		for m in "${M[@]}"; do
+			[[ $m != "$hit" && ${m%%$'\t'*} == *…* ]] && clipped=1
+		done
+		if (( ! clipped )); then
+			_hop_res_fields "$hit"
+			_hop_res_verdict=jump _hop_res_rule=display _hop_res_target=${(pj:\t:)reply}
+			return 0
+		fi
 	fi
 	[[ $jump == unique ]] && return 0
 

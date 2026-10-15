@@ -6,6 +6,7 @@
 # - Sets: names, pref3, scope+env, name+env and nonsense; no argument runs all five.
 # - Every query is decided twice: by the matcher hop 0.1.2 shipped, and by T0 then _hop_resolve as hop() runs them.
 # - It fails on a jump that today's matcher makes and the resolver now picks for, or sends somewhere else.
+# - Except a clipped one: today's single display hit is lost because another match's column was clipped, so it was a guess.
 # - It also fails on any jump for a dictionary word the rows do not hold.
 # - New jumps are listed, never failed, because adding them is what the resolver is for.
 # - Read-only: hop() is never called, so nothing cds, opens a window or writes history.
@@ -104,6 +105,18 @@ ev_now() {
 	fi
 }
 
+# ev_clipped <dir> -> 0 when a candidate other than <dir> has a clipped display column, so today's one hit was a guess.
+ev_clipped() {
+	emulate -L zsh
+	local r
+	local -a f
+	for r in "${_hop_res_rows[@]}"; do
+		f=("${(@ps:\t:)r}")
+		[[ ${f[2]:A} != "${1:A}" && ${f[1]} == *…* ]] && return 0
+	done
+	return 1
+}
+
 # ev_rel <dir> -> REPLY, the dir as a rel, so a report line reads like a row.
 ev_rel() {
 	emulate -L zsh
@@ -124,7 +137,7 @@ ev_sweep() {
 	emulate -L zsh
 	local set=$1 q tdir
 	shift
-	local -i today=0 kept=0 lost=0 changed=0 new=0 pick=0 none=0
+	local -i today=0 kept=0 lost=0 changed=0 clipped=0 new=0 pick=0 none=0
 	local -F t0=$EPOCHREALTIME
 	local REPLY
 	for q in "$@"; do
@@ -145,6 +158,9 @@ ev_sweep() {
 			elif [[ $EV_V == jump ]]; then
 				(( changed++ ))
 				EV_FAIL+=("changed  ${set}  ${q}  today -> ${REPLY}  now -> ${EV_REL} (${EV_WHY})")
+			elif [[ $EV_V == pick && $EV_JUMP != never ]] && ev_clipped "$tdir"; then
+				(( clipped++ ))
+				EV_NEW+=("clipped  ${set}  ${q}  today -> ${REPLY}  now pick ${EV_WHY}, since a clipped row matches too")
 			else
 				(( lost++ ))
 				EV_FAIL+=("lost     ${set}  ${q}  today -> ${REPLY}  now ${EV_V} ${EV_WHY}, best ${EV_REL:--}")
@@ -162,8 +178,8 @@ ev_sweep() {
 	printf -v secs '%.1f' $(( EPOCHREALTIME - t0 ))
 	(( EV_BAD += lost + changed ))
 	[[ $set == nonsense ]] && (( EV_BAD += new ))
-	EV_TABLE+=("$(printf '%-10s %7d %6d %5d %5d %8d %4d %5d %5d %8s' \
-		"$set" $# $today $kept $lost $changed $new $pick $none "$secs")")
+	EV_TABLE+=("$(printf '%-10s %7d %6d %5d %5d %8d %8d %4d %5d %5d %8s' \
+		"$set" $# $today $kept $lost $changed $clipped $new $pick $none "$secs")")
 }
 
 # The query sets come from the rows' own display columns: name, kind, scope, env, region.
@@ -218,7 +234,7 @@ for s in "${EV_SETS[@]}"; do
 done
 
 print -r -- ''
-printf '%-10s %7s %6s %5s %5s %8s %4s %5s %5s %8s\n' set queries today kept lost changed new pick none seconds
+printf '%-10s %7s %6s %5s %5s %8s %8s %4s %5s %5s %8s\n' set queries today kept lost changed clipped new pick none seconds
 print -rl -- "${EV_TABLE[@]}"
 if (( $#EV_NEW )); then
 	print -r -- ''

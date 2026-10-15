@@ -109,7 +109,7 @@ for q in \
 	security-tooling-prod Security-Tooling-Prod security_tooling_prod 'acct sec prod' terraform/account-security terraform/acount-security \
 	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod externaldns securitytoolingprod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
-	'acct sec prd' stg prod_vpc 'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
+	'acct sec prd' stg prod_vpc 'trust prod' 'security vpc' 'infrastructure dev' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
 	'kps zzqx' 'routemaxter kps zzqx' 'routemaster dev' \
 	"${MT_NONSENSE[@]}"; do
 	mt_case "$q"
@@ -314,7 +314,10 @@ mt_jump 'jump T1 single' "$SP/env-prod/us-east-1/vpc/" 'vpc security !staging'
 mt_pick T1 5 - '^vpc'
 mt_get '^vpc'
 assert_eq 0 "${reply[13]}" 'an operator query is the user'"'"'s own fzf syntax, so nothing is synthesised'
-mt_jump 'jump T1 display' "$IP/trust/" 'trust prod'
+mt_jump 'jump T1 display' terraform/acct-infrastructure/env-dev/us-east-1/vpc/ 'infrastructure dev'
+# One display hit is not one target when another match's display column is clipped: there the words were only hidden.
+mt_pick T1 2 - 'security vpc'
+mt_pick T1 3 - 'trust prod'
 mt_pick T1 - - 'data prod'
 mt_pick T1 2 - 'active infrastructure'
 mt_jump 'jump T1 onedir' kubernetes/services/monitoring/ monitoring/grafana
@@ -751,7 +754,7 @@ zsh -f ${(q)HOP_HOME}/tests/eval_real.zsh ${(j: :)${(@q)argv}}
 print -r -- \"st=\$?\"" 2>&1
 }
 
-# mt_eval_cols <output> <set> -> reply is that set's table columns: set queries today kept lost changed new pick none seconds.
+# mt_eval_cols <output> <set> -> reply is that set's table columns: set queries today kept lost changed clipped new pick none seconds.
 mt_eval_cols() {
 	emulate -L zsh
 	local line=${(M)${(@f)1}:#${(b)2} *}
@@ -774,9 +777,9 @@ MT_RUN=$(mt_eval -- names pref3 scope+env name+env)
 
 t 'eval_real: over the fixture, every jump today is kept and the run succeeds'
 mt_eval_cols "$MT_RUN" names
-assert_eq 10 $#reply "no names line in: ${MT_RUN}"
+assert_eq 11 $#reply "no names line in: ${MT_RUN}"
 assert_eq '0 0' "${reply[5]} ${reply[6]}" 'names: lost and changed'
-assert_eq "${reply[3]}" "${reply[4]}" 'names: every jump today is kept'
+assert_eq "${reply[3]}" $(( reply[4] + reply[7] )) 'names: every jump today is kept, or lost only to a clipped row'
 assert_eq 1 $(( ${reply[3]:-0} > 0 )) 'control: with no jump today, kept equalling today proves nothing'
 assert_contains "$MT_RUN" 'eval_real: ok'
 assert_contains "$MT_RUN" 'st=0'

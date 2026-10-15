@@ -432,7 +432,7 @@ stub_fzf_select() {
 # match_fixture -> REPLY is the resolver's fixture repo, with HOP_FIX_CONFIG declaring its kinds.
 # - A slice of a real terraform monorepo, shaped so that every rule in lib/match.zsh has a case needing it.
 # - The tg kind is a real user config's own, --trim included, because J3 reads the trimmed display.
-# - acct-trust-safety-restricted-prod is long on purpose: its scope is clipped, so `trust prod` names one display.
+# - acct-trust-safety-restricted-prod is long on purpose: its scope is clipped, so `trust prod` names one display, and must not jump.
 # - The staging account has no eks, so `eks security` stays the one-row jump it is in the real repo.
 # - cross_account_iam/roles is a real unit, and it is what puts `account` in the T2 vocabulary.
 # - The depth-1 cross_account_iam/terragrunt.hcl beside it is a shared include, which neither layout matches.
