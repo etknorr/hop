@@ -19,7 +19,8 @@ lay_plain() {
 lay_shape() {
 	emulate -L zsh
 	lay_plain "$1"
-	local plain=$REPLY
+	# … is 3 bytes, and outside a UTF-8 locale ${#plain} counts bytes, so a clipped row read 2 wider than it draws.
+	local plain=${REPLY//…/x}
 	local -i i k=1 n=$2
 	local -a offs
 	for (( i = 2; i <= ${#plain} && k < n; i++ )); do
