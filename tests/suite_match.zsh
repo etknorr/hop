@@ -653,6 +653,19 @@ assert_eq 1 ${#${(M)reply:#--query=zzqx}}
 assert_contains "${(F)reply}" 'nothing close to: zzqx (esc twice clears)'
 assert_eq 0 ${#${(M)reply:#--no-sort}} 'there is nothing to order, so ordered mode stays off'
 
+t 'picker: without the modal layer, the nothing-close header names ctrl-u, since esc quits there'
+stub_fzf_select '' 1
+MT_STUB=$REPLY
+mt_pickrun "$MT_STUB" 'hop --no-vim zzqx' >/dev/null
+mt_argv "$MT_STUB"
+assert_contains "${(F)reply}" 'nothing close to: zzqx (ctrl-u clears)' '--no-vim'
+assert_not_contains "${(F)reply}" 'esc twice' '--no-vim'
+stub_fzf_select '' 1
+MT_STUB=$REPLY
+mt_pickrun "$MT_STUB" 'hop zzqx' HOP_VIM=0 >/dev/null
+mt_argv "$MT_STUB"
+assert_contains "${(F)reply}" 'nothing close to: zzqx (ctrl-u clears)' 'HOP_VIM=0'
+
 stub_fzf_select '' 1
 MT_STUB=$REPLY
 mt_pickrun "$MT_STUB" 'hop' >/dev/null

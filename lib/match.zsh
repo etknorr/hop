@@ -1131,10 +1131,15 @@ _hop_res_rank() {
 }
 
 # _hop_resolve_none -> T4: nothing close, so the picker opens on the query as typed, editable, with zero rows.
+# - Without the modal layer esc is fzf's own, which quits, so the hint names ctrl-u there.
 _hop_resolve_none() {
 	emulate -L zsh
 	_hop_res_verdict=none _hop_res_tier=T4 _hop_res_query=$q
-	_hop_res_note="nothing close to: ${q} (esc twice clears)"
+	if _hop_vim_on; then
+		_hop_res_note="nothing close to: ${q} (esc twice clears)"
+	else
+		_hop_res_note="nothing close to: ${q} (ctrl-u clears)"
+	fi
 }
 
 # _hop_resolve_log <query> <start> -> the one HOP_DEBUG line every resolve writes.
