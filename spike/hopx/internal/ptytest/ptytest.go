@@ -85,7 +85,9 @@ func (t *Term) Plain() string { return csi.ReplaceAllString(t.Screen(), "") }
 
 var csi = regexp.MustCompile(`\x1b\[[0-9;?<>=]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][0-9A-Za-z]|\x1b[=>78]`)
 
-// since is the plain text drawn after the last Send, so a wait can't be satisfied by a stale frame.
+// Since is the plain text drawn after the last Send, so a wait can't be satisfied by a stale frame.
+func (t *Term) Since() string { return t.since() }
+
 func (t *Term) since() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()

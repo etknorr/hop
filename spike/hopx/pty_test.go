@@ -51,6 +51,8 @@ func (p *picker) run(t *testing.T, shell string, drive func(*ptytest.Term) bool,
 	cf := filepath.Join(p.tmp, "cmd")
 	os.Remove(cf)
 	os.Remove(filepath.Join(p.tmp, "clip"))
+	// A remembered row would already be selected, so its preview would never redraw for typeAnd to see.
+	os.Remove(filepath.Join(p.tmp, "hist"))
 	c := exec.Command(p.bin, args...)
 	c.Dir = p.root
 	c.Env = []string{
@@ -68,7 +70,7 @@ func (p *picker) run(t *testing.T, shell string, drive func(*ptytest.Term) bool,
 	if !drive(term) {
 		term.Send("\x03")
 		term.Wait(5 * time.Second)
-		t.Errorf("screen did not reach the expected state:\n%s", lastScreen(term.Plain()))
+		t.Errorf("screen did not reach the expected state; drawn since the last key:\n%q", lastScreen(term.Since()))
 		return outcome{rc: -2}
 	}
 	o := outcome{rc: term.Wait(10 * time.Second), out: term.Plain()}
@@ -105,10 +107,12 @@ func TestPicker(t *testing.T) {
 	wait := func(re string) func(*ptytest.Term) bool {
 		return func(tm *ptytest.Term) bool { return tm.WaitFor(re, 10*time.Second) }
 	}
+	// The row's preview is the settle signal: tcell repaints only changed cells, so an info line like 1/27 may never be drawn whole.
+	shows := map[string]string{"raster": `raster-catalogue/terragrunt\.hcl`, "thanos-legacy": `thanos-legacy/values\.yaml`}
 	typeAnd := func(query, key string) func(*ptytest.Term) bool {
 		return func(tm *ptytest.Term) bool {
 			tm.Send(query)
-			if !wait(`\b1/\d+`)(tm) {
+			if !wait(shows[query])(tm) {
 				return false
 			}
 			tm.Send(key)
@@ -143,7 +147,7 @@ func TestPicker(t *testing.T) {
 					return false
 				}
 				tm.Send("helm")
-				if !wait(`\b1/\d+`)(tm) {
+				if !wait(`helm\s+\d+\s+helm charts`)(tm) {
 					return false
 				}
 				tm.Send("\r")
@@ -158,7 +162,8 @@ func TestPicker(t *testing.T) {
 			}
 			reload := func(tm *ptytest.Term) bool {
 				tm.Send("\x1ba")
-				if !wait(`kubernetes/values/thanos-legacy`)(tm) {
+				// Every kind's rows sort the helm ones below the fold on Linux, so the redrawn count is the signal.
+				if !wait(`\d+/\d+`)(tm) {
 					return false
 				}
 				return typeAnd("thanos-legacy", "\r")(tm)
