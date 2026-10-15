@@ -74,7 +74,7 @@ _hop() {
     '(--vim --no-vim)--vim[force the modal layer on when HOP_VIM=0 is set]' \
     '(- *)--doctor=-[dump config, tools and kind counts for a bug report]:mode:(short)' \
     '(- *)'{-h,--help}'[show usage and exit]' \
-    '(- *)'{-V,-v,--version}'[show the installed version and exit]' \
+    '(- *)'{-V,-v,--version}'[show the loaded version, and the installed one when it differs]' \
     '*::query:_hop_query'
 }
 
