@@ -559,6 +559,21 @@ func TestSuiteMatchDetails(t *testing.T) {
 			}
 		}
 	})
+	t.Run("the picker input is the candidates in colour, then every other row", func(t *testing.T) {
+		r := f.get(t, c("vpc")).res
+		in := r.Input(f.all)
+		if len(in) != len(f.all) {
+			t.Fatalf("%d input rows for %d rows", len(in), len(f.all))
+		}
+		for i, row := range r.Rows {
+			if rows.StripANSI(in[i]) != row || in[i] == row {
+				t.Errorf("row %d is not the coloured form of candidate %q", i, RelOf(row))
+			}
+		}
+		if slices.Contains(in[len(r.Rows):], in[0]) {
+			t.Error("a candidate is repeated in the rest")
+		}
+	})
 	t.Run("an injected row keeps its colour", func(t *testing.T) {
 		r := f.get(t, c("acct sec prod")).res
 		if !strings.Contains(r.Rows[0], rows.CDim+SP+"/"+rows.Off) {
