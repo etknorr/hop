@@ -11,7 +11,7 @@ hop_preset terragrunt terraform-modules helm serverless puppet backstage dir fil
 
 # What a query does, opt-in: each line below is commented out at its default.
 # - HOP_ACTION is what Enter does: cd, open, reveal, cd+open or cd+reveal. `c` and alt-enter always cd.
-# - cd+reveal keeps one VS Code window per repo and expands the explorer to the unit you landed on.
+# - cd+reveal cds, then opens the unit's file with `code -r`; the explorer follows it only with explorer.autoReveal on.
 # - HOP_JUMP is when a clear match skips the picker: auto, unique (one target only) or never.
 # - HOP_CODE is a VS Code-compatible CLI that accepts -r and -n: code, cursor, codium or code-insiders.
 # typeset -g HOP_ACTION=cd
