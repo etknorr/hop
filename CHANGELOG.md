@@ -15,32 +15,39 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - A path that exists jumps straight there, before anything is enumerated.
   `hop terraform/acct-security-tooling-prod` cds in about a millisecond rather than paying for the ~0.3s enumeration first.
   It ignores case and lands on the on-disk spelling, so `Terraform/ACCT-x` cds to `terraform/acct-x`.
+  A bare `.` or `..` is a path too, so `hop -o .` opens the directory you're in.
 - A query with a typo, an abbreviation or initials still finds its target, and opens the picker on it rather than jumping.
   `securty-tooling-prod`, `routemaxter` and `kps` each open with the intended row first, and the header says what the query was read as.
   None of these jumps, because a typo costs one Enter while a false jump costs a wrong `cd`; a rewrite that only changed separators or case, such as `security_tooling_prod`, is the one exception.
   A word nothing in the repo explains is never turned into a match, and the suite checks that none of 50 nonsense words jumps.
+  A word run together from path words is split back into them, so `externaldns` reads as `external dns`, and `prd` and `stg` read as `prod` and `staging`.
+  When each word matches on its own but no row holds them all, the picker opens on the rows that hold all but one.
 - A query can land on a directory that is not itself a row, such as an account or env dir.
   `hop security-tooling-prod` cds to `terraform/acct-security-tooling-prod/`, because every match is under it and the query names it on whole-word boundaries, and it prints one line saying so.
   A query that jumped before still jumps to the same place, because a match on the name line alone is checked before this rule.
+  The exception is a query like `trust prod`, whose one name-line match was a guess, because another match's name line was clipped with `…`; it now opens the picker.
 - When a query opens the picker, the best matches come first: `acct sec prod` lists the account dir, then its units.
-  The first key you type hands the order back to fzf, and with no terminal hop prints the best three paths along with the match count.
+  The first key you type hands the order back to fzf, and with no terminal hop prints the best three paths along with the match count, and what would let it jump.
 - `HOP_ACTION` sets what Enter does: `cd` (the default), `open`, `reveal`, `cd+open` or `cd+reveal`.
   `-o`/`--open`, `-e`/`--reveal`, `--cd` and `--action=MODE` set it for one call, and `-p`/`--pick` always opens the picker.
-  `open` on a directory is `code -n`, and `reveal` on a directory reveals its README or first file, because VS Code can't reveal a folder from the shell.
-  When VS Code is missing or unreachable, over SSH or from a stale `VSCODE_IPC_HOOK_CLI`, each verb says why and falls back to `$EDITOR` or a plain `cd`.
+  `open` on a directory is `code -n`, and `reveal` on a directory reveals the row's preview file, or a top-level README or first file when the preview is the directory itself, because VS Code can't reveal a folder from the shell.
+  When VS Code is missing or unreachable, over SSH or from a stale `VSCODE_IPC_HOOK_CLI`, each verb says why and falls back to `$EDITOR` or a plain `cd`; under WSL no `DISPLAY` is needed.
+  An empty `--action=` is refused, as a bare `--action` is.
 - `c` in NORMAL and `alt-enter` in SEARCH always `cd`, so a plain `cd` stays one key away when Enter opens or reveals.
+  In the `:` view menu they do nothing, since a menu row names a view rather than a directory.
   The legends name Enter's mode, and list `c` and `M-enter` only when the mode isn't `cd`, so the default legend is unchanged.
 - `HOP_JUMP` sets when a query may skip the picker: `auto` (the default), `unique` for one target only as before, or `never`.
 - `HOP_CODE` names the VS Code-compatible CLI to run, such as `cursor` or `codium`.
 - `hop --doctor` shows `HOP_ACTION`, `HOP_JUMP` and `HOP_CODE`, whether VS Code is reachable from this shell and why not, and any `--fn` kind still printing 3-field rows.
   `--doctor=short` shows the same settings but withholds a custom launcher path.
 - Completions offer `-p`, `--cd`, `-o`, `-e` and `--action=MODE`, and leave out the combinations hop refuses.
-- Outside a repo, a query that matches no workspace is tried against your repos, so `hop configuration` from `~` finds the repo instead of saying nothing matched.
-  It jumps when one repo matches and opens the repo picker when several do.
+- Outside a repo, a query no workspace matches exactly is tried against your repos too, and the closer match wins, so `hop configuration` from `~` finds the repo instead of saying nothing matched.
+  It jumps when one repo matches, or when exactly one repo's name is the whole query, and opens the repo picker otherwise.
 - `tests/eval_real.zsh` checks the jump rules against a real checkout named by `HOP_TEST_REPO`; `tests/run` doesn't run it.
   It asks every name, 3-letter prefix, scope+env pair and name+env pair from the repo's own rows, and fails if a query that jumped with hop 0.1.2's matcher now opens the picker or lands elsewhere.
   It also fails if any of 500 dictionary words the rows don't contain jumps.
-  On a 1,041-row checkout, all 801 jumps the old matcher made still land in the same place, 23 queries gain a jump, and none of the 500 words jumps, on fzf 0.73.1 and 0.60.3 alike.
+  A jump lost only because another match's name line is clipped is listed as `clipped`, not failed.
+  On a 1,041-row checkout, 799 of the 801 jumps the old matcher made still land in the same place, `trust prod` and `trust staging` are clipped, 23 queries gain a jump, and none of the 500 words jumps, on fzf 0.73.1 and 0.60.3 alike.
 - CI runs the fzf-sensitive suites on fzf 0.60.3 and 0.67.0 as well as the latest, each from a release tarball whose checksum is verified.
 - A skip that hides lost coverage fails on CI instead, at one site per cause.
   A missing tool is honest on a developer's machine and is coverage vanishing on a CI runner, and nothing could tell you which: `tests/run` reports a skip count, so 7 becoming 8 went unnoticed.
@@ -50,6 +57,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ### Changed
 
+- What jumps no longer depends on your fzf defaults: the resolver's `fzf --filter` ignores `FZF_DEFAULT_OPTS`, `FZF_DEFAULT_OPTS_FILE` and an `fzf` alias.
+  The picker still reads your defaults, but resets `--nth`, `--tac` and `--scheme`, so they can't change which rows match or the best-first order.
 - Matching ignores case, where it was smart-case before.
   Under smart-case one capital letter made the whole query case-sensitive, so `Vpc` and `TG vpc` matched nothing at all.
 - Ties between rows that match equally are broken by `begin,chunk` instead of `begin,length`.
