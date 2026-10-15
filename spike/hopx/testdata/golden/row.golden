@@ -1,0 +1,10 @@
+[1mvpc                         [0m [1;36mtg   [0m [34macct-a                [0m [31mprod     [0m [36mus-east-1[0m	/r/infra/vpc	/r/infra/vpc/main.tf	[2minfra/vpc/[0m
+[1meks                         [0m [1;36mtg   [0m [34m…ility-platform-shared[0m [33mstaging  [0m [36mus-west-2[0m	/r/infra/eks	/r/infra/eks	[2minfra/eks/[0m
+[1mgrp/app                     [0m [1;36mhelm [0m [34mkubernetes/services   [0m [2m-        [0m [2m-[0m	/r/kubernetes/services/grp	/r/kubernetes/services/grp/app.yaml	[2mkubernetes/services/grp/app.yaml[0m
+[1m-                           [0m [1;36mmesos[0m [2m-                     [0m [2m-        [0m [2m-[0m	/r/mesos/x	/r/mesos/x/service.conf	[2mmesos/x/[0m
+[1ma-name-that-is-longer-than-twenty-eight[0m [1;36mback…[0m [34mb                     [0m [34mdev      [0m [36meu[0m	/r/b	/r/b/x.yaml	[2mb/x.yaml[0m
+[1m<root>                      [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	/r	/r/README.md	[2m./[0m
+[1mcafé                        [0m [1;36mx    [0m [34m…-scope-with-accents-é[0m [35mplaygrou…[0m [36mr[0m	/r/café	/r/café	[2mcafé/[0m
+[1msrc                         [0m [1;36mws   [0m [34m~/src                 [0m [35m3 repos  [0m [2m-[0m	/elsewhere/src	/elsewhere/src	[2m/elsewhere/src/[0m
+[1mhop                         [0m [1;36mrepo [0m [2m-                     [0m [2m-        [0m [2m-[0m	@HOME@/code/hop	@HOME@/code/hop/README.md	[2m~/code/hop/[0m
+[1mhome                        [0m [1;36mrepo [0m [2m-                     [0m [2m-        [0m [2m-[0m	@HOME@	@HOME@	[2m~/[0m

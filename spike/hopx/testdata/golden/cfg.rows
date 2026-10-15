@@ -1,0 +1,3 @@
+[1mrole1                       [0m [1;36mcfg  [0m [34mapp1                  [0m [35mnoext    [0m [2m-[0m	@ROOT@/cfg/app1/conf/role1	@ROOT@/cfg/app1/conf/role1/noext	[2mcfg/app1/conf/role1/noext[0m
+[1mrole1                       [0m [1;36mcfg  [0m [34mapp1                  [0m [31mprod     [0m [2m-[0m	@ROOT@/cfg/app1/conf/role1	@ROOT@/cfg/app1/conf/role1/prod.conf	[2mcfg/app1/conf/role1/prod.conf[0m
+[1mrole.x                      [0m [1;36mcfg  [0m [34mapp2                  [0m [35mbase     [0m [2m-[0m	@ROOT@/cfg/app2/conf/role.x	@ROOT@/cfg/app2/conf/role.x/base.conf	[2mcfg/app2/conf/role.x/base.conf[0m

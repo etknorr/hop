@@ -1,0 +1,6 @@
+[1m.hidden                     [0m [1;36msvc  [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/.hidden	@ROOT@/svc/.hidden/f	[2msvc/.hidden/[0m
+[1malpha                       [0m [1;36msvc  [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/alpha	@ROOT@/svc/alpha/README.md	[2msvc/alpha/[0m
+[1mbeta                        [0m [1;36msvc  [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/beta	@ROOT@/svc/beta/deep/notes.md	[2msvc/beta/[0m
+[1mcafé                        [0m [1;36msvc  [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/café	@ROOT@/svc/café/f	[2msvc/café/[0m
+[1mdotted.d                    [0m [1;36msvc  [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/dotted.d	@ROOT@/svc/dotted.d/f	[2msvc/dotted.d/[0m
+[1mns                          [0m [1;36msvc  [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/ns	@ROOT@/svc/ns	[2msvc/ns/[0m

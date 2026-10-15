@@ -1,0 +1,13 @@
+[1m<root>                      [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@	@ROOT@/README.md	[2m./[0m
+[1mbackstage                   [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/backstage	@ROOT@/backstage	[2mbackstage/[0m
+[1mcfg                         [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/cfg	@ROOT@/cfg	[2mcfg/[0m
+[1mcharts                      [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/charts	@ROOT@/charts	[2mcharts/[0m
+[1mcluster-apps                [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/cluster-apps	@ROOT@/cluster-apps	[2mcluster-apps/[0m
+[1mdir with space              [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/dir with space	@ROOT@/dir with space	[2mdir with space/[0m
+[1ments                        [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/ents	@ROOT@/ents	[2ments/[0m
+[1minfra                       [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/infra	@ROOT@/infra	[2minfra/[0m
+[1mkubernetes                  [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/kubernetes	@ROOT@/kubernetes	[2mkubernetes/[0m
+[1modd                         [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/odd	@ROOT@/odd	[2modd/[0m
+[1mservices                    [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/services	@ROOT@/services	[2mservices/[0m
+[1msvc                         [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/svc	@ROOT@/svc	[2msvc/[0m
+[1msym                         [0m [1;36mdir  [0m [2m-                     [0m [2m-        [0m [2m-[0m	@ROOT@/sym	@ROOT@/sym	[2msym/[0m

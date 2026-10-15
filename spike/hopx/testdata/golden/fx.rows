@@ -1,0 +1,4 @@
+[1m.hidden                     [0m [1;36mfx   [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/.hidden	@ROOT@/svc/.hidden/f	[2msvc/.hidden/[0m
+[1mcafé                        [0m [1;36mfx   [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/café	@ROOT@/svc/café/f	[2msvc/café/[0m
+[1mdotted.d                    [0m [1;36mfx   [0m [34msvc                   [0m [2m-        [0m [2m-[0m	@ROOT@/svc/dotted.d	@ROOT@/svc/dotted.d/f	[2msvc/dotted.d/[0m
+[1mreadme                      [0m [1;36mfx   [0m [34msvc                   [0m [31mprod     [0m [36meu[0m	@ROOT@/svc/alpha	@ROOT@/svc/alpha/README.md	[2msvc/alpha/README.md[0m

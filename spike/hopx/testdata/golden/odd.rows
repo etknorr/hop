@@ -1,0 +1,5 @@
+[1m.rootdot                    [0m [1;36modd  [0m [34m.                     [0m [2m-        [0m [2m-[0m	@ROOT@	@ROOT@/.rootdot	[2m.rootdot[0m
+[1mUpper.txt                   [0m [1;36modd  [0m [34modd                   [0m [2m-        [0m [2m-[0m	@ROOT@/odd	@ROOT@/odd/Upper.txt	[2modd/Upper.txt[0m
+[1mf                           [0m [1;36modd  [0m [34modd/brack[1]          [0m [2m-        [0m [2m-[0m	@ROOT@/odd/brack[1]	@ROOT@/odd/brack[1]/f	[2modd/brack[1]/f[0m
+[1mlower.txt                   [0m [1;36modd  [0m [34modd                   [0m [2m-        [0m [2m-[0m	@ROOT@/odd	@ROOT@/odd/lower.txt	[2modd/lower.txt[0m
+[1mf                           [0m [1;36modd  [0m [34modd/trail-space-bs\   [0m [2m-        [0m [2m-[0m	@ROOT@/odd/trail-space-bs\ 	@ROOT@/odd/trail-space-bs\ /f	[2modd/trail-space-bs\ /f[0m
