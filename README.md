@@ -689,6 +689,7 @@ bin/hop-kinds           renders the `:` menu and reloads rows; never runs fzf
 bin/hop-preview         the preview pane, and the `?` keymap overlay
 completions/_hop        zsh completion, driven by the live registry
 tests/run               the headless test suite
+tests/eval_real.zsh     the jump sweeps over a real checkout; tests/run skips it
 config.example.zsh      a working config to copy
 workspaces.example      a workspace list to copy
 ```
@@ -783,6 +784,19 @@ action. It needs `HOP_FZF_HEIGHT=` for fullscreen, and it reads fzf's own export
 the screen, because `zsh/zpty` cannot set a window size and the rendered UI is unusable. Missing
 `zsh/zpty` skips those tests locally but **fails** under `$CI`, so a runner that loses pty
 capability turns red instead of quietly dropping coverage.
+
+`tests/eval_real.zsh` checks the jump rules against a real checkout, which a fixture can't stand in
+for. `tests/run` doesn't run it, so run it yourself after changing `lib/match.zsh`:
+
+```zsh
+HOP_TEST_REPO=~/src/some-repo zsh tests/eval_real.zsh
+```
+
+It builds the repo's rows with your `HOP_CONFIG` kinds and asks every name, 3-letter prefix,
+scope+env pair and name+env pair it finds there, plus 500 dictionary words the rows don't contain.
+It fails if a query that jumped with hop 0.1.2's matcher now opens the picker or lands somewhere
+else, or if any of those words jumps. New jumps are listed but don't fail it. It never calls `hop`
+itself, so nothing cds, opens a window or writes history.
 
 What is left in `SMOKE.md` is the part with no machine-readable outcome: whether the layout is
 actually readable at 80 columns, and where VS Code puts what a `code` call opens.

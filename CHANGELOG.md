@@ -36,6 +36,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   `--doctor=short` shows the same settings but withholds a custom launcher path.
 - Completions offer `-p`, `--cd`, `-o`, `-e` and `--action=MODE`, and leave out the combinations hop refuses.
 - Outside a repo, a query that matches no workspace is tried against your repos, so `hop configuration` from `~` lands on the repo.
+- `tests/eval_real.zsh` checks the jump rules against a real checkout named by `HOP_TEST_REPO`; `tests/run` doesn't run it.
+  It asks every name, 3-letter prefix, scope+env pair and name+env pair from the repo's own rows, and fails if a query that jumped with hop 0.1.2's matcher now opens the picker or lands elsewhere.
+  It also fails if any of 500 dictionary words the rows don't contain jumps.
+  On a 1,041-row checkout, all 801 jumps the old matcher made still land in the same place, 23 queries gain a jump, and none of the 500 words jumps, on fzf 0.73.1 and 0.60.3 alike.
 - CI runs the fzf-sensitive suites on fzf 0.60.3 and 0.67.0 as well as the latest, each from a release tarball whose checksum is verified.
 - A skip that hides lost coverage fails on CI instead, at one site per cause.
   A missing tool is honest on a developer's machine and is coverage vanishing on a CI runner, and nothing could tell you which: `tests/run` reports a skip count, so 7 becoming 8 went unnoticed.

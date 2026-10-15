@@ -67,3 +67,4 @@ Patching the code to add a repo-specific kind is a sign the declaration belongs 
 - Any change to `lib/ui.zsh`, `bin/hop-kinds`, or the keymap has been walked through
   [SMOKE.md](SMOKE.md) by hand.
 - New behaviour has a test in `tests/`, or a documented reason it can't.
+- Any change to `lib/match.zsh` passes `HOP_TEST_REPO=<a real checkout> zsh tests/eval_real.zsh`.
