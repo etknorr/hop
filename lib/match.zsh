@@ -72,7 +72,8 @@ _hop_res_fields() {
 
 # _hop_literal_target <word> <root> -> 0 with reply=(dir preview rel) when the word names a real path.
 # - T0: a typed path is a filesystem fact, so it jumps before _hop_generate is ever paid for.
-# - Only a word holding a / or starting with ~ qualifies, so a plain name always goes to the matcher.
+# - Only a word holding a / or starting with ~, or a bare . or .., qualifies, so a plain name always goes to the matcher.
+# - A bare . had fuzzy-matched every rel holding a dot, and `hop -o .` is how you open the dir you are in.
 # - ./x and ../x are $PWD-relative only; /x is the repo root first, as `hop /` is, then the absolute path.
 # - Anything else tries $PWD first, then the root, which is what makes -c's subtree win.
 # - The glob is case-insensitive and returns the on-disk spelling, so `Terraform/ACCT-x` cds to `terraform/acct-x`.
@@ -84,7 +85,7 @@ _hop_literal_target() {
 	zmodload zsh/parameter 2>/dev/null
 	local w=$1 root=${2:-}
 	reply=()
-	[[ $w == */* || $w == '~'* ]] || return 1
+	[[ $w == */* || $w == '~'* || $w == (.|..) ]] || return 1
 	local p=$w
 	[[ $p == ?*/ ]] && p=${p%%/##}
 

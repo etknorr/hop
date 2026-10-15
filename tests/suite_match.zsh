@@ -115,6 +115,10 @@ for q in \
 	mt_case "$q"
 done
 mt_case ../abg sandbox/alpha-beta-gamma
+mt_case .. sandbox/alpha-beta-gamma
+mt_case ../ sandbox/alpha-beta-gamma
+mt_case . terraform
+mt_case ./ terraform
 mt_case /mesos terraform
 mt_case modules/ terraform
 mt_case mesos/services terraform
@@ -219,6 +223,10 @@ assert_eq "$MT_REPO/kubernetes/services/monitoring" "${reply[9]}" 'a file target
 assert_eq "$MT_REPO/kubernetes/services/monitoring/grafana.yaml" "${reply[10]}" 'and previews the file itself'
 mt_jump 'jump T0 path' sandbox/abg/ ./sandbox/abg
 mt_jump 'jump T0 path' sandbox/abg/ ../abg sandbox/alpha-beta-gamma
+mt_jump 'jump T0 path' sandbox/ .. sandbox/alpha-beta-gamma
+mt_jump 'jump T0 path' sandbox/ ../ sandbox/alpha-beta-gamma
+mt_jump 'jump T0 path' terraform/ . terraform
+mt_jump 'jump T0 path' terraform/ ./ terraform
 mt_jump 'jump T0 path' mesos/ /mesos terraform
 mt_jump 'jump T0 path' terraform/modules/ modules/ terraform
 mt_get modules/ terraform
