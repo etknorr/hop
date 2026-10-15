@@ -704,6 +704,11 @@ _hop_resolve() {
 			_hop_resolve_log "$q" "$t0"
 			return 0
 		fi
+		if (( $#keep >= 2 )) && _hop_all_but_one; then
+			_hop_res_note="ignored: ${drop:+${(j: :)drop}, and }one of: ${(j:, :)keep}"
+			_hop_resolve_log "$q" "$t0"
+			return 0
+		fi
 	fi
 
 	_hop_resolve_none
@@ -727,6 +732,45 @@ _hop_term_eq() {
 	_hop_loose "$t" && _hop_match "$REPLY" "$rows" && return 0
 	REPLY=''
 	return 1
+}
+
+# _hop_all_but_one -> 0 when some rows match every kept word but one, and they are decided as a relaxed pick.
+# - Each word matches alone and no row matches all of them, so one word at a time is left out.
+# - The picker opens on every pair OR-ed, `a | b  a | c  b | c`, which is what keeps exactly the rows missing one word.
+# - The smallest set comes first, since the word left out of it was the one the rest least agree with.
+# - It reads _hop_resolve's keep, eqs and rows, and needs every reading to be one OR group for the pairs to say that.
+_hop_all_but_one() {
+	emulate -L zsh
+	local e
+	for e in "${eqs[@]}"; do
+		[[ ${e// | /} != *' '* ]] || return 1
+	done
+	local -a got order out pairs rest
+	local -A seen
+	local -i i j
+	local r k
+	for (( i = 1; i <= $#eqs; i++ )); do
+		rest=("${(@)eqs[1,i-1]}" "${(@)eqs[i+1,-1]}")
+		_hop_match "${(j: :)rest}" "$rows" || continue
+		got[i]=${(F)reply}
+		order+=("${(l:8::0:)#reply}:$i")
+	done
+	(( $#order )) || return 1
+	for k in "${(@o)order}"; do
+		for r in "${(@f)got[${k#*:}]}"; do
+			(( ${+seen[$r]} )) && continue
+			seen[$r]=1
+			out+=("$r")
+		done
+	done
+	for (( i = 1; i < $#eqs; i++ )); do
+		for (( j = i + 1; j <= $#eqs; j++ )); do
+			pairs+=("${eqs[i]} | ${eqs[j]}")
+		done
+	done
+	# No ancestor is injected: one that holds a single word, as every acct-*-prod/ does for prod, would bury the order above.
+	local -i opq=1
+	_hop_decide relaxed "${(j: :)pairs}" 1 "${out[@]}"
 }
 
 # _hop_resolve_none -> T4: nothing close, so the picker opens on the query as typed, editable, with zero rows.

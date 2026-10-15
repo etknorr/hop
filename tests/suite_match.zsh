@@ -110,7 +110,7 @@ for q in \
 	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod externaldns securitytoolingprod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
 	'acct sec prd' stg 'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
-	'kps zzqx' \
+	'kps zzqx' 'routemaxter kps zzqx' 'routemaster dev' \
 	"${MT_NONSENSE[@]}"; do
 	mt_case "$q"
 done
@@ -337,6 +337,15 @@ mt_pick relaxed 2 kubernetes/values/kube-prometheus-stack/ 'kps zzqx'
 mt_get 'kps zzqx'
 assert_eq 'ignored: zzqx' "${reply[16]}"
 assert_eq kube-prometheus-stack "${reply[15]}"
+# Words read by different tiers that no row holds together keep every row that holds all of them but one.
+mt_pick relaxed 4 - 'routemaxter kps zzqx'
+mt_get 'routemaxter kps zzqx'
+assert_eq 'ignored: zzqx, and one of: routemaxter, kps' "${reply[16]}"
+assert_eq 'routemaster | kube-prometheus-stack' "${reply[15]}"
+mt_pick relaxed 3 "terraform/acct-infrastructure/env-dev/us-east-1/vpc/" 'routemaster dev'
+mt_get 'routemaster dev'
+assert_eq 'ignored: one of: routemaster, dev' "${reply[16]}" 'every word matches alone, so dropping one is what finds the rows'
+assert_eq 0 "${reply[13]}" 'an ancestor holding one word alone is never injected'
 
 
 # ---------------------------------------------------------------------------
