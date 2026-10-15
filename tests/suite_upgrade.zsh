@@ -517,6 +517,22 @@ assert_eq 0 "$st"
 assert_contains "$out" 'already at v0.1.0'
 assert_eq "$before" "$(_up_sha "$dir")"
 
+# Upgrading twice without `exec zsh` is the live case: the second run changes nothing on disk.
+t 'an upgrade that changes nothing still says to reload when the shell loaded an older VERSION'
+_up_clone "$ORIGIN" up-stale-shell
+dir=$REPLY
+out=$(_up_probe "$dir" 'typeset -g _HOP_LOADED_VERSION=0.1.0; _hop_upgrade' 2>&1)
+st=$?
+assert_eq 0 "$st"
+assert_contains "$out" 'already at v0.2.0 on main'
+assert_contains "$out" 'This shell still has 0.1.0 loaded.'
+assert_contains "$out" 'exec zsh'
+
+t 'an upgrade that changes nothing says nothing about reloading when the shell is current'
+out=$(_up_probe "$dir" 'typeset -g _HOP_LOADED_VERSION=0.2.0; _hop_upgrade' 2>&1)
+assert_contains "$out" 'already at v0.2.0 on main'
+assert_not_contains "$out" 'exec zsh'
+
 t 'pinning to the release main is already standing on still detaches'
 # Standing on the right COMMIT is not being pinned to it: attached, the next `git pull` moves you.
 _up_clone "$ORIGIN" up-pin-on-main

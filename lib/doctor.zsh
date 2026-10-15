@@ -84,6 +84,18 @@ _hop_doctor_actions() {
 	printf '  %-22s %s\n' 'VS Code reachable' "$v"
 }
 
+# _hop_doctor_loaded -> the version this shell loaded, flagged when VERSION on disk has moved since.
+_hop_doctor_loaded() {
+	emulate -L zsh
+	local REPLY
+	_hop_version_disk
+	if [[ $REPLY == "$_HOP_LOADED_VERSION" ]]; then
+		printf '  %-22s %s\n' loaded "$_HOP_LOADED_VERSION"
+	else
+		printf '  %-22s %s\n' loaded "${_HOP_LOADED_VERSION}, but ${REPLY} is installed: run 'exec zsh'"
+	fi
+}
+
 _hop_doctor_body() {
 	emulate -L zsh
 	setopt local_options no_nomatch
@@ -98,6 +110,7 @@ _hop_doctor_body() {
 	local ver
 	ver=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null) || ver='not a git checkout'
 	printf '  %-22s %s\n' version "$ver"
+	_hop_doctor_loaded
 	printf '  %-22s %s\n' 'entry point' "$HOP_HOME/hop.zsh"
 	print -r -- ''
 
@@ -227,6 +240,7 @@ _hop_doctor_short_body() {
 	local ver
 	ver=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null) || ver='not a git checkout'
 	printf '  %-22s %s\n' version "$ver"
+	_hop_doctor_loaded
 	printf '  %-22s %s\n' 'entry point' "$HOP_HOME/hop.zsh"
 	print -r -- ''
 
