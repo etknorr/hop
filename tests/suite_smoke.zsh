@@ -232,6 +232,46 @@ typeset vshort
 vshort=$(hop_probe 'hop -V')
 assert_eq "$verout" "$vshort"
 
+t 'hop -v is the same as -V'
+assert_eq "$vshort" "$(hop_probe 'hop -v')"
+
+t 'hop --version is exactly "hop VERSION (describe)" when the shell loaded what is on disk'
+typeset smdesc
+smdesc=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null)
+assert_eq "hop ${ver}${smdesc:+ (${smdesc})}" "$verout"
+
+# A copied install, so VERSION can change on disk after sourcing without touching the real one.
+# - GIT_CEILING_DIRECTORIES keeps git describe from finding any repo above the copy.
+fixture_tmpdir version-copy
+typeset smcopy="$REPLY/hop"
+mkdir -p -- "$smcopy"
+cp -R -- "$HOP_HOME"/{hop.zsh,VERSION,lib,presets,completions,bin} "$smcopy/"
+
+# sm_copy_probe <code> -> run code after sourcing the copied install, with its VERSION reset first.
+sm_copy_probe() {
+	emulate -L zsh
+	print -r -- "$ver" > "$smcopy/VERSION"
+	GIT_CEILING_DIRECTORIES=${smcopy:h} zsh -f -c "$(fixture_pins)
+source ${(q)smcopy}/hop.zsh || exit 97
+${1}"
+}
+
+t 'the copied install prints exactly "hop VERSION" while nothing has changed on disk'
+assert_eq "hop ${ver}" "$(sm_copy_probe 'hop --version')"
+
+t 'after an upgrade under a live shell, --version names the loaded and the installed version'
+typeset smstale
+smstale=$(sm_copy_probe "print -r -- 9.9.9 > ${(q)smcopy}/VERSION; hop --version")
+assert_eq "hop ${ver} loaded, 9.9.9 installed: run 'exec zsh' to load it" "$smstale"
+
+t 'after an upgrade under a live shell, --doctor flags the loaded version in one line'
+smstale=$(sm_copy_probe "print -r -- 9.9.9 > ${(q)smcopy}/VERSION; hop --doctor")
+sm_docline "$smstale" loaded
+assert_eq "$(printf '  %-22s %s' loaded "${ver}, but 9.9.9 is installed: run 'exec zsh'")" "$REPLY"
+smstale=$(sm_copy_probe 'hop --doctor=short')
+sm_docline "$smstale" loaded
+assert_eq "$(printf '  %-22s %s' loaded "$ver")" "$REPLY" 'a shell that loaded what is on disk shows the one version'
+
 t 'CHANGELOG.md keeps an Unreleased heading, so a release cannot strand entries'
 typeset changelog
 changelog=$(<"$HOP_HOME/CHANGELOG.md")

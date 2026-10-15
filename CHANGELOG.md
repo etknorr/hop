@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Fixed
+
+- `hop --version` printed the installed version even when the shell still ran an older hop, as after `hop upgrade` without `exec zsh`.
+  It now says `hop 0.2.0 loaded, 0.3.0 installed (v0.3.0): run 'exec zsh' to load it`, and `hop --doctor` and an upgrade that changes nothing say so too.
+- `hop -v` prints the version like `-V`, instead of `hop: unknown option: -v`.
+
 ## [0.3.0] - 2026-10-15
 
 ### Added

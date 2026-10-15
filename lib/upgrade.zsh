@@ -132,6 +132,19 @@ _hop_up_reload() {
 	return 0
 }
 
+# _hop_up_stale -> the reload instruction as well, when this shell loaded another VERSION than is on disk.
+# - A second upgrade that changes nothing is exactly what someone runs when the first one "did not work".
+# - _HOP_LOADED_VERSION is unset when this file is sourced alone, and then there is nothing to compare.
+_hop_up_stale() {
+	emulate -L zsh
+	(( ${+_HOP_LOADED_VERSION} )) || return 0
+	local REPLY
+	_hop_up_current
+	[[ $REPLY == "$_HOP_LOADED_VERSION" ]] && return 0
+	print -r -- "This shell still has ${_HOP_LOADED_VERSION} loaded."
+	_hop_up_reload
+}
+
 # _hop_up_track <tag> -> leave the install ON main, carrying that tag's commit.
 # - This is what a BARE `hop upgrade` does, because detaching would break the next `git pull`.
 # - Fast-forward ONLY: a merge or a reset here could bury a commit the user still wanted.
@@ -194,6 +207,7 @@ _hop_up_track() {
 	if [[ $mainc == $tagc ]]; then
 		if [[ $state == main ]]; then
 			print -r -- "hop is already at ${tag} on main, so nothing changed."
+			_hop_up_stale
 			return 0
 		fi
 		print -r -- "hop is on main at ${tag}."
@@ -203,7 +217,10 @@ _hop_up_track() {
 
 	if _hop_up_git merge-base --is-ancestor "$tagc" "$mainc" 2>/dev/null; then
 		print -r -- "main already carries ${tag} and later commits, so there is nothing to update."
-		[[ $state == main ]] && return 0
+		if [[ $state == main ]]; then
+			_hop_up_stale
+			return 0
+		fi
 		_hop_up_reload
 		return 0
 	fi
@@ -429,6 +446,7 @@ _hop_upgrade() {
 	_hop_up_state
 	if [[ -n $from && $from == $to && $REPLY != main ]]; then
 		print -r -- "hop is already at ${tag}, so nothing changed."
+		_hop_up_stale
 		return 0
 	fi
 

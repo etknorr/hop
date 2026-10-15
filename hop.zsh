@@ -80,7 +80,7 @@ _hop_usage() {
 	print -r -- '  hop upgrade         fast-forward main to the newest release, then exec zsh'
 	print -r -- '  hop upgrade 0.1.0   pin the install to exactly that release, detached'
 	print -r -- '  hop upgrade --check what is installed vs what is released; changes nothing'
-	print -r -- '  hop -V, --version   print the installed version'
+	print -r -- '  hop -V, -v, --version  print the version loaded, and installed when it differs'
 	print -r -- '  hop -h, --help      this text'
 	print -r -- ''
 	print -r -- '  kinds, * being in the default set:'
@@ -111,23 +111,38 @@ _hop_usage() {
 	print -r -- '  A repo-root .hoprc is OPT-IN: it runs code, so set HOP_HOPRC=1 to allow it.'
 }
 
+# _hop_version_disk -> REPLY is what $HOP_HOME/VERSION says right now, or 'unknown' without one.
+# - A zsh builtin `read`, never `cat`, because this also runs while hop.zsh is being sourced.
+_hop_version_disk() {
+	emulate -L zsh
+	local line=''
+	[[ -r $HOP_HOME/VERSION ]] && read -r line < "$HOP_HOME/VERSION"
+	REPLY=${line:-unknown}
+	return 0
+}
+
+# The version this shell actually loaded, because `hop upgrade` moves VERSION on disk under it.
+# - Before this, a shell still running 0.2.0's functions printed 0.3.0 for --version.
+() {
+	emulate -L zsh
+	local REPLY
+	_hop_version_disk
+	typeset -g _HOP_LOADED_VERSION=$REPLY
+}
+
 # _hop_version -> print "hop X.Y.Z", plus "(describe)" when this install is a git checkout.
-# - VERSION is read with a zsh builtin `read`, never `cat`: no fork, even though this path is cold.
+# - When the shell loaded a different VERSION than is on disk now, it says both and how to reload.
 # - Works with VERSION missing (falls back to 'unknown') and with git missing (drops the suffix).
 _hop_version() {
 	emulate -L zsh
-	local v='unknown' f="$HOP_HOME/VERSION" line
-	if [[ -r $f ]]; then
-		read -r line < "$f"
-		[[ -n $line ]] && v=$line
-	fi
-	local desc
+	local REPLY desc
+	_hop_version_disk
 	desc=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null)
-	if [[ -n $desc ]]; then
-		print -r -- "hop ${v} (${desc})"
-	else
-		print -r -- "hop ${v}"
+	if [[ $REPLY != "$_HOP_LOADED_VERSION" ]]; then
+		print -r -- "hop ${_HOP_LOADED_VERSION} loaded, ${REPLY} installed${desc:+ (${desc})}: run 'exec zsh' to load it"
+		return 0
 	fi
+	print -r -- "hop ${REPLY}${desc:+ (${desc})}"
 }
 
 _hop_repos() {
@@ -473,7 +488,7 @@ hop() {
 				_hop_usage
 				return 0
 				;;
-			-V | --version)
+			-V | -v | --version)
 				_hop_version
 				return 0
 				;;
