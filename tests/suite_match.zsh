@@ -1175,7 +1175,7 @@ fixture_commit kindword
 fixture_tmpdir kwcfg || return 1
 MT_KWCFG=$REPLY/config.zsh
 print -rl -- 'hop_preset terragrunt dir file puppet' "hop_kind solo --dirs 'kubernetes/services' --desc 'one row'" \
-	"hop_kind ghost --dirs 'nowhere' --desc 'no rows here'" > "$MT_KWCFG"
+	"hop_kind net --dirs 'kubernetes/services' --desc 'a name inside kubernetes'" "hop_kind ghost --dirs 'nowhere' --desc 'no rows here'" > "$MT_KWCFG"
 
 # mt_kw <cwd> <hop-args> [VAR=value...] -> the run under the kind-word config, then its code calls on one line.
 mt_kw() {
@@ -1235,6 +1235,10 @@ assert_contains "$MT_RUN" 'ignored: file'
 assert_not_contains "$MT_RUN" 'reading'
 MT_RUN=$(mt_kw "$MT_KW" '-a file -e aeraki.yaml')
 assert_not_contains "$MT_RUN" 'reading' '-a already includes every kind'
+
+t 'kind word: a kind that is only part of a word some row holds is still read as -k'
+MT_RUN=$(mt_kw "$MT_KW" net)
+assert_contains "$MT_RUN" 'hop: reading "net" as -k net' 'net is inside kubernetes, but no row holds net as a word'
 
 t 'kind word: a typed -k whose kind has no rows here still finds a path in another repo'
 MT_RUN=$(mt_kw "$MT_KW" '-k ghost wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")

@@ -1061,25 +1061,22 @@ _hop_term_eq() {
 	return 1
 }
 
-# _hop_word_unread <word> <rows-text> -> 0 when no tier reads the word over these rows, so the relaxed tier would drop it.
-# - It builds what _hop_resolve builds for _hop_term_eq, which is what makes it the same test the relaxed tier runs.
-# - An exact hit is checked first, so a word some row holds costs no vocabulary build; above _HOP_APPROX_MAX rows it is the only check, as in _hop_resolve.
+# _hop_word_unread <word> <rows-text> -> 0 when no row holds the word as a whole token of its name line or its rel.
+# - Tokens split on whitespace and / - _ ., as _hop_vocab_build splits a rel.
+# - A substring test kept `conf` a plain word in configuration, because every aws-config row holds it.
 _hop_word_unread() {
 	emulate -L zsh
 	setopt local_options extended_glob
-	local t=$1 rows=$2 REPLY _hop_text=''
-	local -a all rels reply _hop_vocab _hop_segs
-	local -A _hop_vocab_set
-	all=("${(@f)rows}")
+	local t=${(L)1} text
+	local -a all f1 reply
+	all=("${(@f)2}")
 	all=(${all:#})
 	(( $#all )) || return 0
+	f1=("${(@)all%%$'\t'*}")
 	_hop_rels_of "${all[@]}"
-	rels=("${reply[@]}")
-	_hop_text_build
-	_hop_hits "$t" "$rows" && return 1
-	(( $#all > _HOP_APPROX_MAX )) && return 0
-	_hop_vocab_build "${rels[@]}"
-	! _hop_term_eq "$t" "$rows"
+	text=${(L)${(F)${(@)f1//$'\e'\[[0-9;]#m/}}}$'\n'${(L)${(F)reply}}
+	text=$'\n'${text//[\/_.[:space:]-]/$'\n'}$'\n'
+	[[ $text != *$'\n'${t}$'\n'* ]]
 }
 
 # _hop_all_but_one -> 0 when some rows match every kept word but one, and they are decided as a relaxed pick.
