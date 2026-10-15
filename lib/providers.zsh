@@ -80,6 +80,8 @@ _hop_row_raw() {
 
 # _hop_layout <rows> [like] -> REPLY is the rows with every raw display padded into one set of aligned columns.
 # - A name longer than its cap keeps both ends, and rel still carries the whole path, so a search loses nothing.
+# - A column that is - on every row is dropped, as scope, env and region are for every repo row.
+# - A dropped column still ends in its reset, so _hop_lay_parse can read the layout back out of any one row.
 # - `like` is a laid-out row whose widths are used instead, so a row added later lines up with that list.
 # - A row with no raw display, such as a legacy provider's, does not match the pattern and passes through.
 # - Each distinct value is padded and coloured once, then one substitution looks every row's cells up.
@@ -104,6 +106,8 @@ _hop_layout() {
 		k=("${(@u)${(@)raw/#([^${us}]#${us})(#c$(( c - 1 )))}/${us}*}")
 		if (( $#w )); then
 			n=${w[c]}
+		elif (( c > 2 )) && [[ ${(j:,:)k} == - ]]; then
+			n=0
 		else
 			# Below the cap, the longest value is the first of them reverse-sorted as runs of x.
 			n=caps[c]
@@ -114,6 +118,7 @@ _hop_layout() {
 			fi
 			(( c == 1 && n < _HOP_W_NAME_MIN )) && n=_HOP_W_NAME_MIN
 		fi
+		(( n )) || continue
 		# A value wider than its column is clipped with an ellipsis, since an overflow shifts every later column.
 		# - The name keeps both ends, for copies that differ only in a suffix, like `x` and `x.retired-2026-09-14`.
 		# - The scope keeps its END, for a family whose long names share their first 20-odd characters.
@@ -144,7 +149,7 @@ _hop_layout() {
 		k=("${(@)k/#/${c}${us}}")
 		cell+=("${(@)k:^v}")
 	done
-	REPLY=${(F)${(@)rows/#(#b)([^${us}]#)${us}([^${us}]#)${us}([^${us}]#)${us}([^${us}]#)${us}([^${tab}]#)/${cell[1${us}${match[1]}]}${cell[2${us}${match[2]}]}${cell[3${us}${match[3]}]}${cell[4${us}${match[4]}]}${cell[5${us}${match[5]}]}}}
+	REPLY=${(F)${(@)rows/#(#b)([^${us}]#)${us}([^${us}]#)${us}([^${us}]#)${us}([^${us}]#)${us}([^${tab}]#)/${cell[1${us}${match[1]}]}${cell[2${us}${match[2]}]}${cell[3${us}${match[3]}]-${off}}${cell[4${us}${match[4]}]-${off}}${cell[5${us}${match[5]}]-${off}}}}
 }
 
 # _hop_lay_fmt <dest> <format> <array> [array] -> dest is <format> applied to each element, or to each pair of elements.

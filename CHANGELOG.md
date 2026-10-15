@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   A query whose one name-line match is now a guess, because another match's name is cut, opens the picker instead of jumping; of the 2,000 queries `tests/eval_real.zsh` asks on a 1,041-row checkout, only `ml dev` changes.
   This holds for the main picker and every reload of it, the directory rows a query adds to it, such as an account or env dir, and the repo and workspace pickers.
 
+### Changed
+
+- A scope, env or region column that's `-` on every row of a list is left out of it, so the repo picker shows only name and kind before the path, and the workspace picker drops region.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added

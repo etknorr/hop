@@ -125,7 +125,7 @@ fixture_config "hop_kind sbx --default --dirs sandbox --desc 'sandbox dirs'" || 
 
 LAY_CASES+=(long)
 LAY_DESC[long]='list with one 45-character name, a'
-LAY_WORDS[long]=5
+LAY_WORDS[long]=3
 LAY_ROWS[long]=$(hop_probe "builtin cd -q ${(q)LY_LREPO} && _hop_rows ${(q)LY_LREPO} '' sbx")
 fixture_config_reset
 
@@ -141,20 +141,20 @@ done
 
 LAY_CASES+=(repo)
 LAY_DESC[repo]='repo picker'
-LAY_WORDS[repo]=5
+LAY_WORDS[repo]=2
 LAY_ROWS[repo]=$(hop_probe "_hop_provider_repo ${(j: :)${(@q)LY_REPOS}}")
 
-# A row built after the list, from _hop_row_like, takes that list's widths.
+# A row built after the list, from _hop_row_like, takes that list's widths and drops what it drops.
 LAY_CASES+=(like)
 LAY_DESC[like]='repo picker, plus a row built later from _hop_row_like,'
-LAY_WORDS[like]=5
+LAY_WORDS[like]=2
 LAY_ROWS[like]=$(hop_probe "rows=\$(_hop_provider_repo ${(j: :)${(@q)LY_REPOS}})
 print -r -- \"\$rows\"
 _hop_row_like=\${rows%%\$'\\n'*}
 _hop_row repo - - - x /elsewhere/x /elsewhere/x")
 
 # ---------------------------------------------------------------------------
-# The workspace picker, whose names are short.
+# The workspace picker, whose region is - on every row and whose names are short.
 # ---------------------------------------------------------------------------
 typeset -a LY_WS=("$HOP_FIX_HOME/ws-one" "$HOP_FIX_HOME/ws-second" "$HOP_FIX_HOME/w3")
 mkdir -p -- "$HOP_FIX_HOME/ws-one/r1/.git" "$HOP_FIX_HOME/ws-one/r2/.git" "$HOP_FIX_HOME/ws-second" \
@@ -180,8 +180,13 @@ for k in "${LAY_CASES[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-# Widths and the clip.
+# Widths, dropped columns and the clip.
 # ---------------------------------------------------------------------------
+t 'layout: the main picker keeps every column, because each holds a value on some row'
+lay_row "${LAY_ROWS[main]}" vpc
+lay_plain "$REPLY"
+assert_eq 5 ${#${=REPLY}} "a tg row shows name, kind, scope, env and region: ${REPLY}"
+
 t 'layout: a 45-character name is clipped to 40, keeping its start and its end'
 lay_clip "$LY_LONG"
 typeset LY_CLIPPED=$REPLY
@@ -201,6 +206,16 @@ else
 	skip 'layout: the clipped row matches through rel' 'fzf is not installed (see the injected-row skip)'
 fi
 
+t 'layout: a list whose env and region are always - drops both columns'
+lay_row "${LAY_ROWS[long]}" api
+lay_plain "$REPLY"
+assert_eq 'api sbx sandbox' "${(j: :)${=REPLY}}"
+
+t 'layout: a repo row is only its name and kind, because scope, env and region are always -'
+lay_row "${LAY_ROWS[repo]}" configuration
+lay_plain "$REPLY"
+assert_eq 'configuration repo' "${(j: :)${=REPLY}}"
+
 t 'layout: a retired copy is clipped at both ends, so it stays apart from the live repo'
 lay_clip "$LY_RETIRED"
 assert_eq 'platform-configurati….retired-2026-09-14' "$REPLY" 'control: the expected clip itself'
@@ -210,10 +225,20 @@ typeset -a LY_F=("${(@ps:\t:)REPLY}")
 lay_plain "${LY_F[4]}"
 assert_eq "~/strava/${LY_RETIRED}/" "$REPLY" 'rel still carries the whole name'
 
+t 'layout: a row built from _hop_row_like drops the same columns as its list'
+rows=(${(f)LAY_ROWS[like]})
+lay_plain "${rows[-1]}"
+assert_eq 'x repo' "${(j: :)${=REPLY}}"
+
 t 'layout: a list of short names is padded to the 20-column floor'
 lay_row "${LAY_ROWS[ws]}" ws-one
 lay_shape "$REPLY" 2
 assert_eq '22' "${REPLY%%|*}" 'the kind column starts after the 20-column floor and one space'
+
+t 'layout: a workspace row drops region, which is - on every one, and keeps its path and repo count'
+lay_row "${LAY_ROWS[ws]}" ws-one
+lay_plain "$REPLY"
+assert_eq 'ws-one ws ~/ws-one 2 repos' "${(j: :)${=REPLY}}"
 
 t 'layout: the injected account dir is the first row the picker gets'
 if (( ${+LAY_ROWS[injected]} )); then
