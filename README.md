@@ -380,8 +380,8 @@ ten guarded keys go dead at once. `esc` is then the only way out of the picker.
 
 `:` switches which kinds are listed, **in place**, with no nested fzf process. It reuses the single
 fzf instance by reloading it with a menu and using `$FZF_PROMPT` as the mode flag. `enter` switches
-to that kind; `esc` returns to exactly the list you came from, row count unchanged. `:` drops a
-query kept from SEARCH, because it would filter the kind list too, so that list comes back unfiltered.
+to that kind; `esc` returns to the view you came from. `:` drops a query kept from SEARCH, because
+it would filter the kind list too, so that view comes back unfiltered.
 
 Menu counts are cached per repo, per `HEAD`, *and* per the index's own state, so a commit, a branch
 switch and a bare `git add` all invalidate them for free. The index has to be in the key because
