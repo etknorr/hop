@@ -70,7 +70,6 @@ func realpath(p string) string {
 // Literal is _hop_literal_target, T0: the word names a real path, so it jumps before any row is enumerated.
 // - Only a word holding a / or starting with ~, or a bare . or .., qualifies.
 // - ./x and ../x are pwd-relative only; /x is the repo root first, then the absolute path; anything else pwd, then root.
-// - An exact-case hit wins outright; otherwise exactly one case-insensitive match is required, never a guess.
 // - hop's named directories (hash -d) aren't modelled; ~user reads the passwd entry, as zsh's userdirs does.
 func Literal(w, root, pwd string) (Target, bool) {
 	if !strings.Contains(w, "/") && !strings.HasPrefix(w, "~") && w != "." && w != ".." {
@@ -112,42 +111,50 @@ func Literal(w, root, pwd string) (Target, bool) {
 
 	hit := ""
 	for i := range anchors {
-		a := filepath.Clean(anchors[i])
-		f := filepath.Clean(strings.TrimSuffix(a, "/") + "/" + rests[i])
-		// ../ can climb above the anchor, so the literal part is what the typed path still shares with it.
-		base := a
-		for base != "/" && f != base && !strings.HasPrefix(f, base+"/") {
-			base = filepath.Dir(base)
-		}
-		rest := strings.TrimPrefix(strings.TrimPrefix(f, base), "/")
-		if rest == "" {
-			if !exists(f) {
-				continue
-			}
-			hit = f
+		if h, ok := pathUnder(anchors[i], rests[i]); ok {
+			hit = h
 			break
 		}
-		g := ciGlob(base, rest)
-		if slices.Contains(g, f) {
-			hit = f
-		} else if len(g) == 1 {
-			hit = g[0]
-		} else {
-			continue
-		}
-		break
 	}
 	if hit == "" {
 		return Target{}, false
 	}
+	return literalFields(hit, root), true
+}
 
+// pathUnder is _hop_path_under: the path rest names under anchor, spelled as the disk spells it.
+// - An exact-case hit wins outright; otherwise exactly one case-insensitive match is required, never a guess.
+func pathUnder(anchor, rest string) (string, bool) {
+	a := filepath.Clean(anchor)
+	f := filepath.Clean(strings.TrimSuffix(a, "/") + "/" + rest)
+	// ../ can climb above the anchor, so the literal part is what the typed path still shares with it.
+	base := a
+	for base != "/" && f != base && !strings.HasPrefix(f, base+"/") {
+		base = filepath.Dir(base)
+	}
+	r := strings.TrimPrefix(strings.TrimPrefix(f, base), "/")
+	if r == "" {
+		return f, exists(f)
+	}
+	g := ciGlob(base, r)
+	if slices.Contains(g, f) {
+		return f, true
+	}
+	if len(g) == 1 {
+		return g[0], true
+	}
+	return "", false
+}
+
+// literalFields is _hop_literal_fields: the target for a path T0 found, where a file cds to its parent.
+func literalFields(hit, root string) Target {
 	groot := ""
 	if root != "" {
 		groot = realpath(root)
 	}
 	ha := realpath(hit)
 	if isDir(hit) {
-		return Target{hit, hit, rows.Rel(rows.Row{Dir: ha, Preview: ha}, groot)}, true
+		return Target{hit, hit, rows.Rel(rows.Row{Dir: ha, Preview: ha}, groot)}
 	}
-	return Target{filepath.Dir(hit), hit, rows.Rel(rows.Row{Dir: filepath.Dir(ha), Preview: ha, File: true}, groot)}, true
+	return Target{filepath.Dir(hit), hit, rows.Rel(rows.Row{Dir: filepath.Dir(ha), Preview: ha, File: true}, groot)}
 }

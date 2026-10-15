@@ -17,6 +17,8 @@ import (
 type e2e struct {
 	bin, root, home, ws, tmp string
 	seed                     []byte
+	// hophome is the hop whose hop() is the reference: the worktree's 0.2.0 unless a test names a release.
+	hophome string
 }
 
 // history writes a fresh copy of the seeded history, so hop and hopx each start every run from the same MRU.
@@ -32,7 +34,7 @@ func newE2E(t *testing.T) *e2e {
 		t.Skip("fzf not installed")
 	}
 	tmp := testfix.Resolved(t.TempDir())
-	e := &e2e{bin: filepath.Join(tmp, "hopx"), root: filepath.Join(tmp, "repo"), home: filepath.Join(tmp, "home"), tmp: tmp}
+	e := &e2e{bin: filepath.Join(tmp, "hopx"), root: filepath.Join(tmp, "repo"), home: filepath.Join(tmp, "home"), tmp: tmp, hophome: testfix.HopHome()}
 	if out, err := exec.Command("go", "build", "-o", e.bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -84,7 +86,7 @@ func (e *e2e) hop(t *testing.T, dir string, env []string, args []string) landing
 	}
 	script := `source "$1/hop.zsh" || exit 97` + "\nhop " + strings.Join(q, " ") + "\nst=$?\nprint -r -- \"$st $PWD\""
 	env = append([]string{"HOP_HISTFILE=" + e.history("hist-hop"), "HOP_CONFIG=" + testdata("match.zsh")}, env...)
-	out, errs, _ := e.detached(dir, env, "zsh", "-f", "-c", script, "zsh", testfix.HopHome())
+	out, errs, _ := e.detached(dir, env, "zsh", "-f", "-c", script, "zsh", e.hophome)
 	st, pwd, _ := strings.Cut(strings.TrimSpace(out), " ")
 	rc, _ := strconv.Atoi(st)
 	return landing{errs, rc, pwd}
@@ -109,6 +111,12 @@ func (e *e2e) hopx(t *testing.T, dir string, env []string, args []string) landin
 
 func testdata(p string) string { return filepath.Join(testfix.ModuleRoot(), "testdata", p) }
 
+type headlessCase struct {
+	dir  string
+	env  []string
+	args []string
+}
+
 // TestHeadlessAgainstHop is suite_match's mt_headless cases and the four probe queries, run by hop and by hopx.
 // - The same stderr, byte for byte, the same status, and the same final directory.
 func TestHeadlessAgainstHop(t *testing.T) {
@@ -116,13 +124,102 @@ func TestHeadlessAgainstHop(t *testing.T) {
 		t.Skip("zsh or hop.zsh not available")
 	}
 	e := newE2E(t)
+	e.compare(t, e.headlessCases())
+}
+
+// TestHeadlessAgainstHop03 holds hopx to hop 0.3.1 on the same cases, plus what 0.3.0 added.
+// - A first word naming a kind outside the defaults is read as -k.
+// - A path typed outside its repo is looked for in every repo and workspace, a checkout on its default branch winning.
+func TestHeadlessAgainstHop03(t *testing.T) {
+	home := testfix.RefHome(testfix.RefLayout)
+	if home == "" || !testfix.HaveZsh() {
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
+	}
+	e := newE2E(t)
+	e.hophome = home
+	t.Setenv("HOPX_LAYOUT", "")
+	origin := map[string]string{
+		"strava/configuration":       "git@github.com:strava/configuration.git",
+		"personal/configuration-old": "https://github.com/Strava/configuration",
+		"strava/hop":                 "git@github.com:etknorr/hop.git",
+		"personal/hop":               "git@github.com:someone/hop.git",
+	}
+	for r, u := range origin {
+		p := filepath.Join(e.home, r)
+		exec.Command("git", "-C", p, "remote", "add", "origin", u).Run()
+		sub := "terraform/acct-x"
+		if strings.HasSuffix(r, "hop") {
+			sub = "lib/x"
+		}
+		os.MkdirAll(filepath.Join(p, sub), 0o755)
+	}
+	exec.Command("git", "-C", filepath.Join(e.home, "personal/configuration-old"), "checkout", "-q", "-b", "feature").Run()
+	os.MkdirAll(filepath.Join(e.home, "personal/notes/docs/a"), 0o755)
+	ws := "HOP_WORKSPACES=" + e.ws
+	// Every fixture kind is a default, so the kind-word cases narrow the defaults to leave some kinds out.
+	narrow := []string{"HOP_DEFAULT_KINDS=tg,mesos"}
+	cases := append(e.headlessCases(), []headlessCase{
+		{e.root, nil, []string{"helm", "thanos"}},
+		{e.root, narrow, []string{"helm"}},
+		{e.root, narrow, []string{"helm", "thanos"}},
+		{e.root, narrow, []string{"Helm", "thanos"}},
+		{e.root, narrow, []string{"helm", "zzqx"}},
+		{e.root, narrow, []string{"dir", "kubernetes"}},
+		{e.root, narrow, []string{"dir", "terraform"}},
+		{e.root, narrow, []string{"sbx"}},
+		{e.root, narrow, []string{"mod", "vpc"}},
+		{e.root, narrow, []string{"tg", "vpc"}},
+		{e.root, narrow, []string{"mesos", "abg"}},
+		{e.root, narrow, []string{"-k", "tg", "helm"}},
+		{e.root, narrow, []string{"-a", "helm"}},
+		{e.root, narrow, []string{"vpc", "helm"}},
+		{e.root + "/kubernetes", narrow, []string{"-c", "helm", "thanos"}},
+		{e.home, append(narrow, ws), []string{"dir", "terraform/acct-x"}},
+		{e.home, append(narrow, ws), []string{"dir", "zzqx"}},
+		{e.home, []string{ws}, []string{"terraform/acct-x"}},
+		{e.home, []string{ws, "HOP_JUMP=never"}, []string{"terraform/acct-x"}},
+		{e.home, []string{ws, "HOP_JUMP=unique"}, []string{"terraform/acct-x"}},
+		{e.home, []string{ws}, []string{"configuration/terraform/acct-x"}},
+		{e.home, []string{ws}, []string{"configuration-old/terraform/acct-x"}},
+		{e.home, []string{ws}, []string{"lib/x"}},
+		{e.home, []string{ws}, []string{"docs/a/"}},
+		{e.home, []string{ws}, []string{"docs/zz"}},
+		{e.home, []string{ws}, []string{"terraform/acct-zz"}},
+		{e.home, []string{ws}, []string{"helm", "terraform/acct-x"}},
+		{e.root, []string{ws}, []string{"docs/a"}},
+		{e.root, []string{ws}, []string{"-c", "docs/a"}},
+		{e.root, []string{ws}, []string{"lib/x"}},
+		{e.root, []string{ws, "HOP_REPOS=" + e.home + "/strava/hop"}, []string{"lib/x"}},
+	}...)
+	e.compare(t, cases)
+}
+
+func (e *e2e) compare(t *testing.T, cases []headlessCase) {
+	t.Helper()
+	for _, tc := range cases {
+		name := strings.Join(tc.args, " ") + " from " + strings.TrimPrefix(tc.dir, e.tmp+"/")
+		t.Run(name, func(t *testing.T) {
+			want := e.hop(t, tc.dir, tc.env, tc.args)
+			got := e.hopx(t, tc.dir, tc.env, tc.args)
+			if got.rc != want.rc || got.pwd != want.pwd {
+				t.Errorf("hopx: rc %d at %s\n hop: rc %d at %s", got.rc, got.pwd, want.rc, want.pwd)
+			}
+			if got.stderr != want.stderr {
+				t.Errorf("stderr differs\n--- hopx\n%s--- hop\n%s", got.stderr, want.stderr)
+			}
+			hh, _ := os.ReadFile(filepath.Join(e.tmp, "hist-hop"))
+			hx, _ := os.ReadFile(filepath.Join(e.tmp, "hist-hopx"))
+			if !bytes.Equal(hh, hx) {
+				t.Errorf("history differs\n--- hopx\n%s--- hop\n%s", hx, hh)
+			}
+		})
+	}
+}
+
+func (e *e2e) headlessCases() []headlessCase {
 	ws := "HOP_WORKSPACES=" + e.ws
 	sp := "terraform/acct-security-tooling-prod"
-	for _, tc := range []struct {
-		dir  string
-		env  []string
-		args []string
-	}{
+	return []headlessCase{
 		{e.root, nil, []string{"vpc"}},
 		{e.root, nil, []string{"thanos"}},
 		{e.root, nil, []string{"-p", "vpc"}},
@@ -160,23 +257,6 @@ func TestHeadlessAgainstHop(t *testing.T) {
 		{e.root, []string{ws}, []string{"-R", "strava/conf"}},
 		{e.root, []string{ws}, []string{"-R", sp}},
 		{e.home, []string{ws}, []string{"lit/deep"}},
-	} {
-		name := strings.Join(tc.args, " ") + " from " + strings.TrimPrefix(tc.dir, e.tmp+"/")
-		t.Run(name, func(t *testing.T) {
-			want := e.hop(t, tc.dir, tc.env, tc.args)
-			got := e.hopx(t, tc.dir, tc.env, tc.args)
-			if got.rc != want.rc || got.pwd != want.pwd {
-				t.Errorf("hopx: rc %d at %s\n hop: rc %d at %s", got.rc, got.pwd, want.rc, want.pwd)
-			}
-			if got.stderr != want.stderr {
-				t.Errorf("stderr differs\n--- hopx\n%s--- hop\n%s", got.stderr, want.stderr)
-			}
-			hh, _ := os.ReadFile(filepath.Join(e.tmp, "hist-hop"))
-			hx, _ := os.ReadFile(filepath.Join(e.tmp, "hist-hopx"))
-			if !bytes.Equal(hh, hx) {
-				t.Errorf("history differs\n--- hopx\n%s--- hop\n%s", hx, hh)
-			}
-		})
 	}
 }
 

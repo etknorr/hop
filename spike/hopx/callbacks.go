@@ -12,7 +12,6 @@ import (
 	"github.com/etknorr/hop/spike/hopx/internal/kinds"
 	"github.com/etknorr/hop/spike/hopx/internal/mru"
 	"github.com/etknorr/hop/spike/hopx/internal/pick"
-	"github.com/etknorr/hop/spike/hopx/internal/resolve"
 	"github.com/etknorr/hop/spike/hopx/internal/shell"
 )
 
@@ -64,11 +63,11 @@ func cmdRowsSession(names []string, stdout, stderr io.Writer) error {
 	if len(names) == 0 {
 		names = s.Kinds
 	}
-	all := renderAll(kinds.Generate(cfg, s.Root, uniqStrings(names), stderr), s.Root)
+	gen := kinds.Generate(cfg, s.Root, uniqStrings(names), stderr)
 	if s.Under != "" {
-		all = resolve.FilterUnder(all, s.Under)
+		gen = underRows(gen, s.Under)
 	}
-	all = mru.Rank(all, mru.Load(cfg.Settings.HistFile))
+	all := mru.Rank(renderAll(gen, s.Root), mru.Load(cfg.Settings.HistFile))
 	bw := bufio.NewWriterSize(stdout, 1<<16)
 	for _, r := range all {
 		bw.WriteString(r)

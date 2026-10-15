@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/etknorr/hop/spike/hopx/internal/collate"
 	"github.com/etknorr/hop/spike/hopx/internal/match"
@@ -50,6 +51,8 @@ type Resolver struct {
 	Jump   string
 	Under  string
 	Kinds  []string
+	// Like is a row of the list being resolved, so the ancestor rows it injects line up with it (_hop_row_like).
+	Like string
 
 	err error
 }
@@ -306,15 +309,22 @@ func (s *state) decide(tier, eq string, approx, opq bool, M []string) {
 	synby := map[string]string{}
 	var S, srels []string
 	if len(anc) > 0 {
-		syn := make([]string, len(anc))
+		raw := make([]rows.Row, len(anc))
 		for i, a := range anc {
 			scope := zHead(a)
 			if scope == "." {
 				scope = "-"
 			}
 			d := s.Root + "/" + a
-			syn[i] = rows.Render(rows.New("dir", scope, "-", "-", path.Base(a), d, d, false), s.Root)
-			synby[RelOf(syn[i])] = syn[i]
+			raw[i] = rows.New("dir", scope, "-", "-", path.Base(a), d, d, false)
+		}
+		var like *rows.Widths
+		if w, ok := rows.ParseWidths(s.Like); ok {
+			like = &w
+		}
+		syn := rows.List(raw, s.Root, like)
+		for _, r := range syn {
+			synby[RelOf(r)] = r
 		}
 		S = s.match(eq, syn)
 		srels = relsOf(S)
@@ -363,6 +373,43 @@ func (s *state) jump(rule string, t Target) {
 	s.res.Verdict, s.res.Rule, s.res.Target = "jump", rule, t
 }
 
+// unclip is _hop_unclip: the row with its clipped name restored from its rel, or false when rel cannot say what was cut.
+// - Only the name: a clipped scope or env leaves no trace in rel, and neither does a name read from a file.
+// - The name may be the rel's last segments, with or without the extension; the rel is tried whole, then from its last / back.
+func unclip(row string) (string, bool) {
+	disp, tail, _ := strings.Cut(row, "\t")
+	d := rows.StripANSI(disp)
+	name, rest := d, ""
+	if i := strings.IndexByte(d, ' '); i >= 0 {
+		name, rest = d[:i], d[i:]
+	}
+	a, b, ok := strings.Cut(name, "…")
+	if !ok || a == "" || b == "" || strings.Contains(rest, "…") {
+		return "", false
+	}
+	f := strings.Split(row, "\t")
+	rel := strings.TrimSuffix(rows.StripANSI(f[len(f)-1]), "/")
+	cands := []string{rel}
+	if i := strings.LastIndexByte(rel, '.'); i >= 0 {
+		cands = append(cands, rel[:i])
+	}
+	for _, r := range cands {
+		starts := []int{0}
+		for i := len(r) - 1; i >= 0; i-- {
+			if r[i] == '/' {
+				starts = append(starts, i+1)
+			}
+		}
+		for _, st := range starts {
+			x := r[st:]
+			if strings.HasPrefix(x, a) && strings.HasSuffix(x, b) && utf8.RuneCountInString(x) > utf8.RuneCountInString(a)+utf8.RuneCountInString(b) {
+				return x + rest + "\t" + tail, true
+			}
+		}
+	}
+	return "", false
+}
+
 // decideJump is _hop_decide_jump: J1, J1b, J3, J0 and J2, in that order.
 // - J3 runs before J2, which is what keeps every jump the display-only matcher made.
 func (s *state) decideJump(tier, eq string, opq bool, M, R, srels, inj, X, cand []string) {
@@ -390,12 +437,22 @@ func (s *state) decideJump(tier, eq string, opq bool, M, R, srels, inj, X, cand 
 		}
 	}
 	// J3: one display hit still jumps, unless another match has a clipped column that only hid the words.
+	// - A clipped name its rel spells out whole is matched whole instead (hop 0.3.0), so a narrow name column costs no jump.
 	if hits := s.match(eq, M, "--nth=1"); len(hits) == 1 {
-		clipped := false
+		clipped, unclipped := false, false
+		whole := make([]string, 0, len(M))
 		for _, m := range M {
 			if m != hits[0] && strings.Contains(display(m), "…") {
-				clipped = true
+				if u, ok := unclip(m); ok {
+					m, unclipped = u, true
+				} else {
+					clipped = true
+				}
 			}
+			whole = append(whole, m)
+		}
+		if !clipped && unclipped && len(s.match(eq, whole, "--nth=1")) != 1 {
+			clipped = true
 		}
 		if !clipped {
 			s.jump("display", Fields(hits[0]))
@@ -568,9 +625,10 @@ func (r *Resolver) Resolve(q string, rs []string) Result {
 }
 
 // none is _hop_resolve_none: T4, nothing close, so the picker opens on the query as typed.
+// - The hint is hop 0.3's for HOP_VIM=0, since hopx has no modal layer and esc cancels its picker.
 func (s *state) none() {
 	s.res.Verdict, s.res.Tier, s.res.Query = "none", "T4", s.q
-	s.res.Note = "nothing close to: " + s.q + " (esc clears)"
+	s.res.Note = "nothing close to: " + s.q + " (ctrl-u clears)"
 }
 
 // textBuild is _hop_text_build: fields 1 and 4 lowercased, or "" when the text holds non-ASCII besides hop's … marker.

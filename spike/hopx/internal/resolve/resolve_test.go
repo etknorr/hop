@@ -189,7 +189,7 @@ func (f *fix) run(k kase, all []string) out {
 	o := out{res: res, visible: rs}
 	if res.Verdict != "jump" {
 		var b bytes.Buffer
-		Report(&b, res, k.q, k.jump)
+		Report(&b, res, k.q, k.jump, "")
 		o.report = strings.ReplaceAll(strings.TrimRight(b.String(), "\n"), "\n", `\n`)
 	}
 	return o
@@ -221,7 +221,10 @@ func (f *fix) zshTable(t *testing.T, ks []kase) map[string]string {
 	return byKey(got)
 }
 
+// byKey indexes a table by its case. The worktree's hop is 0.2.0, whose T4 hint names its modal layer's esc.
+// - hopx words it as hop 0.3 does with no modal layer, so that one hint is read in hopx's wording.
 func byKey(text string) map[string]string {
+	text = strings.ReplaceAll(text, " (esc clears)\t", " (ctrl-u clears)\t")
 	m := map[string]string{}
 	for _, l := range match.Lines(text) {
 		f := strings.SplitN(l, "\t", 6)
@@ -499,7 +502,7 @@ func TestSuiteMatchDetails(t *testing.T) {
 	t.Run("nothing close", func(t *testing.T) {
 		for _, q := range []string{"zzqx", "zzzz"} {
 			r := f.get(t, c(q)).res
-			if r.Verdict+" "+r.Tier != "none T4" || r.Note != "nothing close to: "+q+" (esc clears)" {
+			if r.Verdict+" "+r.Tier != "none T4" || r.Note != "nothing close to: "+q+" (ctrl-u clears)" {
 				t.Errorf("%s: %s %s %q", q, r.Verdict, r.Tier, r.Note)
 			}
 		}

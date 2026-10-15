@@ -149,10 +149,41 @@ func gitToplevel() string {
 	return strings.TrimRight(string(out), "\n")
 }
 
-func renderAll(rs []rows.Row, root string) []string {
-	out := make([]string, len(rs))
-	for i, r := range rs {
-		out[i] = rows.Render(r, root)
+// listRows is _hop_rows: generate, keep what -c keeps, lay that out, then rank by history.
+// - The status is hop's: 1 when the kinds list nothing, 2 when nothing is under the -c dir.
+func listRows(cfg *config.Config, root, under string, names []string, stderr io.Writer) ([]string, int) {
+	gen := kinds.Generate(cfg, root, names, stderr)
+	if len(gen) == 0 {
+		return nil, 1
+	}
+	if under != "" {
+		if gen = underRows(gen, under); len(gen) == 0 {
+			return nil, 2
+		}
+	}
+	return mru.Rank(renderAll(gen, root), mru.Load(cfg.Settings.HistFile)), 0
+}
+
+func haveFzf() bool {
+	_, err := exec.LookPath("fzf")
+	return err == nil
+}
+
+// looksLikePath is the outside-a-repo test for a kind word: the word after it is a path.
+func looksLikePath(w string) bool {
+	return strings.Contains(w, "/") || strings.HasPrefix(w, "~") || w == "." || w == ".."
+}
+
+// renderAll lays rs out as one list; see rows.List.
+func renderAll(rs []rows.Row, root string) []string { return rows.List(rs, root, nil) }
+
+// underRows is _hop_filter_under on rows not yet laid out, since hop 0.3 lays out only the rows -c keeps.
+func underRows(rs []rows.Row, under string) []rows.Row {
+	var out []rows.Row
+	for _, r := range rs {
+		if r.Dir == under || strings.HasPrefix(r.Dir, under+"/") {
+			out = append(out, r)
+		}
 	}
 	return out
 }
@@ -163,6 +194,8 @@ type session struct {
 	stdout, stderr io.Writer
 	fzf            *match.FZF
 	mode, jump     string
+	// kword is the kind the first word was read as, hop 0.3.0's `hop file x` for `hop -k file x`.
+	kword string
 }
 
 // level is one picker's targets and what its keys can reach: _hop_run's and _hop_res_pick's arguments.
@@ -199,7 +232,7 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 		return a.Dispatch("", t.Dir, t.Preview, t.Rel)
 	}
 	if !tty.Available() {
-		accept, rc := resolve.Report(s.stderr, res, query, s.jump)
+		accept, rc := resolve.Report(s.stderr, res, query, s.jump, s.kword)
 		if accept {
 			t := res.Target
 			return a.Dispatch("", t.Dir, t.Preview, t.Rel)
@@ -219,7 +252,7 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 		o.Ordered = true
 		input = res.Input(lv.targets)
 	case "empty":
-		o.Select1 = s.jump != "never"
+		o.Select1 = s.jump != "never" && s.kword == ""
 	}
 	sess := &pick.Session{Root: lv.root, Under: lv.under, Kinds: lv.kinds, All: s.cfg.AllKinds(), Header: o.Header()}
 	out, st, err := pick.Run(s.fzf.Bin, o, sess, input, s.stderr)
@@ -245,6 +278,27 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 		return 0
 	}
 	return a.Dispatch(r.Key, r.Dir, r.Preview, r.Rel)
+}
+
+// elsewhere runs resolve.Elsewhere over every repo and workspace hop knows; done means the call is over with rc.
+func (s *session) elsewhere(query, root, pwd string) (rc int, done bool) {
+	set := s.cfg.Settings
+	wss := workspace.Parse(set.Workspaces, set.WorkspacesFile)
+	var places []resolve.Place
+	for _, r := range workspace.RepoList(set.Repos, wss) {
+		places = append(places, resolve.Place{Name: filepath.Base(r), Path: r})
+	}
+	for _, w := range wss {
+		places = append(places, resolve.Place{Name: w.Name, Path: w.Path, Workspace: true})
+	}
+	a, hint, ok := resolve.Elsewhere(query, root, pwd, places, s.jump, mru.Load(set.HistFile))
+	if !ok {
+		if hint != "" {
+			fmt.Fprintln(s.stderr, hint)
+		}
+		return 0, false
+	}
+	return s.pick(a.Res, query, level{label: fmt.Sprintf("paths  %d found", len(a.Rows)), targets: a.Rows}), true
 }
 
 func (s *session) repoRows() []string {
@@ -314,6 +368,46 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		return act.CD(root, stdout, stderr, set.HistFile, set.HistMax)
 	}
 	pwd := logicalPWD()
+	names := cfg.DefaultKinds()
+	if o.all {
+		names = cfg.AllKinds()
+	} else if o.kinds != nil {
+		names = o.kinds
+	}
+	names = uniqStrings(names)
+	under := ""
+	if o.here && root != "" {
+		if h, r := realpath(pwd), realpath(root); h != r {
+			under = h
+		}
+	}
+
+	// hop 0.3.0: a first word naming a kind outside the active set, which no row here holds as a whole word, is that kind.
+	// - In a repo the kind must have rows here; outside one, the word is read only before a path, which it frees for T0.
+	// - The rows listed to decide it are kept, so the resolve below enumerates nothing twice.
+	var pre []string
+	preSt := -1
+	if o.kinds == nil && !o.all && !o.wss && !o.repos && len(o.words) > 0 && haveFzf() {
+		w1 := strings.ToLower(o.words[0])
+		if slices.Contains(cfg.AllKinds(), w1) && !slices.Contains(names, w1) {
+			if root == "" {
+				if len(o.words) == 2 && looksLikePath(o.words[1]) {
+					s.kword = w1
+				}
+			} else {
+				pre, preSt = listRows(cfg, root, under, names, stderr)
+				if resolve.WordUnread(o.words[0], pre) {
+					if k, st := listRows(cfg, root, under, []string{w1}, stderr); st == 0 {
+						s.kword, pre, preSt = w1, k, 0
+					}
+				}
+			}
+		}
+		if s.kword != "" {
+			fmt.Fprintf(stderr, "hop: reading \"%s\" as -k %s\n", o.words[0], s.kword)
+			names, o.words = []string{s.kword}, o.words[1:]
+		}
+	}
 
 	// T0: a typed path is a filesystem fact, so it jumps before fzf or any enumeration is paid for.
 	if !o.wss && !o.repos && len(o.words) == 1 && s.jump != "never" {
@@ -321,6 +415,8 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 			return s.actor(false).Dispatch("", t.Dir, t.Preview, t.Rel)
 		}
 	}
+	// A one-word path T0 missed may be another repo's (hop 0.3.0), tried only where this repo has nothing for it; never under -c.
+	xrepo := !o.wss && !o.repos && len(o.words) == 1 && !o.here
 
 	if s.fzf, err = match.New(stderr); err != nil {
 		fmt.Fprintln(stderr, "hop: fzf is not installed")
@@ -336,45 +432,48 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		return s.wsLevel(query, false)
 	}
 	if o.repos || root == "" {
+		if root == "" && xrepo {
+			if rc, done := s.elsewhere(query, "", pwd); done {
+				return rc
+			}
+		}
 		if root == "" && !o.repos && len(workspace.Parse(set.Workspaces, set.WorkspacesFile)) > 0 {
 			return s.wsLevel(query, true)
 		}
 		return s.repoLevel(query)
 	}
 
-	names := cfg.DefaultKinds()
-	if o.all {
-		names = cfg.AllKinds()
-	} else if o.kinds != nil {
-		names = o.kinds
-	}
-	names = uniqStrings(names)
 	if len(names) == 0 {
 		fmt.Fprintln(stderr, "hop: no kinds selected")
 		return 2
 	}
-	under := ""
-	if o.here {
-		if h, r := realpath(pwd), realpath(root); h != r {
-			under = h
+	all, st := pre, preSt
+	if st < 0 {
+		all, st = listRows(cfg, root, under, names, stderr)
+	}
+	if st == 1 && xrepo {
+		if rc, done := s.elsewhere(query, root, pwd); done {
+			return rc
 		}
 	}
-	all := renderAll(kinds.Generate(cfg, root, names, stderr), root)
-	if len(all) == 0 {
+	switch st {
+	case 1:
 		fmt.Fprintf(stderr, "hop: no targets in %s for kinds: %s\n", root, strings.Join(names, ","))
 		return 1
+	case 2:
+		fmt.Fprintf(stderr, "hop: no targets under %s for kinds: %s\n", pwd, strings.Join(names, ","))
+		return 1
 	}
-	if under != "" {
-		if all = resolve.FilterUnder(all, under); len(all) == 0 {
-			fmt.Fprintf(stderr, "hop: no targets under %s for kinds: %s\n", pwd, strings.Join(names, ","))
-			return 1
-		}
-	}
-	all = mru.Rank(all, mru.Load(set.HistFile))
 	r := s.resolver(root, under)
+	r.Like = all[0]
 	res := r.Resolve(query, all)
 	if err := r.Err(); err != nil {
 		fmt.Fprintln(stderr, "hopx:", err)
+	}
+	if res.Verdict == "none" && xrepo {
+		if rc, done := s.elsewhere(query, root, pwd); done {
+			return rc
+		}
 	}
 	return s.pick(res, query, level{
 		label: fmt.Sprintf("%s  %d targets  %s", filepath.Base(root), len(all), strings.Join(names, ",")),
@@ -483,7 +582,7 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 			rep := ""
 			if res.Verdict != "jump" {
 				var b strings.Builder
-				resolve.Report(&b, res, q, jump)
+				resolve.Report(&b, res, q, jump, "")
 				rep = strings.ReplaceAll(strings.TrimRight(b.String(), "\n"), "\n", `\n`)
 			}
 			var rels []string

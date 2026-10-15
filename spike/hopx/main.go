@@ -36,7 +36,7 @@ const usage = `usage: hopx [-a | -k KINDS] [-c] [-p] [--cd] [-o | -e | --action=
   hopx config import [CONFIG.zsh] [-o OUT] convert hop's config.zsh to TOML
   hopx config check                        load the config and report problems
   hopx config path                         print the config path hopx reads
-  hopx -V                                  version
+  hopx -V, -v                              version
 
 The config is $HOPX_CONFIG, else ${XDG_CONFIG_HOME:-~/.config}/hop/config.toml.
 `
@@ -86,7 +86,7 @@ func argAt(a []string, i int) string {
 
 // subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hopx -- rows`.
 var subcommands = map[string]bool{
-	"-h": true, "--help": true, "help": true, "-V": true, "--version": true, "init": true,
+	"-h": true, "--help": true, "help": true, "-V": true, "-v": true, "--version": true, "init": true,
 	"rows": true, "kinds": true, "config": true, "__rows": true, "__resolve-dump": true,
 	"__sh": true, "__preview": true, "__menu": true, "__key": true, "__header": true, "__complete": true,
 }
@@ -99,7 +99,7 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 	case "-h", "--help", "help":
 		fmt.Fprint(stdout, usage)
 		return nil
-	case "-V", "--version":
+	case "-V", "-v", "--version":
 		fmt.Fprintln(stdout, "hopx", version)
 		return nil
 	case "rows":
@@ -170,8 +170,8 @@ func splitKinds(s string) []string {
 
 func writeRows(w io.Writer, rs []rows.Row, root string) error {
 	bw := bufio.NewWriterSize(w, 1<<16)
-	for _, r := range rs {
-		bw.WriteString(rows.Render(r, root))
+	for _, r := range rows.List(rs, root, nil) {
+		bw.WriteString(r)
 		bw.WriteByte('\n')
 	}
 	return bw.Flush()

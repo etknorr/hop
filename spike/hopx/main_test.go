@@ -41,8 +41,10 @@ func TestUsageAndVersion(t *testing.T) {
 	if o, _, rc := hopx(t, "-h"); rc != 0 || !strings.Contains(o, "usage: hopx") {
 		t.Errorf("-h: rc %d", rc)
 	}
-	if o, _, rc := hopx(t, "-V"); rc != 0 || !strings.HasPrefix(o, "hopx ") {
-		t.Errorf("-V: %q", o)
+	for _, v := range []string{"-V", "-v", "--version"} {
+		if o, _, rc := hopx(t, v); rc != 0 || !strings.HasPrefix(o, "hopx ") {
+			t.Errorf("%s: %q", v, o)
+		}
 	}
 	for _, a := range [][]string{{"-Z"}, {"-o", "-e"}, {"--action"}, {"--action=bogus"}, {"--action=open", "-o"}, {"/", "x"}, {"x", "-"}, {"-k"},
 		{"rows", "-w", "-R"}, {"rows", "-a", "-k", "dir"}, {"rows", "extra"}, {"__rows"}, {"config"}, {"__resolve-dump", "--bogus"}} {

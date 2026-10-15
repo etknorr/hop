@@ -154,14 +154,61 @@ func HaveZsh() bool {
 	return err == nil
 }
 
+// RefLayout is the hop release whose fitted layout hopx ports; the worktree's own hop.zsh is 0.2.0, from before it.
+const RefLayout = "v0.3.1"
+
+// RefHome is hop at a release tag, unpacked once from the worktree's git objects into the temp dir.
+// - It is "" when git or the tag is unavailable, so a test can skip rather than fail.
+func RefHome(tag string) string {
+	out, err := exec.Command("git", "-C", HopHome(), "rev-parse", "--verify", "-q", tag+"^{commit}").Output()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(os.TempDir(), "hopx-ref-"+tag+"-"+strings.TrimSpace(string(out))[:12])
+	if _, err := os.Stat(filepath.Join(dir, "hop.zsh")); err == nil {
+		return dir
+	}
+	tmp, err := os.MkdirTemp(os.TempDir(), "hopx-ref-")
+	if err != nil {
+		return ""
+	}
+	defer os.RemoveAll(tmp)
+	archive := exec.Command("git", "-C", HopHome(), "archive", "--format=tar", tag)
+	untar := exec.Command("tar", "-x", "-C", tmp)
+	if untar.Stdin, err = archive.StdoutPipe(); err != nil {
+		return ""
+	}
+	if err := untar.Start(); err != nil {
+		return ""
+	}
+	if err := archive.Run(); err != nil {
+		return ""
+	}
+	if err := untar.Wait(); err != nil {
+		return ""
+	}
+	// Another test process may have unpacked it first; either copy is the same tree.
+	if err := os.Rename(tmp, dir); err != nil {
+		if _, serr := os.Stat(filepath.Join(dir, "hop.zsh")); serr != nil {
+			return ""
+		}
+	}
+	return dir
+}
+
 // Zsh sources the worktree's hop.zsh with config cfg and runs script, passing args as $1.. after hop's own.
 // - zsh -f and a scrubbed environment keep Eric's shell setup and real history out of every comparison.
 func Zsh(cfg, script string, env []string, args ...string) (string, error) {
+	return ZshAt(HopHome(), cfg, script, env, args...)
+}
+
+// ZshAt is Zsh against the hop.zsh in home, such as a RefHome.
+func ZshAt(home, cfg, script string, env []string, args ...string) (string, error) {
 	full := `source "$HOP_HOME_X/hop.zsh" || exit 3` + "\n" + script
 	cmd := exec.Command("zsh", append([]string{"-f", "-c", full, "zsh"}, args...)...)
 	cmd.Env = append([]string{
 		"HOME=" + os.Getenv("HOME"), "PATH=" + os.Getenv("PATH"), "LANG=en_US.UTF-8",
-		"TMPDIR=" + os.TempDir(), "HOP_HISTFILE=/dev/null", "HOP_CONFIG=" + cfg, "HOP_HOME_X=" + HopHome(),
+		"TMPDIR=" + os.TempDir(), "HOP_HISTFILE=/dev/null", "HOP_CONFIG=" + cfg, "HOP_HOME_X=" + home,
 	}, env...)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
