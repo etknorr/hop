@@ -712,6 +712,10 @@ assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration" 'hop configura
 assert_contains "$MT_RUN" 'hop: configuration -> ~/strava/configuration/ (exact name; 1 other contains it)' \
 	'J0 skips configuration-old, so it says what it skipped'
 
+t 'workspaces: outside a repo, an exact repo match beats a workspace pick that ignored a word'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop personal configuration' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/personal/configuration-old" 'a relaxed workspace pick had hidden the one repo both words name'
+
 t 'repos: a name exactly one repo has jumps past the repos that only contain it'
 MT_RUN=$(mt_headless "$MT_REPO" 'hop -R configuration' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"

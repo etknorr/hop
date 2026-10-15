@@ -839,6 +839,18 @@ _hop_all_but_one() {
 	_hop_decide relaxed "${(j: :)pairs}" 1 "${out[@]}"
 }
 
+# _hop_res_rank -> REPLY ranks the resolve by how close it came: T1 5, T2a 4, T2 or T3 3, relaxed 2, nothing 1.
+_hop_res_rank() {
+	emulate -L zsh
+	case $_hop_res_tier in
+		(T0|T1) REPLY=5 ;;
+		(T2a) REPLY=4 ;;
+		(T2|T3) REPLY=3 ;;
+		(relaxed) REPLY=2 ;;
+		(*) REPLY=1 ;;
+	esac
+}
+
 # _hop_resolve_none -> T4: nothing close, so the picker opens on the query as typed, editable, with zero rows.
 _hop_resolve_none() {
 	emulate -L zsh

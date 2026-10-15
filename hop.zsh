@@ -327,7 +327,9 @@ _hop_run() {
 # - Answers "just nav to the workspace, or show its repos" without forcing the choice up front.
 # - Drilling scopes $HOP_REPOS to the chosen workspace, so the repo picker needs no new argument.
 # - fallback is set only when hop chose this level itself, outside a repo, rather than by -w.
-# - Then a query no workspace answers is tried against the repos, so `hop configuration` from ~ finds the repo.
+# - Then a query no workspace answers exactly is tried against the repos too, and the closer tier wins.
+# - So `hop configuration` from ~ finds the repo, and `hop tf eks` is not a workspace pick that ignored eks.
+# - A tie goes to the workspaces, which is the level hop chose.
 _hop_ws_picker() {
 	emulate -L zsh
 	local query=${1:-} fallback=${2:-} targets
@@ -346,12 +348,15 @@ _hop_ws_picker() {
 	local -a rows=("${(f)targets}")
 	local label="workspaces  ${#rows}"
 	_hop_resolve "$query" "$targets" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
-	if [[ -n $fallback && $_hop_res_verdict == none ]]; then
+	if [[ -n $fallback && $_hop_res_verdict != (jump|empty) && $_hop_res_tier != T1 ]]; then
 		local REPLY
 		local -a reply
+		_hop_res_rank
+		local -i wsrank=$REPLY
 		if _hop_repo_targets; then
 			_hop_resolve "$query" "$REPLY" '' "${_hop_mode:-cd}" "${_hop_jump:-$HOP_JUMP}"
-			if [[ $_hop_res_verdict != none ]]; then
+			_hop_res_rank
+			if (( REPLY > wsrank )); then
 				_hop_repo_picker "$query"
 				return $?
 			fi
