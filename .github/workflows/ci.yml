@@ -129,7 +129,7 @@ jobs:
       - name: Run the fzf-sensitive suites
         env:
           HOP_T_TIMEOUT: '180'
-        run: zsh tests/run 'suite_(nottty|match|actions|integration|keymap|pty_escape).zsh'
+        run: zsh tests/run 'suite_(nottty|match|actions|integration|keymap|pty_escape|pty|pty_filter|layout).zsh'
 
   lint:
     name: lint (zsh -n)
