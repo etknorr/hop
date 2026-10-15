@@ -38,7 +38,7 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - `c` in NORMAL and `alt-enter` in SEARCH always `cd`, so a plain `cd` stays one key away when Enter opens or reveals.
   In the `:` view menu they do nothing, since a menu row names a view rather than a directory.
   The legends name Enter's mode, and list `c` and `M-enter` only when the mode isn't `cd`, so the default legend is unchanged.
-- `HOP_JUMP` sets when a query may skip the picker: `auto` (the default), `unique` for one target only as before, or `never`, and `-p`/`--pick` is `never` for one call.
+- `HOP_JUMP` sets when a query may skip the picker: `auto` (the default), `unique` for one target only, or `never`, and `-p`/`--pick` is `never` for one call.
 - `HOP_CODE` names the VS Code-compatible CLI to run, such as `cursor` or `codium`.
 - `hop --doctor` shows `HOP_ACTION`, `HOP_JUMP` and `HOP_CODE`, whether VS Code is reachable from this shell and why not, and any `--fn` kind still printing 3-field rows.
   `--doctor=short` shows the same settings, but withholds a `HOP_ACTION` or `HOP_JUMP` value that isn't a mode, a `HOP_CODE` other than `code`, `cursor`, `codium` or `code-insiders`, and the socket path or launcher name when one is why VS Code isn't reachable.
