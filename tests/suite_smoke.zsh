@@ -211,9 +211,6 @@ smshort=$(HOP_CODE=cursor hop_probe "builtin cd -q ${(q)HOP_FIX_TMPROOT} && hop 
 sm_docline "$smshort" HOP_CODE
 assert_eq "$(printf '  %-22s %s' HOP_CODE cursor)" "$REPLY" 'one of the four documented launchers names nothing personal'
 
-# A bare `typeset REPLY` further down would otherwise echo whatever REPLY still holds here.
-unset REPLY
-
 # ---------------------------------------------------------------------------
 # --version: the release contract other tooling (hop upgrade) depends on.
 # ---------------------------------------------------------------------------
@@ -336,7 +333,7 @@ assert_eq "${HOP_FIX_HOME}/.config" "${probeenv[2]}" 'XDG_CONFIG_HOME must move 
 assert_contains "${probeenv[3]}" "$HOP_FIX_HOME" 'the workspaces file a probe would READ is outside the fixture'
 
 t 'fixture_repo builds a throwaway git repo'
-typeset REPLY repo top
+typeset repo top
 fixture_repo smoke
 repo=$REPLY
 fixture_write 'terraform/sandbox/vpc/terragrunt.hcl' 'include {}'

@@ -289,6 +289,7 @@ assert_empty "$(stub_calls code)"
 typeset AC_SOCK="$AC_WORK/ipc.sock"
 cat > "$AC_WORK/usable.zsh" <<'EOF'
 ac_usable() {
+	emulate -L zsh
 	local label=$1
 	shift
 	(
