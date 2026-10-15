@@ -257,7 +257,8 @@ nt_run 'hop vpc' "$NT_MREPO" "$NT_MPIN"
 assert_eq 0 "$NT_HUNG"
 assert_eq 1 "$NT_ST"
 assert_contains "$NT_ERR" '5 targets matched the query: vpc'
-assert_contains "$NT_ERR" 'hop: best matches: terraform/' 'the rels are what tell a user how to narrow it'
+assert_contains "$NT_ERR" $'\n''hop: best matches: terraform/acct-data-platform-prod/env-prod/us-east-1/vpc/, terraform/acct-infrastructure/env-dev/us-east-1/vpc/, terraform/acct-infrastructure/env-prod/us-east-1/vpc/'$'\n' \
+	'the best three rels, in fzf order, are what tell a user how to narrow it'
 assert_contains "$NT_ERR" 'hop: narrow the query until exactly one target matches' 'an exact pick is the one case narrowing fixes'
 assert_eq "$NT_MREPO" "$NT_PWD"
 
