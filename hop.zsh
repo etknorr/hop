@@ -99,7 +99,7 @@ _hop_usage() {
 	print -r -- "  SEARCH: every key types | esc back to NORMAL | enter ${enter} | alt-enter cd"
 	print -r -- '          ctrl-o code -r file | ctrl-t code -n dir'
 	print -r -- '          ctrl-y copy dir | alt-y copy file | alt-o $EDITOR file'
-	print -r -- '          ctrl-g gh browse | alt-a all kinds | ctrl-r refresh preview'
+	print -r -- '          alt-B gh browse | alt-a all kinds | ctrl-r refresh preview'
 	print -r -- '          alt-p or ctrl-/ toggle preview'
 	print -r -- ''
 	print -r -- '  ^G and alt-g launch hop from a half-typed command line.'
