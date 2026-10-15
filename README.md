@@ -292,7 +292,8 @@ fzf has no key-sequence support, so there is no `gg`. `g` alone is first, `G` is
 | `p` | toggle the preview pane |
 | `r` | refresh the list |
 | `?` | keymap overlay in the preview pane |
-| `q` or `esc` | quit |
+| `esc` | clear the query, or quit when it is already empty |
+| `q` | quit |
 
 Five of those depend on which picker you are in. `r` needs a list it can regenerate, `:` needs a repo
 root to enumerate kinds from, `l` needs somewhere to drill into, `h` needs a level to go back out to,
@@ -302,7 +303,10 @@ rather than name a key that does nothing.
 
 ### SEARCH
 
-Every printable key types. `esc` returns to NORMAL and clears the query.
+Every printable key types. `esc` returns to NORMAL and keeps the query, so the list stays filtered
+and `j`/`k` and every NORMAL verb work on the rows it matched. A second `esc` clears the query and
+brings the full list back, and a third quits. `/` goes back to SEARCH with the query still there to
+edit.
 
 | Key | Does |
 |---|---|
@@ -346,7 +350,7 @@ Three gaps remain, all nuisance-level and all deliberate for now.
 
 A **bracketed paste** wraps its payload in `\e[200~` and `\e[201~`, which are well-formed CSI
 sequences that fzf parses and discards, so there is no introducer left to hook. It also takes a
-deliberate paste to trigger, and NORMAL mode has search off, so pasting there is meaningless anyway.
+deliberate paste to trigger.
 
 `\b` and `\f`, if a program prints them raw, still read as `ctrl-h` and `ctrl-l`, which are `--expect`
 keys rather than binds. `--expect` outranks every bind and so cannot be guarded. Both are in-picker
@@ -359,9 +363,10 @@ relocating the verb, which is what `ctrl-g` got, is the only remedy that class h
 are deliberately not getting it in a patch release: relocating two documented keybindings is a worse
 trade than a recoverable change of list position.
 
-A **bare `ESC` byte** still closes the picker, because `esc` in NORMAL means quit and that is the
-documented binding. Measured: a lone `\e` or `\e\e` aborts, while a `\e` arriving at the tail of a
-truncated sequence does whatever `esc` means in the mode it lands in. `esc` is deliberately *not*
+A **bare `ESC` byte** still closes the picker, because `esc` in NORMAL with an empty query means
+quit and that is the documented binding; with a query it clears the query instead. Measured on an
+empty query: a lone `\e` or `\e\e` aborts, while a `\e` arriving at the tail of a truncated sequence
+does whatever `esc` means in the mode it lands in. `esc` is deliberately *not*
 guarded, and that is a safety property rather than an oversight: if `bin/hop-guard` were ever missing
 or lost its executable bit, a `transform:` yields no output, fzf treats that as no action, and all
 ten guarded keys go dead at once. `esc` is then the only way out of the picker.
@@ -370,7 +375,8 @@ ten guarded keys go dead at once. `esc` is then the only way out of the picker.
 
 `:` switches which kinds are listed, **in place**, with no nested fzf process. It reuses the single
 fzf instance by reloading it with a menu and using `$FZF_PROMPT` as the mode flag. `enter` switches
-to that kind; `esc` returns to exactly the list you came from, row count unchanged.
+to that kind; `esc` returns to exactly the list you came from, row count unchanged. `:` drops a
+query kept from SEARCH, because it would filter the kind list too, so that list comes back unfiltered.
 
 Menu counts are cached per repo, per `HEAD`, *and* per the index's own state, so a commit, a branch
 switch and a bare `git add` all invalidate them for free. The index has to be in the key because

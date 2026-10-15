@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Changed
+
+- `esc` out of SEARCH keeps the query, so NORMAL stays filtered and `j`/`k`, `enter` and every NORMAL verb work on the rows it matched.
+  A second `esc` clears the query and brings the full list back, and an `esc` on an empty query still quits.
+  `/` goes back to SEARCH with the query still there, cursor at its end.
+  A query that matches nothing comes back as an empty list in NORMAL, and the second `esc` restores every row rather than leaving the list stuck empty.
+  `:` drops a kept query, since it would filter the kind list too.
+  `HOP_VIM=0` and `--no-vim` are unchanged.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added
