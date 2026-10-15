@@ -547,7 +547,7 @@ typeset dirrows=${ROWS[dir]}
 t 'dir: the root row comes first and previews the README'
 typeset firstrow=${${(f)dirrows}[1]}
 cols_of "$firstrow"
-assert_eq '<root> dir - - -' "${(j: :)reply}"
+assert_eq '<root> dir' "${(j: :)reply}" 'a dir list has no scope, env or region, so all three columns are dropped'
 rf "$firstrow" 2
 assert_eq "$REPO" "$REPLY"
 rf "$firstrow" 3

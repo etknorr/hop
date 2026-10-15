@@ -121,37 +121,51 @@ _hop_literal_target() {
 	esac
 
 	local -i i
-	local a f base rest hit=''
-	local -a g
+	local REPLY hit=''
 	for (( i = 1; i <= $#anchors; i++ )); do
-		a=${anchors[i]:a}
-		f="${a%/}/${rests[i]}"
-		f=${f:a}
-		# ../ can climb above the anchor, so the literal part is what the typed path still shares with it.
-		base=$a
-		while [[ $base != / && $f != "$base" && $f != "$base"/* ]]; do
-			base=${base:h}
-		done
-		rest=${f#"$base"}
-		rest=${rest#/}
-		if [[ -z $rest ]]; then
-			[[ -e $f ]] || continue
-			hit=$f
-			break
-		fi
-		g=("${base%/}"/(#i)${rest}(N))
-		if (( ${g[(Ie)$f]} )); then
-			hit=$f
-		elif (( $#g == 1 )); then
-			hit=${g[1]}
-		else
-			continue
-		fi
+		_hop_path_under "${anchors[i]}" "${rests[i]}" || continue
+		hit=$REPLY
 		break
 	done
 	[[ -n $hit ]] || return 1
+	_hop_literal_fields "$hit" "$root"
+}
 
-	local REPLY _hop_gen_root=${root:+${root:A}}
+# _hop_path_under <anchor> <rest> -> 0 with REPLY the path rest names under anchor, spelled as the disk spells it.
+_hop_path_under() {
+	emulate -L zsh
+	setopt local_options extended_glob null_glob
+	local a=${1:a} f base rest
+	local -a g
+	REPLY=''
+	f="${a%/}/${2}"
+	f=${f:a}
+	# ../ can climb above the anchor, so the literal part is what the typed path still shares with it.
+	base=$a
+	while [[ $base != / && $f != "$base" && $f != "$base"/* ]]; do
+		base=${base:h}
+	done
+	rest=${f#"$base"}
+	rest=${rest#/}
+	if [[ -z $rest ]]; then
+		[[ -e $f ]] || return 1
+		REPLY=$f
+		return 0
+	fi
+	g=("${base%/}"/(#i)${rest}(N))
+	if (( ${g[(Ie)$f]} )); then
+		REPLY=$f
+	elif (( $#g == 1 )); then
+		REPLY=${g[1]}
+	else
+		return 1
+	fi
+}
+
+# _hop_literal_fields <hit> <root> -> reply=(dir preview rel) for a path T0 found; a file target cds to its parent.
+_hop_literal_fields() {
+	emulate -L zsh
+	local hit=$1 REPLY _hop_gen_root=${2:+${2:A}}
 	if [[ -d $hit ]]; then
 		_hop_rel "${hit:A}" "${hit:A}"
 		reply=("$hit" "$hit" "$REPLY")
@@ -160,6 +174,234 @@ _hop_literal_target() {
 		reply=("${hit:h}" "$hit" "$REPLY")
 	fi
 	return 0
+}
+
+# _hop_elsewhere <word> <root> -> 1 when no other repo or workspace holds the path; else 0, with _hop_st the call's status.
+# - T0 again, for a path typed outside the repo it lives in: `terraform/x` from ~, or `configuration/terraform/x`.
+# - Every repo _hop_repos knows and every workspace root is an anchor, minus $PWD and root for the path as typed, which T0 already tried.
+# - A path may start with a repo's own name, which works whether or not a workspace holds that repo.
+# - Each anchor costs one case-insensitive glob, and no other repo's rows are ever enumerated.
+# - One distinct target jumps, saying where it was found.
+# - Several jump only when every one is a checkout of one origin and exactly one is on its default branch; see _hop_main_checkout.
+# - Not under HOP_JUMP=unique, which promises a jump only when the query names one target.
+# - Under -p or HOP_JUMP=never nothing jumps, so even one hit opens the picker.
+# - Otherwise they open a picker over just those, the one in the repo visited most recently first, then by path.
+_hop_elsewhere() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local w=$1 root=${2:+${2:A}}
+	w=${w%%/##}
+	[[ $w == */* && $w != (/|'~'|./|../)* && /$w/ != */(.|..)/* ]] || return 1
+	local -F t0=0
+	[[ -n ${HOP_DEBUG:-} ]] && zmodload -F zsh/datetime p:EPOCHREALTIME 2>/dev/null && t0=$EPOCHREALTIME
+
+	# akinds says which anchors are workspace roots, whose repo is the path's first segment.
+	local -a anchors rests names akinds reply
+	local out a e first=${(L)w%%/*}
+	if out=$(_hop_repos); then
+		for a in "${(@f)out}"; do
+			anchors+=("$a") rests+=("$w") names+=("${a:t}") akinds+=(repo)
+			[[ ${(L)a:t} == "$first" ]] && anchors+=("$a") rests+=("${w#*/}") names+=("${a:t}") akinds+=(repo)
+		done
+	fi
+	if _hop_ws_parse; then
+		for e in "${reply[@]}"; do
+			anchors+=("${e#*$'\t'}") rests+=("$w") names+=("${e%%$'\t'*}") akinds+=(workspace)
+		done
+	fi
+
+	local -A seen
+	local -a hits homes where hkinds
+	local cwd=${PWD:A} k rest REPLY
+	local -i i
+	for (( i = 1; i <= $#anchors; i++ )); do
+		a=${anchors[i]:A}
+		[[ ${rests[i]} == "$w" && ( $a == "$cwd" || $a == "$root" ) ]] && continue
+		_hop_path_under "$a" "${rests[i]}" || continue
+		k=${REPLY:A}
+		(( ${+seen[$k]} )) && continue
+		seen[$k]=1
+		hits+=("$REPLY") where+=("${names[i]}") hkinds+=("${akinds[i]}")
+		if [[ ${akinds[i]} == workspace ]]; then
+			rest=${REPLY#"$a"/}
+			homes+=("$a/${rest%%/*}")
+		else
+			homes+=("$a")
+		fi
+	done
+	if (( ! $#hits )); then
+		# Only the repo a misspelt path lives in can correct it, so a repo holding its first dir is named.
+		local seg=''
+		local -a near
+		local -A nseen
+		for (( i = 1; i <= $#anchors; i++ )); do
+			[[ ${akinds[i]} == repo && ${rests[i]} == */* ]] || continue
+			a=${anchors[i]:A}
+			[[ $a != "$root" ]] && (( ! ${+nseen[$a]} )) || continue
+			_hop_path_under "$a" "${rests[i]%%/*}" && [[ -d $REPLY ]] || continue
+			nseen[$a]=1 near+=("${names[i]}")
+			[[ -n $seg ]] || seg=${rests[i]%%/*}
+		done
+		if (( $#near )); then
+			local more=''
+			(( $#near > 3 )) && more=" and $(( $#near - 3 )) more"
+			print -ru2 -- "hop: no repo has ${w}, but ${seg}/ is in ${(j:, :)near[1,3]}${more}; hop corrects a misspelt path from inside its repo."
+		fi
+		return 1
+	fi
+
+	local _hop_gen_root='' why='' jump=${_hop_jump:-${HOP_JUMP:-auto}}
+	local -i j=0
+	if [[ $jump != never ]] && (( $#hits == 1 )); then
+		j=1
+	elif [[ $jump == auto ]] && _hop_main_checkout "${homes[@]}"; then
+		j=${REPLY%% *} why=", the ${REPLY#* } checkout of ${#hits}"
+	fi
+	if (( j )); then
+		_hop_literal_fields "${hits[j]}" ''
+		_hop_elsewhere_log jump "$#hits" "${reply[3]}"
+		[[ ${hkinds[j]} == workspace ]] && where[j]="workspace ${where[j]}"
+		print -ru2 -- "hop: ${1} -> ${reply[3]} (found in ${where[j]}${why})"
+		_hop_dispatch '' "${reply[@]}"
+		_hop_st=$?
+		return 0
+	fi
+
+	# A repo ranks by its first appearance in the history, as the repo or anything inside it, then by path.
+	local -a hist keys raw rows places
+	[[ -r ${HOP_HISTFILE:-} ]] && hist=("${(@f)$(<"$HOP_HISTFILE")}")
+	for (( i = 1; i <= $#hits; i++ )); do
+		keys+=("${(l:6::0:)${hist[(i)${(b)homes[i]}(|/*)]}}${homes[i]}"$'\t'"${hits[i]}"$'\t'"$i")
+	done
+	_hop_sort_bytes "${keys[@]}"
+	# The repo is the name, since it is what tells the rows apart, and a name keeps both ends when it is clipped.
+	for k in "${reply[@]}"; do
+		i=${k##*$'\t'}
+		places+=("${(D)homes[i]}")
+		_hop_literal_fields "${hits[i]}" ''
+		if [[ -d ${hits[i]} ]]; then
+			_hop_row_raw dir - - - "${homes[i]:t}" "${reply[1]}" "${reply[2]}"
+		else
+			_hop_row_raw file - - - "${homes[i]:t}" "${reply[1]}" "${reply[2]}" f
+		fi
+		raw+=("$REPLY")
+	done
+	# Laid out as one list of its own, never like the list of the repo this was reached from.
+	_hop_layout "${(F)raw}"
+	rows=("${(@f)REPLY}")
+	_hop_elsewhere_log pick "$#rows"
+
+	local _hop_res_verdict=pick _hop_res_tier=T0 _hop_res_rule=elsewhere _hop_res_query=$1 _hop_res_target=''
+	local _hop_res_note="found in ${#rows} places: ${(j:, :)places}"
+	local -i _hop_res_n=$#rows _hop_res_m=$#rows _hop_res_inj=0 _hop_res_ready=1
+	local -a _hop_res_rows=("${(@)rows//$'\e'\[[0-9;]#m/}")
+	_hop_run "paths  ${#rows} found" "$1" '' "${(F)rows}"
+	_hop_st=$?
+	return 0
+}
+
+# _hop_main_checkout <dir...> -> 0 with REPLY "<index> <branch>" for the one dir on its default branch, when all share one origin.
+# - Two clones and two worktrees of one repo hold every path alike, and the one on main is the one you mean.
+# - Checkouts of different origins, a dir with no origin, or two on their default branch all fail, so the caller picks.
+_hop_main_checkout() {
+	emulate -L zsh
+	local origin='' b=''
+	local -i i n=0 at=0
+	local -a reply
+	for (( i = 1; i <= $#; i++ )); do
+		_hop_git_facts "${argv[i]}" || return 1
+		[[ -z $origin || ${reply[1]} == "$origin" ]] || return 1
+		origin=${reply[1]}
+		[[ -n ${reply[2]} && ${reply[2]} == "${reply[3]}" ]] || continue
+		(( n++ ))
+		at=i b=${reply[2]}
+	done
+	(( n == 1 )) || return 1
+	REPLY="${at} ${b}"
+}
+
+# _hop_git_facts <dir> -> 0 with reply=(origin branch default), read from the checkout's git files without running git.
+# - Measured: two git calls for each of four checkouts took 55ms, against a 20ms budget for the whole rule.
+# - origin is remote.origin.url without scheme, user or a trailing .git, so git@host:org/repo and https://host/org/repo agree.
+# - branch is empty on a detached HEAD, and default is what origin/HEAD names, else main when a main branch exists, else master.
+# - A linked worktree's .git is a file naming its gitdir, and config and refs live in that gitdir's commondir.
+# - Anything it cannot read fails, a reftable repo included, so a guess never becomes a jump.
+_hop_git_facts() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local d=$1 g common line sect='' url='' head def=''
+	reply=()
+	if [[ -d $d/.git ]]; then
+		g=$d/.git
+	elif [[ -f $d/.git ]]; then
+		read -r line < "$d/.git" || return 1
+		g=${line#gitdir: }
+		[[ $g == /* ]] || g=$d/$g
+	else
+		return 1
+	fi
+	common=$g
+	if [[ -r $g/commondir ]]; then
+		read -r line < "$g/commondir" || return 1
+		if [[ $line == /* ]]; then common=$line; else common=$g/$line; fi
+	fi
+	[[ -r $common/config && -r $g/HEAD && ! -e $common/reftable ]] || return 1
+
+	for line in "${(@f)$(<"$common/config")}"; do
+		line=${${line##[[:space:]]##}%%[[:space:]]##}
+		if [[ $line == \[* ]]; then
+			sect=$line
+		elif [[ -z $url && $sect == (#i)\[remote\ \"origin\"\] && $line == (#i)url[[:space:]]#=* ]]; then
+			url=${${line#*=}##[[:space:]]##}
+		fi
+	done
+	url=${${url#\"}%\"}
+	[[ -n $url ]] || return 1
+	url=${${url%/}%.git}
+	if [[ $url == *://* ]]; then
+		url=${${url#*://}#*@}
+	else
+		url=${${url#*@}/:/\/}
+	fi
+
+	read -r head < "$g/HEAD" || return 1
+	if [[ $head == 'ref: refs/heads/'* ]]; then head=${head#ref: refs/heads/}; else head=''; fi
+	if [[ -r $common/refs/remotes/origin/HEAD ]]; then
+		read -r line < "$common/refs/remotes/origin/HEAD"
+		[[ $line == 'ref: refs/remotes/origin/'* ]] && def=${line#ref: refs/remotes/origin/}
+	fi
+	if [[ -z $def ]]; then
+		def=main
+		_hop_git_has "$common" main || ! _hop_git_has "$common" master || def=master
+	fi
+	reply=("${(L)url}" "$head" "$def")
+}
+
+# _hop_git_has <common-dir> <branch> -> 0 when the branch exists, locally or on origin, as a loose or a packed ref.
+_hop_git_has() {
+	emulate -L zsh
+	local c=$1 b=$2 p
+	[[ -e $c/refs/heads/$b || -e $c/refs/remotes/origin/$b ]] && return 0
+	[[ -r $c/packed-refs ]] || return 1
+	p=$'\n'$(<"$c/packed-refs")$'\n'
+	[[ $p == *" refs/heads/${b}"$'\n'* || $p == *" refs/remotes/origin/${b}"$'\n'* ]]
+}
+
+# _hop_sort_bytes <string...> -> reply is the strings in byte order, so `configuration` sorts before `configuration.old`.
+# - (o) collates by locale, and a glibc locale that skips punctuation puts the longer name first.
+_hop_sort_bytes() {
+	emulate -L zsh
+	local LC_ALL=C
+	reply=("${(@o)argv}")
+}
+
+# _hop_elsewhere_log <verdict> <n> [target] -> _hop_elsewhere's HOP_DEBUG line, timed from its own t0.
+_hop_elsewhere_log() {
+	emulate -L zsh
+	[[ -n ${HOP_DEBUG:-} ]] || return 0
+	local ms=-
+	(( t0 > 0 )) && printf -v ms '%.1f' $(( (EPOCHREALTIME - t0) * 1000 ))
+	_hop_dbg "resolve tier=T0 rule=elsewhere verdict=${1} n=${2} inj=0 q=${w} target=${3:--} ms=${ms}"
 }
 
 # _hop_vocab_build <rel...> -> _hop_vocab, _hop_vocab_set and _hop_segs, the words T2 and T3 may rewrite a query into.
@@ -483,12 +725,16 @@ _hop_decide() {
 	fi
 	local -A synby
 	if (( $#anc )); then
-		local syn a
+		local syn a REPLY
 		local -i i
 		local _hop_gen_root=$root
-		syn=$(for a in "${anc[@]}"; do
+		# Raw, then laid out once: a layout per row made 3058 ancestors cost 675ms instead of 194ms.
+		syn=$(local _hop_gen_raw=1
+		for a in "${anc[@]}"; do
 			_hop_row dir "${${a:h}/#%./-}" - - "${a:t}" "$root/$a" "$root/$a"
 		done)
+		_hop_layout "$syn" "${_hop_row_like:-}"
+		syn=$REPLY
 		local -a synrows=("${(@f)syn}")
 		_hop_rels_of "${synrows[@]}"
 		for (( i = 1; i <= $#synrows; i++ )); do
@@ -562,12 +808,24 @@ _hop_decide_jump() {
 	# J3: whatever the display-only matcher hop shipped with jumped to, it still jumps to.
 	# - Unless another match has a clipped column: its display only hid the words, so one display hit is not one target.
 	# - `security vpc` had jumped into the prod vpc, because the staging scope showed as …urity-tooling-staging.
+	# - A clipped name its rel spells out whole is matched whole instead, so `ml dev` still jumps with a narrow name column.
 	if _hop_match "$eq" "${(F)M}" --nth=1 && (( $#reply == 1 )); then
 		local hit=${reply[1]} m
-		local -i clipped=0
+		local -i clipped=0 unclipped=0
+		local -a whole=()
 		for m in "${M[@]}"; do
-			[[ $m != "$hit" && ${m%%$'\t'*} == *…* ]] && clipped=1
+			if [[ $m != "$hit" && ${m%%$'\t'*} == *…* ]]; then
+				if _hop_unclip "$m"; then
+					m=$REPLY unclipped=1
+				else
+					clipped=1
+				fi
+			fi
+			whole+=("$m")
 		done
+		if (( ! clipped && unclipped )); then
+			_hop_match "$eq" "${(F)whole}" --nth=1 && (( $#reply == 1 )) || clipped=1
+		fi
 		if (( ! clipped )); then
 			_hop_res_fields "$hit"
 			_hop_res_verdict=jump _hop_res_rule=display _hop_res_target=${(pj:\t:)reply}
@@ -621,6 +879,28 @@ _hop_decide_jump() {
 	_hop_res_note="hop: ${q} -> ${X[1]} (all ${#M} matches are under it)"
 	[[ $tier == T2a ]] && _hop_res_note+=" (read as: ${eq})"
 	return 0
+}
+
+# _hop_unclip <row> -> 0 with REPLY the row, its clipped name restored from rel; 1 when rel cannot say what was cut.
+# - Only the name: a clipped scope or env keeps no trace in rel, and neither does a name --name-fn read from a file.
+# - The rows are fzf's output, uncoloured, so the name is the display's first word.
+_hop_unclip() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local d=${${1%%$'\t'*}//$'\e'\[[0-9;]#m/} name rest rel a b r
+	name=${d%% *}
+	rest=${d#"$name"}
+	[[ $name == ?*…?* && $rest != *…* ]] || return 1
+	a=${name%%…*} b=${name#*…}
+	rel=${${1##*$'\t'}//$'\e'\[[0-9;]#m/}
+	rel=${rel%/}
+	for r in "$rel" "${rel%.*}"; do
+		if [[ $r == (#b)(|*/)(${a}?*${b}) ]]; then
+			REPLY="${match[2]}${rest}"$'\t'"${1#*$'\t'}"
+			return 0
+		fi
+	done
+	return 1
 }
 
 # _hop_resolve <query> <rows-text> <root> <action> <jump> [under] -> sets the caller's _hop_res_* fields.
@@ -800,6 +1080,24 @@ _hop_term_eq() {
 	return 1
 }
 
+# _hop_word_unread <word> <rows-text> -> 0 when no row holds the word as a whole token of its name line or its rel.
+# - Tokens split on whitespace and / - _ ., as _hop_vocab_build splits a rel.
+# - A substring test kept `conf` a plain word in configuration, because every aws-config row holds it.
+_hop_word_unread() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local t=${(L)1} text
+	local -a all f1 reply
+	all=("${(@f)2}")
+	all=(${all:#})
+	(( $#all )) || return 0
+	f1=("${(@)all%%$'\t'*}")
+	_hop_rels_of "${all[@]}"
+	text=${(L)${(F)${(@)f1//$'\e'\[[0-9;]#m/}}}$'\n'${(L)${(F)reply}}
+	text=$'\n'${text//[\/_.[:space:]-]/$'\n'}$'\n'
+	[[ $text != *$'\n'${t}$'\n'* ]]
+}
+
 # _hop_all_but_one -> 0 when some rows match every kept word but one, and they are decided as a relaxed pick.
 # - Each word matches alone and no row matches all of them, so one word at a time is left out.
 # - The picker opens on every pair OR-ed, `a | b  a | c  b | c`, which is what keeps exactly the rows missing one word.
@@ -852,10 +1150,15 @@ _hop_res_rank() {
 }
 
 # _hop_resolve_none -> T4: nothing close, so the picker opens on the query as typed, editable, with zero rows.
+# - Without the modal layer esc is fzf's own, which quits, so the hint names ctrl-u there.
 _hop_resolve_none() {
 	emulate -L zsh
 	_hop_res_verdict=none _hop_res_tier=T4 _hop_res_query=$q
-	_hop_res_note="nothing close to: ${q} (esc clears)"
+	if _hop_vim_on; then
+		_hop_res_note="nothing close to: ${q} (esc twice clears)"
+	else
+		_hop_res_note="nothing close to: ${q} (ctrl-u clears)"
+	fi
 }
 
 # _hop_resolve_log <query> <start> -> the one HOP_DEBUG line every resolve writes.
@@ -905,12 +1208,12 @@ _hop_headless_report() {
 	emulate -L zsh
 	local query=${1:-} label=${2:-}
 	_hop_dbg "headless label=${label} rows=${_hop_res_n} query=${query}"
-	if [[ $_hop_res_verdict == empty ]] && (( _hop_res_n == 1 )) && [[ ${_hop_jump:-${HOP_JUMP:-auto}} != never ]]; then
+	if [[ $_hop_res_verdict == empty && -z ${_hop_kword:-} ]] && (( _hop_res_n == 1 )) && [[ ${_hop_jump:-${HOP_JUMP:-auto}} != never ]]; then
 		_hop_res_note=''
 		_hop_res_jump
 		return $?
 	fi
-	if [[ $_hop_res_verdict == pick && $_hop_res_tier != T1 ]]; then
+	if [[ $_hop_res_verdict == pick && $_hop_res_tier != (T0|T1) ]]; then
 		if [[ $_hop_res_tier == relaxed ]]; then
 			print -ru2 -- "hop: no exact match for: ${query} (${_hop_res_note})"
 		else
@@ -919,7 +1222,7 @@ _hop_headless_report() {
 	fi
 	print -ru2 -- 'hop: no terminal available, so the picker cannot run (/dev/tty could not be opened).'
 	if [[ $_hop_res_verdict == none ]]; then
-		print -ru2 -- "hop: nothing matched${query:+ the query: $query}, so there was nothing to jump to."
+		print -ru2 -- "hop: nothing matched${query:+ the query: $query}${_hop_kword:+ with -k $_hop_kword}, so there was nothing to jump to."
 		# The row cap is the one reason a typo goes uncorrected, and the picker header is not there to say so.
 		[[ -n $_hop_res_note && $_hop_res_note != 'nothing close to: '* ]] && print -ru2 -- "hop: ${_hop_res_note}, so a misspelt word is not corrected; -k narrows the kinds."
 		return 1
@@ -939,6 +1242,10 @@ _hop_headless_report() {
 		print -ru2 -- "hop: drop or fix: ${_hop_res_note#ignored: }"
 	elif [[ $_hop_res_tier == (T2|T3) ]]; then
 		print -ru2 -- 'hop: fix the spelling, since hop never jumps on a corrected query.'
+	elif [[ $_hop_res_tier == T0 ]]; then
+		print -ru2 -- 'hop: put the repo name in front of the path, or give the whole path from ~/, so it names one of them.'
+	elif [[ -n ${_hop_kword:-} && $_hop_res_verdict == empty ]] && (( _hop_res_n == 1 )); then
+		print -ru2 -- "hop: a kind word alone lists that kind and never jumps; hop -k ${_hop_kword} jumps to its one target."
 	else
 		print -ru2 -- 'hop: narrow the query until exactly one target matches and hop will jump straight to it.'
 	fi

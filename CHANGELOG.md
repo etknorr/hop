@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Added
+
+- A first word that names a kind outside your default set is read as `-k` when that kind has targets in the repo and no default target holds the word as a whole word.
+  `hop file aeraki.yaml` is `hop -k file aeraki.yaml`, and hop says `hop: reading "file" as -k file`.
+  `hop puppet` is unchanged in a repo with a top-level `puppet/` dir, because a default target holds it.
+  Outside a repo it's read only when one path follows it, which then reaches the lookup in other repos, and `-w` and `-R` never read it.
+  A kind name after the first word is never read as `-k`, and a kind word alone opens the picker on that kind even when it holds one target.
+
+### Changed
+
+- `esc` out of SEARCH keeps the query, so NORMAL stays filtered and `j`/`k`, `enter` and every NORMAL verb work on the rows it matched.
+  A second `esc` clears the query and brings the full list back, and an `esc` on an empty query still quits.
+  `/` goes back to SEARCH with the query still there, cursor at its end.
+  A query that matches nothing comes back as an empty list in NORMAL, and the second `esc` restores every row rather than leaving the list stuck empty.
+  `:` drops a kept query, since it would filter the kind list too.
+  `HOP_VIM=0` and `--no-vim` are unchanged.
+- A scope, env or region column that's `-` on every row of a list is left out of it, so the repo picker shows only name and kind before the path, and the workspace picker drops region.
+
+### Fixed
+
+- hop now finds a path typed from outside the repo that holds it.
+  From `~` or a workspace root, `hop terraform/acct-security-tooling-prod` said nothing matched, because a path was only tried under `$PWD` and the current repo's root.
+  It's now also tried in every repo hop knows and under every workspace root, ignoring case.
+  A path can start with its repo's name too, so `hop configuration/terraform/acct-security-tooling-prod` works from `~`.
+  One match jumps and says where it was found.
+  A path that several checkouts have jumps only when they're all checkouts of one origin and exactly one is on its default branch, and the note says so: `(found in configuration, the main checkout of 4)`.
+  Otherwise the picker opens on just those, each row named by its repo, the most recently visited repo first.
+  Inside a repo, other repos are tried only when the repo has nothing close to the query, so every in-repo jump and pick is unchanged.
+- The columns in a list line up: kind, scope, env, region and the path start at the same column on every row.
+  A name longer than the 28-column name field pushed the rest of its row to the right, as `platform-configuration.retired-2026-09-14` did in the repo picker and long helm service names did in the main picker.
+  The region column wasn't padded at all, so the path moved with the region's length.
+  Each column is now as wide as its longest value in the list, up to a cap.
+  The name column is at least 20 characters wide, and past 28 it fits 95% of the list's names, up to 56, so configuration's four 53-character helm names no longer push env and the path off all 1,041 rows.
+  A longer name keeps its start and its end around a `…`, and the path column still holds the whole path, so when a name comes from the path, a query still matches the part that's cut.
+  A clipped name that its path spells out whole is matched whole when hop decides whether a query's one name-line match may jump, so clipping such a name costs no jump.
+  This holds for the main picker and every reload of it, the directory rows a query adds to it, such as an account or env dir, and the repo and workspace pickers.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added

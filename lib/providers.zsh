@@ -1,8 +1,8 @@
 #!/usr/bin/env zsh
 # hop's row primitives, plus the few families too irregular to declare with hop_kind.
 # - Every provider emits 4 TAB-separated fields: <display> \t <dir> \t <preview_path> \t <rel>.
-# - `display` is pre-padded and ANSI-coloured here, because fzf does not align --with-nth fields.
-# - Padding wraps the plain text first, since printf counts an escape sequence's bytes as width.
+# - `display` is padded and ANSI-coloured here, because fzf does not align --with-nth fields.
+# - Inside a generate a row's display is raw, and _hop_layout pads the whole list once its widths are known.
 # - Most kinds live in presets/ as hop_kind declarations; only an irregular family is code.
 
 typeset -g _HOP_OFF=$'\e[0m'
@@ -12,34 +12,34 @@ typeset -g _HOP_C_SCOPE=$'\e[34m'
 typeset -g _HOP_C_REGION=$'\e[36m'
 typeset -g _HOP_C_NAME=$'\e[1m'
 typeset -g _HOP_C_DIM=$'\e[2m'
+typeset -g _HOP_C_PROD=$'\e[31m'
+typeset -g _HOP_C_STAGING=$'\e[33m'
+typeset -g _HOP_C_DEV=$'\e[34m'
+typeset -g _HOP_C_ENV=$'\e[35m'
 
 # Column order puts `name` first.
 # - It is the only field that distinguishes one row from another.
 # - The list pane is 45% of the terminal, so a 55-column fixed prefix hid it below ~160 columns.
 # - It also makes --tiebreak=begin reward a name-prefix match instead of a kind-prefix match.
-typeset -g _HOP_W_NAME=28
+# - Each width below is a cap: a list's column is as wide as its longest value, up to that cap.
+# - The name also has a floor, so a list of short names is not crammed against the kind column.
+# - Past _HOP_W_NAME_FIT, the name column fits 95% of the list's names, and the longest few are clipped.
+# - Sized for its longest, configuration's four 53-character helm names pushed env and the path off 1041 rows at 120 columns.
+# - The kind floor fits dir, file and helm, so a dir row the resolver adds to a tg-only list is not cut to `d…`.
+typeset -g _HOP_W_NAME=56
+typeset -g _HOP_W_NAME_MIN=20
+typeset -g _HOP_W_NAME_FIT=28
 typeset -g _HOP_W_KIND=5
+typeset -g _HOP_W_KIND_MIN=4
 typeset -g _HOP_W_SCOPE=22
 typeset -g _HOP_W_ENV=9
+typeset -g _HOP_W_REGION=14
+
+# Separates a raw display's columns: name, kind, scope, env, region.
+typeset -g _HOP_US=$'\x1f'
 
 # Tracked top-level dirs that are never destinations: build output and scratch space.
 typeset -ga _HOP_DIR_SKIP=(target tmp)
-
-# _hop_fit <text> <width> [tail] -> REPLY, clipped with an ellipsis rather than overflowing.
-# - A fixed-width printf pads but never clips, so one 31-character scope shifted every later column.
-# - `tail` keeps the END, for a family whose long names share their first 20-odd characters.
-_hop_fit() {
-	emulate -L zsh
-	local s=$1
-	local -i w=$2
-	if (( ${#s} <= w )); then
-		REPLY=$s
-	elif [[ -n ${3:-} ]]; then
-		REPLY="…${s[$(( ${#s} - w + 2 )),-1]}"
-	else
-		REPLY="${s[1,w-1]}…"
-	fi
-}
 
 # _hop_rel <dir> <preview> [f] -> REPLY is a row's rel field, undimmed.
 # - rel is the target relative to the repo root, and it is the only path the matcher ever searches.
@@ -65,34 +65,143 @@ _hop_rel() {
 
 # _hop_row <kind> <scope> <env> <region> <name> <dir> <preview> [f]
 # - `f` marks a file target, where the preview file is the destination and dir is only its parent.
+# - Inside a generate the row comes out raw, for _hop_layout to align with the rest of its list.
+# - Anywhere else it is laid out at once, matching the list in _hop_row_like when the caller names one.
 _hop_row() {
 	emulate -L zsh
-	local kind=${1:--} scope=${2:--} env=${3:--} region=${4:--} name=${5:--}
-	local dir=$6 preview=${7:-$6}
-	local pn pk ps pe REPLY
+	local REPLY
+	_hop_row_raw "$@"
+	(( ${+_hop_gen_raw} )) || _hop_layout "$REPLY" "${_hop_row_like:-}"
+	print -r -- "$REPLY"
+}
 
-	# name is padded to a floor but never clipped, because it is the discriminator.
-	printf -v pn "%-${_HOP_W_NAME}s" "$name"
-	_hop_fit "$kind" $_HOP_W_KIND
-	printf -v pk "%-${_HOP_W_KIND}s" "$REPLY"
-	_hop_fit "$scope" $_HOP_W_SCOPE tail
-	printf -v ps "%-${_HOP_W_SCOPE}s" "$REPLY"
-	_hop_fit "$env" $_HOP_W_ENV
-	printf -v pe "%-${_HOP_W_ENV}s" "$REPLY"
-
-	local ce cs cr
-	case $env in
-		prod) ce=$'\e[31m' ;;
-		staging) ce=$'\e[33m' ;;
-		dev | playground) ce=$'\e[34m' ;;
-		-) ce=$_HOP_C_DIM ;;
-		*) ce=$'\e[35m' ;;
-	esac
-	if [[ $scope == '-' ]]; then cs=$_HOP_C_DIM; else cs=$_HOP_C_SCOPE; fi
-	if [[ $region == '-' ]]; then cr=$_HOP_C_DIM; else cr=$_HOP_C_REGION; fi
-
+# _hop_row_raw <same arguments as _hop_row> -> REPLY is the row with its display columns unpadded, joined by _HOP_US.
+# - A separator inside a value would add a cell and shift every later column, so it reads as `?`.
+_hop_row_raw() {
+	emulate -L zsh
+	local us=$_HOP_US dir=$6 preview=${7:-$6}
+	if [[ $1$2$3$4$5 == *${us}* ]]; then
+		_hop_row_raw "${1//${us}/?}" "${2//${us}/?}" "${3//${us}/?}" "${4//${us}/?}" "${5//${us}/?}" "${@[6,-1]}"
+		return
+	fi
 	_hop_rel "$dir" "$preview" "${8:-}"
-	print -r -- "${_HOP_C_NAME}${pn}${_HOP_OFF} ${_HOP_C_KIND}${pk}${_HOP_OFF} ${cs}${ps}${_HOP_OFF} ${ce}${pe}${_HOP_OFF} ${cr}${region}${_HOP_OFF}	${dir}	${preview}	${_HOP_C_DIM}${REPLY}${_HOP_OFF}"
+	REPLY="${5:--}${us}${1:--}${us}${2:--}${us}${3:--}${us}${4:--}	${dir}	${preview}	${_HOP_C_DIM}${REPLY}${_HOP_OFF}"
+}
+
+# _hop_layout <rows> [like] -> REPLY is the rows with every raw display padded into one set of aligned columns.
+# - A name longer than its cap keeps both ends, and rel still carries the whole path, so a search loses nothing.
+# - A column that is - on every row is dropped, as scope, env and region are for every repo row.
+# - A dropped column still ends in its reset, so _hop_lay_parse can read the layout back out of any one row.
+# - `like` is a laid-out row whose widths are used instead, so a row added later lines up with that list.
+# - A row with no raw display, such as a legacy provider's, does not match the pattern and passes through.
+# - Each distinct value is padded and coloured once, then one substitution looks every row's cells up.
+# - So nothing loops over rows: a per-row loop cost 50ms on 1041 rows and 4.4s on 15370.
+_hop_layout() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local us=$_HOP_US off=$_HOP_OFF tab=$'\t'
+	local -a rows=(${(f)1})
+	local -a raw=("${(@M)${(@)rows/${tab}*}:#*${us}*}")
+	if (( ! $#raw )); then
+		REPLY=${(F)rows}
+		return 0
+	fi
+	local -a reply w
+	[[ -n ${2:-} ]] && _hop_lay_parse "$2" && w=("${reply[@]}")
+	local -a caps=($_HOP_W_NAME $_HOP_W_KIND $_HOP_W_SCOPE $_HOP_W_ENV $_HOP_W_REGION)
+	local -A cell
+	local -a k v col
+	local -i c n h
+	for (( c = 1; c <= 5; c++ )); do
+		k=("${(@u)${(@)raw/#([^${us}]#${us})(#c$(( c - 1 )))}/${us}*}")
+		if (( $#w )); then
+			n=${w[c]}
+		elif (( c > 2 )) && [[ ${(j:,:)k} == - ]]; then
+			n=0
+		elif (( c == 1 )); then
+			# Reverse-sorted as runs of x, the values run longest first, so one index is a percentile.
+			v=("${(@O)${(@)k//?/x}}")
+			n=${#v[1]}
+			if (( n > _HOP_W_NAME_FIT )); then
+				h=${#v[$#v / 20 + 1]}
+				(( n = h > _HOP_W_NAME_FIT ? h : _HOP_W_NAME_FIT ))
+			fi
+			(( n > caps[c] )) && n=caps[c]
+			(( n < _HOP_W_NAME_MIN )) && n=_HOP_W_NAME_MIN
+		else
+			# Below the cap, the longest value is the first of them reverse-sorted as runs of x.
+			n=caps[c]
+			v=("${(@M)k:#?(#c${n},)}")
+			if (( ! $#v )); then
+				v=("${(@O)${(@)k//?/x}}")
+				n=${#v[1]}
+			fi
+			(( c == 2 && n < _HOP_W_KIND_MIN )) && n=_HOP_W_KIND_MIN
+		fi
+		(( n )) || continue
+		# A value wider than its column is clipped with an ellipsis, since an overflow shifts every later column.
+		# - The name keeps both ends, for copies that differ only in a suffix, like `x` and `x.retired-2026-09-14`.
+		# - The scope keeps its END, for a family whose long names share their first 20-odd characters.
+		case $c in
+			1)
+				h=$(( n / 2 ))
+				v=("${(@)k/#%(#b)(?(#c${h}))??##(?(#c$(( n - h - 1 ))))/${match[1]}…${match[2]}}")
+				;;
+			3) v=("${(@)k/#%??##(#b)(?(#c$(( n - 1 ))))/…${match[1]}}") ;;
+			*) v=("${(@)k/#%(#b)(?(#c$(( n - 1 ))))??##/${match[1]}…}") ;;
+		esac
+		case $c in
+			1) _hop_lay_fmt v "${_HOP_C_NAME}%-${n}s${off}" v ;;
+			2) _hop_lay_fmt v " ${_HOP_C_KIND}%-${n}s${off}" v ;;
+			*)
+				# Each colour is decided on the whole value, before a clip can change it.
+				case $c in
+					3) col=("${(@)${(@)k/#%^-/${_HOP_C_SCOPE}}/#%-/${_HOP_C_DIM}}") ;;
+					4)
+						col=("${(@)k/#%^(prod|staging|dev|playground|-)/${_HOP_C_ENV}}")
+						col=("${(@)${(@)${(@)${(@)col/#%prod/${_HOP_C_PROD}}/#%staging/${_HOP_C_STAGING}}/#%(dev|playground)/${_HOP_C_DEV}}/#%-/${_HOP_C_DIM}}")
+						;;
+					5) col=("${(@)${(@)k/#%^-/${_HOP_C_REGION}}/#%-/${_HOP_C_DIM}}") ;;
+				esac
+				_hop_lay_fmt v " %s%-${n}s${off}" col v
+				;;
+		esac
+		k=("${(@)k/#/${c}${us}}")
+		cell+=("${(@)k:^v}")
+	done
+	REPLY=${(F)${(@)rows/#(#b)([^${us}]#)${us}([^${us}]#)${us}([^${us}]#)${us}([^${us}]#)${us}([^${tab}]#)/${cell[1${us}${match[1]}]}${cell[2${us}${match[2]}]}${cell[3${us}${match[3]}]-${off}}${cell[4${us}${match[4]}]-${off}}${cell[5${us}${match[5]}]-${off}}}}
+}
+
+# _hop_lay_fmt <dest> <format> <array> [array] -> dest is <format> applied to each element, or to each pair of elements.
+# - One printf over the zipped arrays, since zsh has no element-wise join of two arrays.
+# - printf also pads by characters, where ${(r:n:)} took 0.57s on 15370 values holding a clip's …
+_hop_lay_fmt() {
+	emulate -L zsh
+	local _hop_s
+	if (( $# == 4 )); then
+		local -a _hop_za=("${(@P)3}") _hop_zb=("${(@P)4}")
+		printf -v _hop_s "${2}\n" "${(@)_hop_za:^_hop_zb}"
+	else
+		printf -v _hop_s "${2}\n" "${(@P)3}"
+	fi
+	set -A "$1" "${(@f)${_hop_s%$'\n'}}"
+}
+
+# _hop_lay_parse <laid-out row> -> reply is the widths _hop_layout gave its list, or 1 when the row was not laid out by it.
+# - Every column ends in exactly one reset, so splitting on it yields the five columns and a trailing empty field.
+_hop_lay_parse() {
+	emulate -L zsh
+	setopt local_options extended_glob
+	local -a cells=("${(@ps:\e[0m:)${1%%$'\t'*}}")
+	(( $#cells == 6 )) || return 1
+	cells=("${(@)cells[1,5]//$'\e'\[[0-9;]#m/}")
+	local c
+	reply=(${#cells[1]})
+	# Every column after the name opens with the one space that separates it.
+	for c in "${(@)cells[2,5]}"; do
+		reply+=(${#${c# }})
+	done
+	(( reply[1] && reply[2] ))
 }
 
 # _hop_row_split <row> -> reply is the row's TAB fields, in order.
@@ -329,11 +438,16 @@ _hop_provider_dir() {
 _hop_provider_repo() {
 	emulate -L zsh
 	local r REPLY _hop_gen_root=''
+	local -a rows
 	for r in "$@"; do
 		[[ -n $r && -d $r ]] || continue
 		_hop_preview_doc "$r"
-		_hop_row repo '-' '-' '-' "${r:t}" "$r" "$REPLY"
+		_hop_row_raw repo '-' '-' '-' "${r:t}" "$r" "$REPLY"
+		rows+=("$REPLY")
 	done
+	(( $#rows )) || return 0
+	_hop_layout "${(F)rows}"
+	print -r -- "$REPLY"
 }
 
 # _hop_rel_upgrade <rows> -> print the rows, each legacy 3-field one with a derived dir rel appended.
@@ -341,6 +455,7 @@ _hop_provider_repo() {
 # - The (M) filter is one array pass, so output holding no legacy row pays nothing per row.
 # - The rel comes from _hop_rel, so it reads the same _hop_gen_root as every other row.
 # - A caller that declares _hop_gen_legacy gets the legacy count added to it, which is how --doctor names the kind.
+# - That caller has to declare _hop_gen_raw as well, or _hop_generate lays its rows out from a child and the count never comes back.
 _hop_rel_upgrade() {
 	emulate -L zsh
 	setopt local_options extended_glob
@@ -372,12 +487,19 @@ _hop_rel_upgrade() {
 # - That function fallback is what lets an opt-in .hoprc add a kind without touching the registry.
 # - The three DSL shapes always build rows with _hop_row, so only a function provider can be legacy.
 # - Only those are captured for _hop_rel_upgrade, which keeps the bulk of the rows streaming.
+# - A caller that declares _hop_gen_raw gets the rows unlaid-out, as _hop_rows does to lay out only what it keeps.
 _hop_generate() {
 	emulate -L zsh
 	local IFS=$' \t\n\0'
 	local root=$1
-	shift
 	[[ -n $root ]] || return 1
+	if (( ! ${+_hop_gen_raw} )); then
+		local _hop_gen_raw=1 REPLY
+		_hop_layout "$(_hop_generate "$@")"
+		[[ -n $REPLY ]] && print -r -- "$REPLY"
+		return 0
+	fi
+	shift
 	# Dynamically scoped, so _hop_row sees the root without a provider having to pass it on.
 	local _hop_gen_root=$root
 
@@ -415,7 +537,7 @@ _hop_rows() {
 	emulate -L zsh
 	local root=$1 under=$2
 	shift 2
-	local targets
+	local targets REPLY _hop_gen_raw=1
 	targets=$(_hop_generate "$root" "$@")
 	[[ -n $targets ]] || return 1
 	if [[ -n $under ]]; then
@@ -424,5 +546,6 @@ _hop_rows() {
 		(( $#reply )) || return 2
 		targets=${(F)reply}
 	fi
-	_hop_rank "$targets"
+	_hop_layout "$targets"
+	_hop_rank "$REPLY"
 }

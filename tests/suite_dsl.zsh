@@ -224,7 +224,7 @@ assert_eq $'gateway\nroles/reader\ncache' "$REPLY" 'only the three real stacks m
 t 'with no --layout at all the name is the basename and the scope its parent'
 dsl_kinds "hop_kind st --marker 'Stack.yaml' --under 'infra' --desc 'stacks'"
 dsl_cols "$R" st gateway
-assert_eq 'gateway st teamx/live/eu-west-1 - -' "${(j: :)reply}"
+assert_eq 'gateway st teamx/live/eu-west-1' "${(j: :)reply}" 'env and region are - on every row, so the list drops them'
 
 t 'a marker with no --under scans the whole repo'
 dsl_kinds "hop_kind any --marker 'Stack.yaml' --desc 'anywhere'"
@@ -238,7 +238,7 @@ t '--files maps segments onto columns, and - discards one'
 dsl_kinds "hop_kind ec --files 'envs/*/config/*/*.conf' --under 'envs' --strip-ext \
 	--layout 'scope,-,name,env' --desc 'env config'"
 dsl_cols "$R" ec api
-assert_eq 'api ec teamx live -' "${(j: :)reply}" 'the config segment is discarded by the - column'
+assert_eq 'api ec teamx live' "${(j: :)reply}" 'the config segment is discarded, and the always-empty region column with it'
 
 t '--strip-ext runs before the layout, so the extension never lands in a column'
 dsl_cols "$R" ec api

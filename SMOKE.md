@@ -39,12 +39,17 @@ exec zsh && cd "$REPO" && hop
 - [ ] **[auto]** `/` switches the header to `SEARCH` and the prompt to `/`.
 - [ ] **[auto]** Type `vpc`: all three letters appear in the query and the list filters.
 - [ ] `q` types a literal `q` in SEARCH instead of quitting.
-- [ ] **[auto]** `esc` returns the header to `NORMAL` and clears the query.
+- [ ] **[auto]** `esc` returns the header to `NORMAL` and keeps the query, and the list stays filtered.
+- [ ] After that `esc` the kept query is still visible on the prompt line, after the `> ` prompt.
+- [ ] **[auto]** `j` then `enter` cds to the second row of the filtered list, not of the full one.
+- [ ] **[auto]** A second `esc` clears the query and brings every row back, and a third `esc` quits.
+- [ ] **[auto]** `/` after that first `esc` is SEARCH again with the query, and a letter lands at its end.
 - [ ] **After that round trip, every verb still works**: `j` `k` `g` `G` `^d` `^u` `p` `r` all act,
       and `o` `O` `e` `y` `Y` `b` each fire once and exit. This is the whole unbind/rebind restore.
       `j` and `o` are **[auto]**; the other twelve keys are still yours to check.
 - [ ] Do `/` `abc` `esc` twice in a row, then confirm `j` still moves rather than typing.
-- [ ] `/` `zzz` `esc` leaves a list you can still navigate, rather than a dead empty one.
+- [ ] **[auto]** `/` `zzz` `esc` shows NORMAL with no rows and `zzz` still in the query, and a second
+      `esc` brings every row back rather than leaving a dead empty list.
 
 ## Overlays and the view switch
 
@@ -53,6 +58,7 @@ exec zsh && cd "$REPO" && hop
 - [ ] `:` opens the kind list in place, `j`/`k` move in it, `enter` switches the view.
 - [ ] **[auto]** `:` then `esc` returns to the list you came from, and `enter` still `cd`s.
 - [ ] `:` then `/` filters the kind list, and `esc` still goes back rather than quitting.
+- [ ] `/` `vpc` `esc` then `:` lists every kind, not none, because `:` drops the kept query.
 
 ## Layout
 
@@ -65,7 +71,8 @@ exec zsh && cd "$REPO" && hop
 What it cannot see is how the opened picker looks and behaves under real keys:
 
 - [ ] `hop acct sec prod` opens with the account dir first, then its units; the first key you type
-      re-sorts the list into fzf's own order; `esc` into NORMAL then shows every row.
+      re-sorts the list into fzf's own order; `esc` into NORMAL keeps the filtered rows, and a second
+      `esc` shows every row.
 - [ ] `hop securty-tooling-prod` opens with `no exact match for: ... (showing: ...)` as the header's
       first line, above the mode legend, and the legend is still intact after `esc` and `/`.
 - [ ] On fzf 0.67.0 or later, type `terraform/acct-sec` so the list scrolls along the path: the name
