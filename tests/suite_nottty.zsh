@@ -339,7 +339,7 @@ zzzz=0
 # - -i and +i are single-dash, so they are matched as whole words.
 # - `local -i` is the same word, so NT_MF_DECL drops declaration lines before a function body is counted.
 typeset -g NT_MF_DECL='^[[:space:]]*(local|typeset|integer|declare|readonly)[[:space:]]'
-typeset -g NT_MF_PAT='--(ansi|delimiter|with-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|smart-case|ignore-case|no-ignore-case)(=[^ )]*)?|(^|[[:space:](])[-+]i([[:space:])]|$)'
+typeset -g NT_MF_PAT='--(ansi|delimiter|with-nth|nth|no-exact|exact|literal|algo|tiebreak|scheme|no-tac|tac|smart-case|ignore-case|no-ignore-case)(=[^ )]*)?|(^|[[:space:](])[-+]i([[:space:])]|$)'
 
 # The VALUES fzf receives, in the order the array declares them, not the source text that built them.
 # - So --delimiter carries a REAL tab.
@@ -349,6 +349,9 @@ typeset -a NT_MF_WANT=(
 	'--with-nth=1,4'
 	'--exact'
 	'-i'
+	'--nth=..'
+	'--no-tac'
+	'--scheme=default'
 	'--tiebreak=begin,chunk'
 )
 typeset NT_MF_ACTUAL=''
@@ -367,7 +370,7 @@ NT_MF_HEAD_HARD=$(hop_probe "functions _hop_filter | grep -vE -- ${(q)NT_MF_DECL
 NT_MF_PAT_ALIVE=$(hop_probe "print -rl -- \"\${_HOP_MATCHER_FLAGS[@]}\" | grep -cE -- ${(q)NT_MF_PAT} || true")
 
 t 'the flag pattern still matches something, so the two zero counts below mean absence'
-assert_eq 6 "$NT_MF_PAT_ALIVE" 'the pattern matches nothing at all, so it cannot prove either caller is clean'
+assert_eq 9 "$NT_MF_PAT_ALIVE" 'the pattern matches nothing at all, so it cannot prove either caller is clean'
 
 t 'the picker hardcodes no matcher flag of its own'
 assert_eq 0 "$NT_MF_PICK_HARD" 'a hardcoded flag here can drift from the headless path again'

@@ -17,11 +17,13 @@ typeset -gi _HOP_APPROX_MAX=6000
 # - --accept-nth never reaches it either: 0.73.1 honours it under --filter while 0.60.3 and 0.67.0 ignore it.
 # - So the rows always come back whole, and with --ansi fzf prints them with their SGR stripped.
 # - fzf's stderr is NOT suppressed: --filter still parses every option, and a genuine complaint must reach the user.
+# - The user's FZF_DEFAULT_OPTS never reach it: --no-sort there made 0.60.3 print the transformed line, so a jump cd'd to ''.
+# - `command` keeps an `alias fzf=...` from being baked into this body when hop.zsh is sourced.
 _hop_filter() {
 	emulate -L zsh
 	local q=$1
 	shift
-	fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" "$@"
+	FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= command fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" "$@"
 }
 
 # _hop_match <query> <rows-text> [fzf-arg...] -> reply is the matching rows, best first; 1 when there are none.

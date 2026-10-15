@@ -629,6 +629,29 @@ MT_RUN=$(mt_headless "$MT_REPO" 'hop -R strava/conf' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/configuration"
 
 # ---------------------------------------------------------------------------
+# A user's own fzf defaults, which every other run here pins empty.
+# ---------------------------------------------------------------------------
+# mt_hostile <alias> <hop-code> -> mt_headless's run, with hostile FZF_DEFAULT_OPTS and an fzf alias defined before hop.zsh is sourced.
+mt_hostile() {
+	emulate -L zsh
+	hop_bound 30 zsh -f -c "$(fixture_pins 'FZF_DEFAULT_OPTS=--no-sort --tac --nth=1 --accept-nth=1 --scheme=path')
+${1}
+source ${(q)HOP_HOME}/hop.zsh || exit 97
+_hop_tty_ok() { return 1 }
+builtin cd -q -- ${(q)MT_REPO} || exit 96
+${2}
+print -r -- \"st=\$? PWD=\$PWD\"" 2>&1
+}
+
+typeset MT_QS="for q in acct-security-tooling-prod/env-prod vpc 'trust prod' 'eks security' securty-tooling-prod; do (hop \${=q}; print -r -- \"st=\$? PWD=\$PWD\"); done"
+typeset MT_CLEAN
+MT_CLEAN=$(mt_headless "$MT_REPO" "$MT_QS")
+t 'resolve: hostile FZF_DEFAULT_OPTS and an fzf alias change no resolve'
+MT_RUN=$(mt_hostile "alias fzf='fzf --read0'" "$MT_QS")
+assert_eq "$MT_CLEAN" "$MT_RUN" 'a user default leaked into the resolver'"'"'s fzf --filter'
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/$SP/env-prod" 'control: the J2 jump has to be among the runs compared'
+
+# ---------------------------------------------------------------------------
 # tests/eval_real.zsh, the real-repo sweep harness, driven over the fixture.
 # ---------------------------------------------------------------------------
 # tests/run never runs the harness, so these are what keep it from rotting between real-repo runs.

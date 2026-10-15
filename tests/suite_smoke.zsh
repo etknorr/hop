@@ -508,7 +508,7 @@ typeset -a fzfcalls=()
 typeset sf smrel smhits smline
 for sf in "${smshipped[@]}"; do
 	smrel=${sf#${HOP_HOME}/}
-	smhits=$(grep -E '(^[[:space:]]*|[|(][[:space:]]*)fzf[[:space:]]|_hop_doctor_tool[[:space:]]+fzf([[:space:]]|$)' -- "$sf" | sed 's/^[[:space:]]*//')
+	smhits=$(grep -E '(^[[:space:]]*|[|(][[:space:]]*|command[[:space:]]+)fzf[[:space:]]|_hop_doctor_tool[[:space:]]+fzf([[:space:]]|$)' -- "$sf" | sed 's/^[[:space:]]*//')
 	[[ -n $smhits ]] || continue
 	for smline in ${(f)smhits}; do
 		fzfcalls+=("${smrel}: ${smline}")
@@ -519,7 +519,7 @@ done
 typeset -a fzfexpected=(
 	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
 	'lib/doctor.zsh: _hop_doctor_tool fzf --version'
-	'lib/match.zsh: fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" "$@"'
+	'lib/match.zsh: FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= command fzf --filter="$q" "${_HOP_MATCHER_FLAGS[@]}" "$@"'
 	'lib/ui.zsh: fzf "${args[@]}"'
 	'lib/ui.zsh: out=$(fzf --version </dev/null 2>/dev/null)'
 )

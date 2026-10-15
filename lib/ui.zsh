@@ -386,6 +386,13 @@ typeset -ga _HOP_MATCHER_FLAGS=(
 	--exact
 	# Case-insensitive rather than smart-case: under smart-case `Vpc` and `TG vpc` matched nothing.
 	-i
+	# These restate fzf's defaults, because a user FZF_DEFAULT_OPTS reaches the picker and would change them.
+	# - --nth=1 there hid the path column, --tac opened an ordered pick worst-first, and --scheme=path reranked it.
+	# - Each comes after the user's defaults, so it wins; J3's own --nth=1 is passed later still.
+	# - --scheme also sets a tiebreak, so it has to come before --tiebreak, or it undoes it.
+	--nth=..
+	--no-tac
+	--scheme=default
 	# begin keeps the exact-name preference, and chunk replaces length.
 	# - The path column makes line length vary, so length was deciding same-name ties the MRU order should.
 	# - chunk dates from fzf 0.32, so the 0.60.3 floor accepts it.
