@@ -241,7 +241,7 @@ Enter, a direct jump and a headless jump all do the same thing, and `HOP_ACTION`
 |---|---|---|
 | `cd` (default) | `cd` to its directory | `cd` to it |
 | `open` | `code -r <file>` | `code -n <dir>`, a window on that folder |
-| `reveal` | `code -r <file>` | `code -r` on a file at its top: a README, else the first file by name |
+| `reveal` | `code -r <file>` | `code -r` on the row's preview file; when the preview is the directory itself, on a top-level README, else the first file by name |
 | `cd+open`, `cd+reveal` | `cd` first, then as above | `cd` first, then as above |
 
 The flags replace `HOP_ACTION` for one call. `-o` and `-e` are exclusive, `--cd -o` is `cd+open`,
@@ -255,7 +255,8 @@ all, as `kubernetes/values/` doesn't, hop says so and suggests `-o`.
 
 `hop /`, `hop -`, `hopr` and `hopw` always `cd`, whatever `HOP_ACTION` says, because they navigate
 by name rather than pick a target. Inside the picker, `c` (NORMAL) and `alt-enter` (SEARCH) always
-`cd` too, so the plain `cd` stays one key away when Enter does something else.
+`cd` too, so the plain `cd` stays one key away when Enter does something else. In the `:` view
+menu they do nothing, because a menu row names a view, not a directory.
 
 ---
 
@@ -599,23 +600,32 @@ zsh's `${(0)...}` never quotes and never splits inside a name.
 `hop <words>` decides what you meant before any picker opens. It tries these steps in order and
 stops at the first one that finds something:
 
-1. **Literal path**: one word that holds a `/`, or starts with `~`, `./` or `../`, and names a
-   real directory or file jumps there before anything is enumerated, in about a millisecond. The
+1. **Literal path**: one word that holds a `/`, starts with `~`, `./` or `../`, or is a bare `.` or
+   `..`, and names a real directory or file jumps there before anything is enumerated, in about a
+   millisecond. `hop -o .` opens the directory you're in. The
    match ignores case and lands on the on-disk spelling, so `hop Terraform/ACCT-x` cds to
    `terraform/acct-x`. `./x` and `../x` are relative to `$PWD`, `/x` is relative to the repo root
    first (as `hop /` is), and anything else tries `$PWD` and then the root. `-k` doesn't narrow
    it, since no kind is consulted, and `-w`, `-R` and `-p` skip it.
 2. **Exact**: fzf matches the words against the name and the `rel` path, with `--exact`, `-i` and
    `--tiebreak=begin,chunk`. The picker gets the same flags from the same array, so the two always
-   agree on which rows match.
+   agree on which rows match. Your `FZF_DEFAULT_OPTS` and any `fzf` alias never reach this step,
+   so a default such as `--no-sort` or `--nth=1` can't change what jumps, and the picker resets
+   `--nth`, `--tac` and `--scheme`, the defaults that would change which rows match or their order.
 3. **Rewrite**: a word that no path contains is fixed against the words the paths do contain:
    one typo, two from 8 letters, or an abbreviation from 6. `routemaxter` reads as `routemaster`,
-   and `terraform/account-security` as `terraform account | acct security`. If one word can't be
+   and `terraform/account-security` as `terraform account | acct security`. A word run together
+   from two or three path words is split back into them, so `externaldns` reads as `external dns`,
+   and a short env word no path holds reads as its long form: `prd` as `prod`, `stg` as `staging`.
+   A word the paths already hold is abbreviated only when nothing matched without that, so
+   `routemaster-prod` stays `routemaster prod` instead of gaining `raster`. If one word can't be
    explained, this step finds nothing, so a nonsense word is never turned into a match.
 4. **Loose**: initials, or the letters in order inside one path segment: `kps` and `kubeprom` both
    find `kube-prometheus-stack`.
-5. **Relaxed**: with two or more words, the ones that match nothing are dropped, and the picker's
-   header says so: `ignored: zzqx`.
+5. **Relaxed**: with two or more words, each word is read on its own by whichever step above finds
+   it, the ones nothing reads are dropped, and the picker's header says so: `ignored: zzqx`. When
+   every word matches alone but no row holds them all, the picker shows the rows that hold all but
+   one, smallest set first, and the header says `ignored: one of: routemaster, dev`.
 6. **Nothing close**: the picker opens on your query with no rows, ready to edit.
 
 #### Jump rules
@@ -630,11 +640,15 @@ window. An exact match jumps when one of these holds, checked in this order:
 |---|---|---|
 | J1 | exactly one target matches | `eks security` |
 | J1b | every match is in one directory, and Enter is plain `cd` | `monitoring/grafana`, whose files all sit in `kubernetes/services/monitoring/` |
-| J3 | exactly one row matches on its name line alone, which is all hop searched before paths were added, so every query that jumped before still does | `trust prod` |
+| J3 | exactly one row matches on its name line alone, which is all hop searched before paths were added, so a query that jumped before still does; not when another match's name line is clipped with `…`, since there the words were only hidden | `disaster-recovery prod` |
+| J0 | at the workspace and repo levels only: one word, and exactly one target's name is that word | `configuration` from `~`, past `configuration.retired-2026-09-14` |
 | J2 | every match is under one directory, the words name that directory on whole-word boundaries, and none of them is a kind name | `security-tooling-prod` jumps to `terraform/acct-security-tooling-prod/` |
 
 J2 prints one line saying why it jumped, such as
-`hop: security-tooling-prod -> terraform/acct-security-tooling-prod/ (all 3 matches are under it)`.
+`hop: security-tooling-prod -> terraform/acct-security-tooling-prod/ (all 3 matches are under it)`,
+and J0 names what it skipped: `hop: configuration -> ~/strava/configuration/ (exact name; 3 others
+contain it)`. A jump on a rewrite of separators says how it read the words, as
+`hop: routemaster-prod -> ... (read as: routemaster prod)`.
 `kub` doesn't jump to `kubernetes/`, because a prefix isn't a whole word, and `tg vpc` doesn't jump
 by J2, because `tg` names a whole family. Under any mode but plain `cd`, `cd+reveal` included, J1b
 doesn't collapse the files in one directory, because each file is a target of its own.
@@ -643,6 +657,10 @@ An account or env directory is not a row of any kind, but it still shows up when
 it: hop adds it as a row only when it matches the same query, and J2 is the only rule that jumps to
 one. A query using fzf's own syntax (`'`, `^`, `$`, `!` or `|`) gets the exact step alone, with no
 rewrite and no added rows.
+
+Outside a repo, hop resolves the query against your workspaces, and when none matches exactly it
+tries your repos too and keeps the closer result, a tie going to the workspaces. So `hop tf eks`
+from `~` lands on `tf-aws-eks` instead of a workspace that only matched `tf`.
 
 `HOP_JUMP` sets how eager this is. `auto` allows every rule above. `unique` allows literal paths, J1,
 J1b and J3, which is how hop behaved before paths were searched. `never` always opens the picker,
@@ -653,9 +671,11 @@ and `-p` is `never` for one call.
 When a query opens the picker, the closest matches come first: `acct sec prod` lists the account
 directory and then its units. The first key you type hands the order back to fzf. The header's
 first line says when the query was rewritten, for example
-`no exact match for: securty-tooling-prod (showing: security tooling prod)`. Typing in the picker is
+`no exact match for: securty-tooling-prod (showing: security tooling prod)`, or
+`(read as: prod vpc)` for `prod_vpc`, whose words were only split apart. Typing in the picker is
 plain fzf: it searches the paths, but it doesn't correct typos. With no terminal, a pick can't be
-shown, so hop prints how many targets matched and the best three paths, and exits 1.
+shown, so hop prints how many targets matched, the best three paths, and what would let it jump:
+a narrower query, a spelling fix, or the words it ignored. Then it exits 1.
 
 #### Frecency and fuzzy matching
 
@@ -752,7 +772,8 @@ rows and **zero** stderr, which is what lets one config work across every repo w
 
 VS Code counts as unusable, not just missing, in three more cases: `VSCODE_IPC_HOOK_CLI` names a
 socket that's gone, which is a terminal that outlived its window; an SSH session with no VS Code
-window attached; and Linux with neither `DISPLAY` nor `WAYLAND_DISPLAY`. A live IPC socket wins over
+window attached; and Linux with neither `DISPLAY` nor `WAYLAND_DISPLAY`, except under WSL, where
+`code` opens VS Code on Windows. A live IPC socket wins over
 the other two, so a VS Code Remote-SSH terminal still works. When `code` can't be used, each verb
 says why in one line and then does the nearest thing:
 
@@ -795,7 +816,8 @@ HOP_TEST_REPO=~/src/some-repo zsh tests/eval_real.zsh
 It builds the repo's rows with your `HOP_CONFIG` kinds and asks every name, 3-letter prefix,
 scope+env pair and name+env pair it finds there, plus 500 dictionary words the rows don't contain.
 It fails if a query that jumped with hop 0.1.2's matcher now opens the picker or lands somewhere
-else, or if any of those words jumps. New jumps are listed but don't fail it. It never calls `hop`
+else, or if any of those words jumps. New jumps are listed but don't fail it, and so is a jump lost
+only because another match's name line is clipped, which the old matcher could not see. It never calls `hop`
 itself, so nothing cds, opens a window or writes history.
 
 What is left in `SMOKE.md` is the part with no machine-readable outcome: whether the layout is
