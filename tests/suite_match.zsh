@@ -1006,7 +1006,6 @@ assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/g1/p7/x"
 assert_contains "$MT_RUN" '(found in g1, the master checkout of 2)'
 
 t 'elsewhere: two on main, different origins, a checkout with no origin, and a detached HEAD all still pick'
-typeset w
 for w in p2/x p3/x p4/x p5/x; do
 	MT_RUN=$(mt_headless "$MT_WSH" "hop $w" "HOP_WORKSPACES=$MT_CO")
 	assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH" "${w} jumped"
