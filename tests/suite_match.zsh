@@ -944,6 +944,11 @@ MT_RUN=$(mt_headless "$MT_WSH" 'hop p1/x' "HOP_WORKSPACES=$MT_CO")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/a-main/p1/x" 'git@host:org/repo and https://host/org/repo.git are one origin'
 assert_contains "$MT_RUN" 'hop: p1/x -> ~/co/a-main/p1/x/ (found in a-main, the main checkout of 2)'
 
+t 'elsewhere: HOP_JUMP=unique keeps the default-branch checkout a pick, since the path names two targets'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p1/x' "HOP_WORKSPACES=$MT_CO" HOP_JUMP=unique)
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+assert_contains "$MT_RUN" '2 targets matched the query: p1/x'
+
 t 'elsewhere: a linked worktree on main beats its primary on a branch, with main as the default when origin/HEAD is unset'
 MT_RUN=$(mt_headless "$MT_WSH" 'hop p6/x' "HOP_WORKSPACES=$MT_CO")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/f1wt/p6/x"
