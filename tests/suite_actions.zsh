@@ -446,6 +446,10 @@ ac_fcase 'J2 -e' . 'hop -e security-tooling-prod'
 ac_fcase 'J2 --cd -e' . 'hop --cd -e security-tooling-prod'
 ac_fcase 'kubernetes/values -e' . 'hop -e kubernetes/values'
 ac_fcase 'kubernetes/values --cd -e' . 'hop --cd -e kubernetes/values'
+# J1b collapses files in one dir only under cd, so these tell whether hop hands the resolver the call's mode at all.
+ac_fcase 'J1b cd' . 'hop monitoring/grafana'
+ac_fcase 'J1b -o' . 'hop -o monitoring/grafana'
+ac_fcase 'J1b --cd -e' . 'hop --cd -e monitoring/grafana'
 
 typeset AC_FOUT
 AC_FOUT=$(hop_bound 120 zsh -f -c "$(fixture_pins)
@@ -562,6 +566,11 @@ ac_flag_want 'J2 --cd -e' 0 "$AC_MT/terraform/acct-security-tooling-prod" "code 
 t 'reveal on a dir with no file at its top explains itself: a failure alone, a note after a cd'
 ac_flag_want 'kubernetes/values -e' 1 "$AC_MT" '' 'hop: nothing to reveal at the top of kubernetes/values/; use -o to open it as a folder'
 ac_flag_want 'kubernetes/values --cd -e' 0 "$AC_MT/kubernetes/values" '' 'hop: nothing to reveal at the top of kubernetes/values/'
+
+t 'J1b reads the mode hop resolved: two files in one dir jump under cd, and need a pick under -o or --cd -e'
+ac_flag_want 'J1b cd' 0 "$AC_MT/kubernetes/services/monitoring" ''
+ac_flag_want 'J1b -o' 1 "$AC_MT" '' '2 targets matched the query: monitoring/grafana'
+ac_flag_want 'J1b --cd -e' 1 "$AC_MT" '' '2 targets matched the query: monitoring/grafana'
 
 # HOP_ACTION in config.zsh wins over the environment, because config is sourced after lib/actions.zsh sets the default.
 t 'HOP_ACTION set in config.zsh is honoured over the environment, and --cd still replaces it'
