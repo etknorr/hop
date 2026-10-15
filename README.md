@@ -200,7 +200,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 |---|---|
 | `hop` | pick from the default kinds, starting in NORMAL mode |
 | `hop vpc prod` | a clear match jumps with no UI; otherwise the picker opens on the best matches first. See [How a query resolves](#how-a-query-resolves) |
-| `hop terraform/acct-x` | a path that exists jumps straight there, before any matching, even from outside its repo when only one repo has it |
+| `hop terraform/acct-x` | a path that exists jumps straight there, before any matching, even from outside its repo when only one repo has it, or only one of that repo's checkouts is on its default branch |
 | `hop /` or `hopr` | `cd` to the repo root |
 | `hop -` | `cd -` |
 | `hopw` | `cd` to the workspace containing `$PWD`, deepest match winning |
@@ -612,9 +612,21 @@ stops at the first one that finds something:
    under every workspace root. It ignores case the same way. So from `~`, both
    `hop terraform/acct-x` and `hop configuration/terraform/acct-x` land in `configuration`, as long
    as no other repo has the same path. One match jumps and prints where it was found:
-   `hop: terraform/acct-x -> ~/work/configuration/terraform/acct-x/ (found in configuration)`. Two
-   or more never jump. The picker opens on just those, the repo you visited most recently first,
-   then by path. Inside a repo this happens only when the repo has nothing close to the query, so
+   `hop: terraform/acct-x -> ~/work/configuration/terraform/acct-x/ (found in configuration)`.
+
+   Two or more jump only when every one is a checkout of the same origin repo and exactly one of
+   them is checked out on its default branch. Origins are compared by `remote.origin.url` with the
+   scheme, the user and a trailing `.git` dropped, ignoring case, so `git@github.com:org/repo` and
+   `https://github.com/org/repo.git` count as one. The default branch is what `origin/HEAD` names,
+   else `main` if the repo has it, else `master` if it has that, and a detached HEAD isn't on any
+   branch. So when a clone, a retired copy and two worktrees of `configuration` hold the path and
+   only one of them is on `main`, hop lands there, and the note says why:
+   `(found in configuration, the main checkout of 4)`. hop reads this from each checkout's own git
+   files rather than running `git`, so it costs a few milliseconds. `HOP_JUMP=unique` turns this
+   rule off, since there the path names more than one target. Otherwise the picker opens on
+   just those, the repo you visited most recently first, then by path.
+
+   Inside a repo, other repos are tried only when the repo has nothing close to the query, so
    a match or a typo pick in the repo you're in still wins. The lookup needs a `/` with a name
    after it, so `hop configuration/` is still matched like any other query. It skips paths
    starting with `./`, `../`, `/` or `~` and paths with a `.` or `..` segment, and it's off under
@@ -642,6 +654,18 @@ stops at the first one that finds something:
    every word matches alone but no row holds them all, the picker shows the rows that hold all but
    one, smallest set first, and the header says `ignored: one of: routemaster, dev`.
 6. **Nothing close**: the picker opens on your query with no rows, ready to edit.
+
+Before any of these, a first word that names a registered kind outside your default set is read
+as `-k` when no default target matches it, not even as a typo fix or a loose match. So with `file`
+not a default kind, `hop file aeraki.yaml` is `hop -k file aeraki.yaml`, and hop prints
+`hop: reading "file" as -k file`. `hop file` alone opens the picker on that kind, even when it
+holds one target. A default kind such as `tg`, a kind name after the first word, and a word some
+default target matches all stay plain words, so `hop puppet` in a repo with a top-level `puppet/`
+still goes to that dir. Nothing is read as `-k` when you pass `-k` or `-a`. With `-w`, `-R` or
+outside a repo it's read the same way, and since those levels ignore `-k`, the word is only
+dropped from the query. When it fires in a repo, the default kinds are listed once to check the
+word, and with no terminal a rest that matches nothing is reported as
+`nothing matched the query: zzqx with -k file`.
 
 #### Jump rules
 

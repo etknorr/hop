@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+### Added
+
+- A first word that names a kind outside your default set is read as `-k` when no default target matches it.
+  `hop file aeraki.yaml` is `hop -k file aeraki.yaml`, and hop says `hop: reading "file" as -k file`.
+  `hop puppet` is unchanged in a repo with a top-level `puppet/` dir, because a default target matches it.
+  A kind name after the first word is never read as `-k`, and a kind word alone opens the picker on that kind even when it holds one target.
+
 ### Fixed
 
 - hop now finds a path typed from outside the repo that holds it.
@@ -13,7 +20,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   It's now also tried in every repo hop knows and under every workspace root, ignoring case.
   A path can start with its repo's name too, so `hop configuration/terraform/acct-security-tooling-prod` works from `~`.
   One match jumps and says where it was found.
-  A path that several repos have never jumps: the picker opens on just those, the most recently visited repo first.
+  A path that several checkouts have jumps only when they're all checkouts of one origin and exactly one is on its default branch, and the note says so: `(found in configuration, the main checkout of 4)`.
+  Otherwise the picker opens on just those, the most recently visited repo first.
   Inside a repo, other repos are tried only when the repo has nothing close to the query, so every in-repo jump and pick is unchanged.
 
 ## [0.2.0] - 2026-10-14
