@@ -700,12 +700,16 @@ _hop_decide() {
 	fi
 	local -A synby
 	if (( $#anc )); then
-		local syn a
+		local syn a REPLY
 		local -i i
 		local _hop_gen_root=$root
-		syn=$(for a in "${anc[@]}"; do
+		# Raw, then laid out once: a layout per row made 3058 ancestors cost 675ms instead of 194ms.
+		syn=$(local _hop_gen_raw=1
+		for a in "${anc[@]}"; do
 			_hop_row dir "${${a:h}/#%./-}" - - "${a:t}" "$root/$a" "$root/$a"
 		done)
+		_hop_layout "$syn" "${_hop_row_like:-}"
+		syn=$REPLY
 		local -a synrows=("${(@f)syn}")
 		_hop_rels_of "${synrows[@]}"
 		for (( i = 1; i <= $#synrows; i++ )); do
