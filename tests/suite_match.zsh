@@ -109,7 +109,7 @@ for q in \
 	security-tooling-prod Security-Tooling-Prod security_tooling_prod 'acct sec prod' terraform/account-security terraform/acount-security \
 	securty-tooling-prod secuirty-tooling-prod routemaxter rotuemaster routemastr routemaster-prod externaldns securitytoolingprod kps kpstack kubeprom \
 	vpc Vpc 'TG vpc' tg mesos helm kub kubernetes values 'eks security' 'vpc security !staging' '^vpc' \
-	'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
+	'acct sec prd' stg 'trust prod' 'data prod' 'active infrastructure' monitoring/grafana abg zzqx zzzz 'vpc zzqx' thanos \
 	"${MT_NONSENSE[@]}"; do
 	mt_case "$q"
 done
@@ -284,6 +284,13 @@ assert_eq 'external dns' "${reply[15]}"
 mt_pick T2 4 "$SP/" securitytoolingprod
 mt_get securitytoolingprod
 assert_eq 'security tooling prod' "${reply[15]}" 'three words run together split into three terms'
+# An env word shortened past what a typo fix reaches reads as its long form, and only opens the picker.
+mt_pick T2 7 "$SP/" 'acct sec prd'
+mt_get 'acct sec prd'
+assert_eq 'acct sec prod' "${reply[15]}"
+mt_pick T2 - - stg
+mt_get stg
+assert_eq staging "${reply[15]}" 'stg is four letters short of staging, so only the env word map reaches it'
 for w in kps kpstack kubeprom; do
 	mt_pick T3 2 kubernetes/values/kube-prometheus-stack/ "$w"
 done

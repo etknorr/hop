@@ -11,6 +11,19 @@
 # - Measured: T2 took 177ms at 6041 rows, against a 100ms budget.
 typeset -gi _HOP_APPROX_MAX=6000
 
+# Env words people shorten in ways no typo rule reaches: stg is four letters short of staging.
+# - Used only when no row holds the short form and some row holds the long one as a whole word, and never to jump.
+typeset -gA _HOP_ENV_WORDS=(
+	prd prod
+	production prod
+	stg staging
+	stag staging
+	stage staging
+	devel dev
+	develop dev
+	development dev
+)
+
 # _hop_filter <query> [fzf-arg...]  <rows on stdin -> the matching rows on stdout, best first.
 # - The ONLY fzf --filter call in hop, so every resolve matches exactly the way the picker will.
 # - --no-sort never reaches it: on 0.60.3, --filter --no-sort with --with-nth=1,4 prints the TRANSFORMED line.
@@ -214,6 +227,7 @@ _hop_compound() {
 # _hop_rewrite <query> [wide] -> 0 with reply=(approx effq), the query rewritten into fzf OR groups (T2).
 # - Every token is split out on whitespace and / - _ . and kept as-is when some vocabulary word contains it.
 # - A token no word contains gets typo fixes: zsh's approximate glob, 1 error, or 2 from 8 chars, transposition counted once.
+# - A short env word with no row holding it reads as its long form first; see _HOP_ENV_WORDS.
 # - A token with neither is split into the words it runs together, else gets the words it abbreviates to.
 # - The split comes first: `externaldns` had abbreviated to extras, and the external-dns rows were never offered.
 # - Typo before abbreviation, and a word the token merely starts with is refused, fixed `rotuemaster`.
@@ -241,6 +255,10 @@ _hop_rewrite() {
 		if (( ${_hop_vocab[(I)*${(b)tok}*]} )); then
 			exact=1
 			alts+=("$tok")
+		elif [[ -n ${_HOP_ENV_WORDS[$tok]:-} ]] && (( ${+_hop_vocab_set[${_HOP_ENV_WORDS[$tok]}]} )); then
+			groups+=("${_HOP_ENV_WORDS[$tok]}")
+			approx=1
+			continue
 		elif (( ${#tok} >= 4 )); then
 			n=$(( ${#tok} >= 8 ? 2 : 1 ))
 			typo=(${(M)_hop_vocab:#(#a${n})${tok}})
