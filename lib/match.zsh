@@ -121,37 +121,51 @@ _hop_literal_target() {
 	esac
 
 	local -i i
-	local a f base rest hit=''
-	local -a g
+	local REPLY hit=''
 	for (( i = 1; i <= $#anchors; i++ )); do
-		a=${anchors[i]:a}
-		f="${a%/}/${rests[i]}"
-		f=${f:a}
-		# ../ can climb above the anchor, so the literal part is what the typed path still shares with it.
-		base=$a
-		while [[ $base != / && $f != "$base" && $f != "$base"/* ]]; do
-			base=${base:h}
-		done
-		rest=${f#"$base"}
-		rest=${rest#/}
-		if [[ -z $rest ]]; then
-			[[ -e $f ]] || continue
-			hit=$f
-			break
-		fi
-		g=("${base%/}"/(#i)${rest}(N))
-		if (( ${g[(Ie)$f]} )); then
-			hit=$f
-		elif (( $#g == 1 )); then
-			hit=${g[1]}
-		else
-			continue
-		fi
+		_hop_path_under "${anchors[i]}" "${rests[i]}" || continue
+		hit=$REPLY
 		break
 	done
 	[[ -n $hit ]] || return 1
+	_hop_literal_fields "$hit" "$root"
+}
 
-	local REPLY _hop_gen_root=${root:+${root:A}}
+# _hop_path_under <anchor> <rest> -> 0 with REPLY the path rest names under anchor, spelled as the disk spells it.
+_hop_path_under() {
+	emulate -L zsh
+	setopt local_options extended_glob null_glob
+	local a=${1:a} f base rest
+	local -a g
+	REPLY=''
+	f="${a%/}/${2}"
+	f=${f:a}
+	# ../ can climb above the anchor, so the literal part is what the typed path still shares with it.
+	base=$a
+	while [[ $base != / && $f != "$base" && $f != "$base"/* ]]; do
+		base=${base:h}
+	done
+	rest=${f#"$base"}
+	rest=${rest#/}
+	if [[ -z $rest ]]; then
+		[[ -e $f ]] || return 1
+		REPLY=$f
+		return 0
+	fi
+	g=("${base%/}"/(#i)${rest}(N))
+	if (( ${g[(Ie)$f]} )); then
+		REPLY=$f
+	elif (( $#g == 1 )); then
+		REPLY=${g[1]}
+	else
+		return 1
+	fi
+}
+
+# _hop_literal_fields <hit> <root> -> reply=(dir preview rel) for a path T0 found; a file target cds to its parent.
+_hop_literal_fields() {
+	emulate -L zsh
+	local hit=$1 REPLY _hop_gen_root=${2:+${2:A}}
 	if [[ -d $hit ]]; then
 		_hop_rel "${hit:A}" "${hit:A}"
 		reply=("$hit" "$hit" "$REPLY")
