@@ -704,19 +704,22 @@ hop() {
 
 	# T0: a typed path is a filesystem fact, so it jumps before fzf or any enumeration is paid for.
 	# - -k does not narrow it, because no kind is consulted; -w and -R name a different level, so they skip it.
-	if (( ! wspick && ! repopick && $#words == 1 )) && [[ $_hop_jump != never ]]; then
-		local -a reply
-		local -F t0=0
-		[[ -n ${HOP_DEBUG:-} ]] && zmodload -F zsh/datetime p:EPOCHREALTIME 2>/dev/null && t0=$EPOCHREALTIME
-		if _hop_literal_target "${words[1]}" "$root"; then
-			local ms=-
-			(( t0 > 0 )) && printf -v ms '%.1f' $(( (EPOCHREALTIME - t0) * 1000 ))
-			_hop_dbg "resolve tier=T0 rule=path verdict=jump n=1 inj=0 q=${words[1]} target=${reply[3]} ms=${ms}"
-			_hop_dispatch '' "${reply[1]}" "${reply[2]}" "${reply[3]}"
-			return $?
+	if (( ! wspick && ! repopick && $#words == 1 )); then
+		if [[ $_hop_jump != never ]]; then
+			local -a reply
+			local -F t0=0
+			[[ -n ${HOP_DEBUG:-} ]] && zmodload -F zsh/datetime p:EPOCHREALTIME 2>/dev/null && t0=$EPOCHREALTIME
+			if _hop_literal_target "${words[1]}" "$root"; then
+				local ms=-
+				(( t0 > 0 )) && printf -v ms '%.1f' $(( (EPOCHREALTIME - t0) * 1000 ))
+				_hop_dbg "resolve tier=T0 rule=path verdict=jump n=1 inj=0 q=${words[1]} target=${reply[3]} ms=${ms}"
+				_hop_dispatch '' "${reply[1]}" "${reply[2]}" "${reply[3]}"
+				return $?
+			fi
 		fi
 		# _hop_xrepo arms _hop_elsewhere, which runs below outside a repo and from _hop_run inside one.
 		# - Never under -c, which keeps every search under $PWD.
+		# - Armed under -p and HOP_JUMP=never too, where it opens a picker over what it finds instead of jumping.
 		(( here )) || _hop_xrepo=1
 	fi
 

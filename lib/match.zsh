@@ -184,6 +184,7 @@ _hop_literal_fields() {
 # - One distinct target jumps, saying where it was found.
 # - Several jump only when every one is a checkout of one origin and exactly one is on its default branch; see _hop_main_checkout.
 # - Not under HOP_JUMP=unique, which promises a jump only when the query names one target.
+# - Under -p or HOP_JUMP=never nothing jumps, so even one hit opens the picker.
 # - Otherwise they open a picker over just those, the one in the repo visited most recently first, then by path.
 _hop_elsewhere() {
 	emulate -L zsh
@@ -230,11 +231,11 @@ _hop_elsewhere() {
 	done
 	(( $#hits )) || return 1
 
-	local _hop_gen_root='' why=''
+	local _hop_gen_root='' why='' jump=${_hop_jump:-${HOP_JUMP:-auto}}
 	local -i j=0
-	if (( $#hits == 1 )); then
+	if [[ $jump != never ]] && (( $#hits == 1 )); then
 		j=1
-	elif [[ ${_hop_jump:-${HOP_JUMP:-auto}} != unique ]] && _hop_main_checkout "${homes[@]}"; then
+	elif [[ $jump == auto ]] && _hop_main_checkout "${homes[@]}"; then
 		j=${REPLY%% *} why=", the ${REPLY#* } checkout of ${#hits}"
 	fi
 	if (( j )); then

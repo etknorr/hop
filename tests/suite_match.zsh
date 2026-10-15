@@ -1013,16 +1013,23 @@ MT_RUN=$(mt_headless "$MT_REPO" 'hop terraform/acount-security' "HOP_WORKSPACES=
 assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" 'configuration has terraform/acount-security, but this repo reads it as a typo first'
 assert_contains "$MT_RUN" 'no exact match for: terraform/acount-security'
 
-t 'elsewhere: -c, -p, HOP_JUMP=never and -R never look in other repos'
+t 'elsewhere: -c and -R never look in other repos'
 MT_RUN=$(mt_headless "$MT_REPO" 'hop -c wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" '-c means under $PWD'
-MT_RUN=$(mt_headless "$MT_WSH" "hop -p $SP" "HOP_WORKSPACES=$MT_WS")
-assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
-MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS" HOP_JUMP=never)
-assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
 MT_RUN=$(mt_headless "$MT_WSH" "hop -R $SP" "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
 MT_RUN=$(mt_headless "$MT_WSH" "hop -w $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+
+t 'elsewhere: -p and HOP_JUMP=never still look in other repos, and open the picker on even one hit'
+MT_RUN=$(mt_headless "$MT_WSH" "hop -p $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH" 'nothing jumps under -p'
+assert_contains "$MT_RUN" "hop: 1 target matched the query: $SP, and picking one needs a terminal."
+assert_contains "$MT_RUN" "hop: best matches: ~/strava/configuration/$SP/" 'the workspace picker opened instead of the lookup'
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS" HOP_JUMP=never)
+assert_contains "$MT_RUN" "hop: best matches: ~/strava/configuration/$SP/"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop -p p1/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" '2 targets matched the query: p1/x' 'the default-branch checkout is a jump, so -p keeps it a pick'
 assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
 
 t 'elsewhere: the lookup logs as T0 with its own timing'
