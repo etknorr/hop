@@ -132,6 +132,7 @@ mt_case infrastructure terraform/acct-infrastructure/env-prod cd auto c
 mt_case infrastructure terraform/acct-infrastructure/env-prod
 mt_case 'acct-l[a]b*#/env-prod'
 mt_case env-prod 'terraform/acct-l[a]b*#' cd auto c
+mt_case terrafrom/acct-securty-tooling-prd
 
 print -rl -- "${MT_CASES[@]}" > "$MT_WORK/cases"
 export MT_REPO MT_WORK
@@ -237,6 +238,12 @@ t 'resolve: terraform/nope/x falls through to the matcher'
 mt_get terraform/nope/x
 assert_ne T0 "${reply[7]}" 'a path that does not exist is not a literal target'
 assert_eq none "${reply[6]}"
+
+# Pinned as reported: three typos in a real account path, which must read back as that account and never jump.
+mt_pick T2 - "$SP/" terrafrom/acct-securty-tooling-prd
+mt_get terrafrom/acct-securty-tooling-prd
+assert_eq 'terraform acct security tooling prod' "${reply[15]}"
+assert_eq 'no exact match for: terrafrom/acct-securty-tooling-prd (showing: terraform acct security tooling prod)' "${reply[16]}"
 
 t 'resolve: a literal path under HOP_JUMP=never opens the picker instead'
 mt_get terraform/acct-security-tooling-prod . cd never
@@ -784,6 +791,12 @@ MT_RUN=$(mt_headless "$MT_REPO/terraform" "hop ${(q)MT_WSH}/lit/deep")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/lit/deep" 'an absolute path that is not under the root falls back to /'
 MT_RUN=$(mt_headless "$MT_WSH" 'hop lit/deep' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/lit/deep" 'outside a repo a path is $PWD-relative'
+
+t 'T0 through hop: inside a repo, a path the repo spells differently is still a typo, not a cross-repo lookup'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop terrafrom/acct-securty-tooling-prd')
+assert_contains "$MT_RUN" 'hop: no exact match for: terrafrom/acct-securty-tooling-prd (read as: terraform acct security tooling prod)'
+assert_contains "$MT_RUN" "hop: best matches: $SP/," 'the account dir is the first candidate'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" 'a typo never jumps'
 
 t 'resolve: an injected dir previews its top-level README, and a dir with none previews itself'
 typeset MT_PREV
