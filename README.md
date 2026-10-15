@@ -200,7 +200,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 |---|---|
 | `hop` | pick from the default kinds, starting in NORMAL mode |
 | `hop vpc prod` | a clear match jumps with no UI; otherwise the picker opens on the best matches first. See [How a query resolves](#how-a-query-resolves) |
-| `hop terraform/acct-x` | a path that exists jumps straight there, before any matching |
+| `hop terraform/acct-x` | a path that exists jumps straight there, before any matching, even from outside its repo when only one repo has it, or only one of that repo's checkouts is on its default branch |
 | `hop /` or `hopr` | `cd` to the repo root |
 | `hop -` | `cd -` |
 | `hopw` | `cd` to the workspace containing `$PWD`, deepest match winning |
@@ -612,6 +612,32 @@ stops at the first one that finds something:
    relative to `$PWD`, `/x` is relative to the repo root first (as `hop /` is), and anything else
    tries `$PWD` and then the root. `-k` doesn't narrow it, since no kind is consulted, and `-w`,
    `-R` and `-p` skip it.
+
+   A path that isn't under `$PWD` or the repo root is looked up in every repo hop knows
+   (`$HOP_REPOS`, or every repo in your workspaces), with or without the repo's name in front, and
+   under every workspace root. It ignores case the same way. So from `~`, both
+   `hop terraform/acct-x` and `hop configuration/terraform/acct-x` land in `configuration`, as long
+   as no other repo has the same path. One match jumps and prints where it was found:
+   `hop: terraform/acct-x -> ~/work/configuration/terraform/acct-x/ (found in configuration)`.
+
+   Two or more jump only when every one is a checkout of the same origin repo and exactly one of
+   them is checked out on its default branch. Origins are compared by `remote.origin.url` with the
+   scheme, the user and a trailing `.git` dropped, ignoring case, so `git@github.com:org/repo` and
+   `https://github.com/org/repo.git` count as one. The default branch is what `origin/HEAD` names,
+   else `main` if the repo has it, else `master` if it has that, and a detached HEAD isn't on any
+   branch. So when a clone, a retired copy and two worktrees of `configuration` hold the path and
+   only one of them is on `main`, hop lands there, and the note says why:
+   `(found in configuration, the main checkout of 4)`. hop reads this from each checkout's own git
+   files rather than running `git`, so it costs a few milliseconds. `HOP_JUMP=unique` turns this
+   rule off, since there the path names more than one target. Otherwise the picker opens on
+   just those, the repo you visited most recently first, then by path.
+
+   Inside a repo, other repos are tried only when the repo has nothing close to the query, so
+   a match or a typo pick in the repo you're in still wins. The lookup needs a `/` with a name
+   after it, so `hop configuration/` is still matched like any other query. It skips paths
+   starting with `./`, `../`, `/` or `~` and paths with a `.` or `..` segment, and it's off under
+   `-c`, which keeps the search under `$PWD`. It only checks whether the path exists in each repo,
+   so it lists no repo's targets and costs a few milliseconds.
 2. **Exact**: fzf matches the words against the row's name line (name, kind, scope, env and
    region) and its `rel` path, with `--exact`, `-i` and `--tiebreak=begin,chunk`. The picker gets
    the same flags from the same array, so the two always agree on which rows match. Your
@@ -634,6 +660,18 @@ stops at the first one that finds something:
    every word matches alone but no row holds them all, the picker shows the rows that hold all but
    one, smallest set first, and the header says `ignored: one of: routemaster, dev`.
 6. **Nothing close**: the picker opens on your query with no rows, ready to edit.
+
+Before any of these, a first word that names a registered kind outside your default set is read
+as `-k` when no default target matches it, not even as a typo fix or a loose match. So with `file`
+not a default kind, `hop file aeraki.yaml` is `hop -k file aeraki.yaml`, and hop prints
+`hop: reading "file" as -k file`. `hop file` alone opens the picker on that kind, even when it
+holds one target. A default kind such as `tg`, a kind name after the first word, and a word some
+default target matches all stay plain words, so `hop puppet` in a repo with a top-level `puppet/`
+still goes to that dir. Nothing is read as `-k` when you pass `-k` or `-a`. With `-w`, `-R` or
+outside a repo it's read the same way, and since those levels ignore `-k`, the word is only
+dropped from the query. When it fires in a repo, the default kinds are listed once to check the
+word, and with no terminal a rest that matches nothing is reported as
+`nothing matched the query: zzqx with -k file`.
 
 #### Jump rules
 
@@ -668,9 +706,10 @@ it: hop adds it as a row only when it matches the same query, and J2 is the only
 one. A query using fzf's own syntax (`'`, `^`, `$`, `!` or `|`) gets the exact step alone, with no
 rewrite and no added rows.
 
-Outside a repo, hop resolves the query against your workspaces, and when none matches exactly it
-tries your repos too and keeps the closer result, a tie going to the workspaces. So `hop tf eks`
-from `~` lands on `tf-aws-eks` instead of a workspace that only matched `tf`.
+Outside a repo, a path is looked up in your repos and workspace roots first, as step 1 describes.
+Any other query is resolved against your workspaces, and when none matches exactly hop tries your
+repos too and keeps the closer result, a tie going to the workspaces. So `hop tf eks` from `~`
+lands on `tf-aws-eks` instead of a workspace that only matched `tf`.
 
 `HOP_JUMP` sets how eager this is. `auto` allows every rule above. `unique` allows literal paths,
 J1, J1b and J3, so a query jumps only when it names one target. `never` always opens the picker,
@@ -685,7 +724,8 @@ first line says when the query was rewritten, for example
 `(read as: prod vpc)` for `prod_vpc`, whose words were only split apart. Typing in the picker is
 plain fzf: it searches the paths, but it doesn't correct typos. With no terminal, a pick can't be
 shown, so hop prints how many targets matched, the best three paths, and what would let it jump:
-a narrower query, a spelling fix, or the words it ignored. Then it exits 1.
+a narrower query, a spelling fix, the words it ignored, or the repo name in front of a path
+several repos have. Then it exits 1.
 
 #### Frecency and fuzzy matching
 
