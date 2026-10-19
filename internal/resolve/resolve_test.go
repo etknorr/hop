@@ -3,6 +3,7 @@ package resolve
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,6 +37,7 @@ type fix struct {
 	all  []string
 	fit  []string
 	fzf  *match.FZF
+	vim  bool
 }
 
 var (
@@ -90,7 +92,7 @@ func matchFix(t *testing.T) *fix {
 			fixErr = &os.PathError{Op: "generate", Path: root, Err: os.ErrInvalid}
 			return
 		}
-		fixVal = &fix{root, cfg, all, rows.List(rs, root, nil), fzf}
+		fixVal = &fix{root: root, cfg: cfg, all: all, fit: rows.List(rs, root, nil), fzf: fzf}
 	})
 	if fixErr != nil {
 		t.Skip("match fixture unavailable: ", fixErr)
@@ -190,7 +192,7 @@ func (f *fix) run(k kase, all []string) out {
 			return out{res: Result{Verdict: "jump", Tier: "T0", Rule: "path", Target: t, N: 1, M: 1}, t0: true, visible: rs}
 		}
 	}
-	r := &Resolver{Match: f.fzf, Root: f.root, Action: k.action, Jump: k.jump, Under: under, Kinds: f.cfg.AllKinds()}
+	r := &Resolver{Match: f.fzf, Root: f.root, Action: k.action, Jump: k.jump, Under: under, Kinds: f.cfg.AllKinds(), Vim: f.vim}
 	res := r.Resolve(k.q, rs)
 	o := out{res: res, visible: rs}
 	if res.Verdict != "jump" {
@@ -220,14 +222,18 @@ func (f *fix) zshTable(t *testing.T, ks []kase) map[string]string {
 		b.WriteString(k.key() + "\n")
 	}
 	os.WriteFile(cf, []byte(b.String()), 0o644)
-	got, err := testfix.Zsh(testdata("match.zsh"), `source "$1" && hx_runner "$2" "$3"`, noVim, testdata("resolve_runner.zsh"), f.root, cf)
+	env := noVim
+	if f.vim {
+		env = []string{"HOP_VIM=1"}
+	}
+	got, err := testfix.Zsh(testdata("match.zsh"), `source "$1" && hx_runner "$2" "$3"`, env, testdata("resolve_runner.zsh"), f.root, cf)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return byKey(got)
 }
 
-// noVim is how resolve comparisons run zsh hop: the Go picker has no modal layer yet, and only the T4 hint reads it.
+// noVim is how the goldens were captured; only the T4 hint reads HOP_VIM, and TestLiveZsh runs both ways.
 var noVim = []string{"HOP_VIM=0"}
 
 // byKey indexes a table by its case. resolve.tsv was captured from hop 0.2.0, whose T4 hint names its modal layer's esc.
@@ -301,9 +307,12 @@ func TestLiveZsh(t *testing.T) {
 	if !testfix.HaveZsh() {
 		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
 	}
-	f := matchFix(t)
 	ks := cases(t)
-	compareTables(t, ks, f.zshTable(t, ks), f.goTable(ks, f.fit), "live zsh")
+	for _, vim := range []bool{false, true} {
+		f := *matchFix(t)
+		f.vim = vim
+		compareTables(t, ks, f.zshTable(t, ks), f.goTable(ks, f.fit), fmt.Sprintf("live zsh, HOP_VIM=%v", vim))
+	}
 }
 
 func (f *fix) get(t *testing.T, k kase) out {
@@ -513,6 +522,11 @@ func TestSuiteMatchDetails(t *testing.T) {
 			r := f.get(t, c(q)).res
 			if r.Verdict+" "+r.Tier != "none T4" || r.Note != "nothing close to: "+q+" (ctrl-u clears)" {
 				t.Errorf("%s: %s %s %q", q, r.Verdict, r.Tier, r.Note)
+			}
+			vf := *f
+			vf.vim = true
+			if r := vf.get(t, c(q)).res; r.Note != "nothing close to: "+q+" (esc twice clears)" {
+				t.Errorf("%s under the modal layer: %q", q, r.Note)
 			}
 		}
 	})

@@ -548,7 +548,7 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	all := mru.Rank(renderAll(kinds.Generate(cfg, root, names, stderr), root), mru.Load(cfg.Settings.HistFile))
-	r := &resolve.Resolver{Match: fzf, Root: root, Action: "cd", Jump: jump, Kinds: cfg.AllKinds()}
+	r := &resolve.Resolver{Match: fzf, Root: root, Action: "cd", Jump: jump, Kinds: cfg.AllKinds(), Vim: *cfg.Settings.Vim}
 	bw := bufio.NewWriter(stdout)
 	defer bw.Flush()
 	sc := bufio.NewScanner(os.Stdin)

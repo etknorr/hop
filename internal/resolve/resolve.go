@@ -53,6 +53,8 @@ type Resolver struct {
 	Kinds  []string
 	// Like is a row of the list being resolved, so the ancestor rows it injects line up with it (_hop_row_like).
 	Like string
+	// Vim is the modal layer, which the T4 hint names esc for.
+	Vim bool
 
 	err error
 }
@@ -625,10 +627,14 @@ func (r *Resolver) Resolve(q string, rs []string) Result {
 }
 
 // none is _hop_resolve_none: T4, nothing close, so the picker opens on the query as typed.
-// - The hint is hop 0.3's for HOP_VIM=0, since the picker has no modal layer yet and esc cancels it.
+// - The hint names the key that clears it: esc twice under the modal layer (SEARCH to NORMAL, then clear), ctrl-u without.
 func (s *state) none() {
 	s.res.Verdict, s.res.Tier, s.res.Query = "none", "T4", s.q
-	s.res.Note = "nothing close to: " + s.q + " (ctrl-u clears)"
+	hint := " (ctrl-u clears)"
+	if s.Vim {
+		hint = " (esc twice clears)"
+	}
+	s.res.Note = "nothing close to: " + s.q + hint
 }
 
 // textBuild is _hop_text_build: fields 1 and 4 lowercased, or "" when the text holds non-ASCII besides hop's … marker.
