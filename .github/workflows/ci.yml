@@ -221,7 +221,17 @@ jobs:
           out=$(gofmt -l .)
           if [ -n "$out" ]; then printf '%s\n' "$out"; exit 1; fi
 
-      - run: go test ./...
+      - name: go test (macOS)
+        if: runner.os == 'macOS'
+        run: go test ./...
+
+      # internal/collate reproduces macOS's en_US order, which zsh hop's sorts follow on Eric's Mac; glibc's en_US differs,
+      # so the two live-zsh comparisons that sort through the C library can't agree here, and only those two are skipped.
+      - name: go test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          go list ./... | grep -v -e '/internal/collate$' -e '/internal/resolve$' | xargs go test
+          go test -skip '^(TestSortMatchesLiveZsh|TestLiveZsh)$' ./internal/collate ./internal/resolve
 
   # The go job gets the latest fzf; these are the floor and the first release with --freeze-left.
   go-floor:
@@ -353,7 +363,6 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
-      HOMEBREW_NO_INSTALL_FROM_API: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
     steps:
       - uses: actions/checkout@v4

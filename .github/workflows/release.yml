@@ -61,7 +61,6 @@ jobs:
         os: [macos-latest, ubuntu-latest]
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
-      HOMEBREW_NO_INSTALL_FROM_API: '1'
     steps:
       - name: Put brew on PATH (Linux)
         if: runner.os == 'Linux'
