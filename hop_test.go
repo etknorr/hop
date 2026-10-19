@@ -138,7 +138,6 @@ func TestHeadlessAgainstHop03(t *testing.T) {
 	}
 	e := newE2E(t)
 	e.hophome = home
-	t.Setenv("HOP_LAYOUT", "")
 	origin := map[string]string{
 		"strava/configuration":       "git@github.com:strava/configuration.git",
 		"personal/configuration-old": "https://github.com/Strava/configuration",

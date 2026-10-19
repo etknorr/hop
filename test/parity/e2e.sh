@@ -22,11 +22,6 @@ root=$HOP_PARITY_REPO
 zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
 gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
 hophome=$HOP_PARITY_HOME
-# hop 0.3.0 fitted the columns to each list; against an older hop, the Go hop lays rows out the old way.
-case $(cat "$hophome/VERSION" 2>/dev/null) in
-	0.1.* | 0.2.*) layout=fixed ;;
-	*) layout=fit ;;
-esac
 jumps=${PARITY_JUMPS:-auto unique never}
 vims=${PARITY_VIM:-1 0}
 workers=${PARITY_WORKERS:-8}
@@ -91,7 +86,7 @@ for jump in $jumps; do
 		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" HOP_VIM="$vim" \
 			HOP_CONFIG="$zshcfg" zsh -f "$here/e2e_run.zsh" zsh "$hophome" "$root" "$s" "$d/zsh.$n" &
 		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" HOP_VIM="$vim" \
-			HOP_LAYOUT="$layout" HOP_CONFIG="$gocfg" zsh -f "$here/e2e_run.zsh" go "$bin" "$root" "$s" "$d/go.$n" &
+			HOP_CONFIG="$gocfg" zsh -f "$here/e2e_run.zsh" go "$bin" "$root" "$s" "$d/go.$n" &
 	done
 	wait
 	echo "(vim $vim, $jump: $(echo "$(now) - $t0" | bc)s wall for $(wc -l <"$out/all.cases" | tr -d ' ') queries x 2, $workers shards each)" >&2

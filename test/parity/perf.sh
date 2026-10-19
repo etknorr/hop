@@ -5,7 +5,6 @@
 # - Enumeration: go is a whole `hop __dump-rows` process; zsh is _hop_rows in an already-sourced shell, which is what hop() pays.
 # - Resolve: per query, T0 first, enumeration excluded; zsh's in one sourced shell, go's from __resolve-dump --ms.
 # - End to end: every PERF_EVERY-th query of each set, plus e2e.sh's v03 and away, serially and headless through both functions.
-# - The Go hop's layout follows the oracle's VERSION, as in e2e.sh.
 # - Medians and p90s; the machine is shared, so read the ratios rather than the absolute times.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -20,10 +19,6 @@ gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
 hophome=$HOP_PARITY_HOME
 runs=${PERF_RUNS:-15}
 every=${PERF_EVERY:-10}
-case $(cat "$hophome/VERSION" 2>/dev/null) in
-	0.1.* | 0.2.*) layout=fixed ;;
-	*) layout=fit ;;
-esac
 sets="names pref3 scope+env name+env nonsense corpus typo relaxed"
 out=$(mktemp -d "${TMPDIR:-/tmp}/hop-perf.XXXXXX")
 trap 'rm -rf "$out"' EXIT
@@ -40,7 +35,7 @@ clean() {
 
 # HOP_CONFIG and HOP_HISTFILE name different files to the two hops, so each side sets its own.
 zclean() { clean HOP_HISTFILE=/dev/null HOP_CONFIG="$zshcfg" "$@"; }
-gclean() { clean HOP_HISTFILE="$out/hist" HOP_CONFIG="$gocfg" HOP_LAYOUT="$layout" "$@"; }
+gclean() { clean HOP_HISTFILE="$out/hist" HOP_CONFIG="$gocfg" "$@"; }
 
 detached() {
 	perl -MPOSIX -e 'if (my $p = fork) { waitpid($p, 0); exit($? >> 8) } POSIX::setsid(); exec @ARGV or die "exec: $!"' -- "$@"
@@ -116,7 +111,7 @@ echo "== end to end through the shell function, auto, every ${every}th query (wa
 detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP=auto \
 	HOP_CONFIG="$zshcfg" zsh -f "$here/e2e_run.zsh" zsh "$hophome" "$root" "$out/e2e.cases" "$out/e2e.zsh"
 detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP=auto \
-	HOP_LAYOUT="$layout" HOP_CONFIG="$gocfg" zsh -f "$here/e2e_run.zsh" go "$bin" "$root" "$out/e2e.cases" "$out/e2e.go"
+	HOP_CONFIG="$gocfg" zsh -f "$here/e2e_run.zsh" go "$bin" "$root" "$out/e2e.cases" "$out/e2e.go"
 printf '%-10s %6s %9s %9s %9s %9s %7s\n' group calls go-med go-p90 zsh-med zsh-p90 ratio
 row() {
 	local name=$1 filter=$2 n xm xp zm zp ratio

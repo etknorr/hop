@@ -4,7 +4,6 @@
 #   is the oracle's config.zsh (default zsh hop's own path) and HOP_PARITY_CONFIG the Go side's TOML (default testdata/eric.toml).
 # - The last three sets are stress sets for the approximate tiers; the go/no-go bar reads only the first five.
 # - core compares verdict, tier, rule and target rel; full compares the whole line: n, m, inj, every candidate, query, note, report.
-# - The Go hop's layout follows the oracle's VERSION.
 # - Each run is repeated with the modal layer on and off (PARITY_VIM, default "1 0"), since the T4 hint reads HOP_VIM.
 # - Exit status is the number of core diffs on names, scope+env and name+env under auto, plus nonsense jumps, capped at 99.
 set -u
@@ -18,11 +17,6 @@ root=$HOP_PARITY_REPO
 zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
 gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
 hopdir=$HOP_PARITY_HOME
-# hop 0.3.0 fitted the columns to each list; against an older hop, the Go hop lays rows out the old way.
-case $(cat "$hopdir/VERSION" 2>/dev/null) in
-	0.1.* | 0.2.*) layout=fixed ;;
-	*) layout=fit ;;
-esac
 jumps=${PARITY_JUMPS:-auto unique never}
 vims=${PARITY_VIM:-1 0}
 bin=${HOP_BIN:-}
@@ -40,7 +34,7 @@ clean() {
 
 # HOP_CONFIG and HOP_HISTFILE name different files to the two hops, so each side sets its own.
 zclean() { clean HOP_HISTFILE=/dev/null HOP_CONFIG="$zshcfg" "$@"; }
-gclean() { clean HOP_HISTFILE="$out/hist" HOP_CONFIG="$gocfg" HOP_LAYOUT="$layout" "$@"; }
+gclean() { clean HOP_HISTFILE="$out/hist" HOP_CONFIG="$gocfg" "$@"; }
 
 now() { perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
 
@@ -52,9 +46,6 @@ for jump in $jumps; do
 	mkdir -p "$d"
 	t0=$(now)
 	zclean HOP_VIM="$vim" zsh -f "$here/resolve_dump.zsh" "$hopdir" "$root" "$d" "$jump" "$repo" || exit 98
-	# hop 0.2's hint names esc whatever HOP_VIM says; the Go hop words it as hop 0.3 does.
-	[ "$layout" = fixed ] && [ "$vim" = 0 ] && perl -pi -e 's/ \(esc clears\)\t/ (ctrl-u clears)\t/' "$d"/*.zsh
-	[ "$layout" = fixed ] && [ "$vim" = 1 ] && perl -pi -e 's/ \(esc clears\)\t/ (esc twice clears)\t/' "$d"/*.zsh
 	tz=$(echo "$(now) - $t0" | bc)
 	for set in names pref3 scope+env name+env nonsense corpus typo relaxed; do
 		t1=$(now)

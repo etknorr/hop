@@ -1,7 +1,6 @@
 package rows
 
 import (
-	"os"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -19,25 +18,13 @@ const (
 	CapRegion = 14
 )
 
-// Fixed reports whether rows use hop 0.2's layout, each row padded to constant widths on its own.
-// - HOP_LAYOUT=fixed selects it; anything else is hop 0.3's fitted layout, which the hop Eric runs uses.
-// - The 0.2 layout stays because the row and resolve goldens were captured from hop 0.2.0.
-func Fixed() bool { return os.Getenv("HOP_LAYOUT") == "fixed" }
-
 // Widths are one list's five column widths: name, kind, scope, env, region. A 0 drops that column.
 type Widths [5]int
 
 // List is _hop_layout: rs rendered as one list whose columns line up, each as wide as its longest value up to a cap.
 // - like, when non-nil, gives the widths instead, so rows added to a list later line up with it.
-// - Under Fixed it is Render per row, as hop 0.2 printed them.
 func List(rs []Row, root string, like *Widths) []string {
 	out := make([]string, len(rs))
-	if Fixed() {
-		for i, r := range rs {
-			out[i] = Render(r, root)
-		}
-		return out
-	}
 	if len(rs) == 0 {
 		return out
 	}

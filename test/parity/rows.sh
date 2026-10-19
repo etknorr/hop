@@ -3,7 +3,6 @@
 # - HOP_PARITY_HOME (a zsh hop install, the oracle) and HOP_PARITY_REPO (the repo to sweep) are required; HOP_PARITY_ZSHCONFIG
 #   is the oracle's config.zsh (default zsh hop's own path) and HOP_PARITY_CONFIG the Go side's TOML (default testdata/eric.toml).
 # - Prints `kind rows-zsh rows-go IDENTICAL|DIFF first-diff-line set-diff`; set-diff counts ANSI-stripped rows in only one side.
-# - The Go hop's layout follows the oracle's VERSION.
 # - Exit status is the number of DIFF lines, capped at 99.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -16,11 +15,6 @@ root=$HOP_PARITY_REPO
 zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
 gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
 hopdir=$HOP_PARITY_HOME
-# hop 0.3.0 fitted the columns to each list; against an older hop, the Go hop lays rows out the old way.
-case $(cat "$hopdir/VERSION" 2>/dev/null) in
-	0.1.* | 0.2.*) layout=fixed ;;
-	*) layout=fit ;;
-esac
 bin=${HOP_BIN:-}
 out=$(mktemp -d "${TMPDIR:-/tmp}/hop-parity.XXXXXX")
 trap 'rm -rf "$out"' EXIT
@@ -36,7 +30,7 @@ clean() {
 
 # HOP_CONFIG and HOP_HISTFILE name different files to the two hops, so each side sets its own.
 zclean() { clean HOP_HISTFILE=/dev/null HOP_CONFIG="$zshcfg" "$@"; }
-gclean() { clean HOP_HISTFILE="$out/hist" HOP_CONFIG="$gocfg" HOP_LAYOUT="$layout" "$@"; }
+gclean() { clean HOP_HISTFILE="$out/hist" HOP_CONFIG="$gocfg" "$@"; }
 
 zhop() {
 	zclean zsh -f -c '

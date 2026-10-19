@@ -110,7 +110,6 @@ done`
 }
 
 func TestListLiveZsh03(t *testing.T) {
-	t.Setenv("HOP_LAYOUT", "")
 	home := testfix.RefHome(testfix.RefLayout)
 	if home == "" || !testfix.HaveZsh() {
 		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
@@ -128,7 +127,6 @@ func TestListLiveZsh03(t *testing.T) {
 }
 
 func TestListWidths(t *testing.T) {
-	t.Setenv("HOP_LAYOUT", "")
 	cases := []struct {
 		name string
 		list int
@@ -149,19 +147,6 @@ func TestListWidths(t *testing.T) {
 		w, ok := ParseWidths(List(rs, "/r", nil)[0])
 		if !ok || w != c.want {
 			t.Errorf("%s: widths %v (ok %v), want %v", c.name, w, ok, c.want)
-		}
-	}
-}
-
-func TestListFixed(t *testing.T) {
-	t.Setenv("HOP_LAYOUT", "fixed")
-	var rs []Row
-	for _, c := range cases {
-		rs = append(rs, New(c[0], c[1], c[2], c[3], c[4], c[5], c[6], len(c) > 7))
-	}
-	for i, got := range List(rs, "/r", nil) {
-		if want := Render(rs[i], "/r"); got != want {
-			t.Errorf("row %d under HOP_LAYOUT=fixed\n got  %q\n want %q", i, got, want)
 		}
 	}
 }
