@@ -8,7 +8,6 @@ install
 
 config
   HOP_CONFIG             ~/.config/hop/config.toml (default, readable)
-  warning                action "bogus" is not one of cd, open, reveal, cd+open, cd+reveal; using cd
   HOP_WORKSPACES_FILE    ~/.config/hop/workspaces (default, readable)
   HOP_HISTFILE           ~/.local/state/hop/history (default, MISSING)
   HOP_HIST_MAX           50 (config)
