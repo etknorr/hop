@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -117,5 +118,21 @@ func TestUpgradeIsFirstWordOnly(t *testing.T) {
 	}
 	if _, e, rc := runHop(t, "upgrade", "--force"); rc != 2 || !strings.Contains(e, "hop upgrade: unknown option: --force") {
 		t.Errorf("upgrade --force: rc %d %q", rc, e)
+	}
+}
+
+// TestReleaseFiles holds what release.yml relies on: a bare VERSION and an Unreleased heading to move entries out of.
+func TestReleaseFiles(t *testing.T) {
+	v, err := os.ReadFile("VERSION")
+	if err != nil || !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+\n?$`).Match(v) {
+		t.Errorf("VERSION must be a bare X.Y.Z, no v: %q %v", v, err)
+	}
+	c, _ := os.ReadFile("CHANGELOG.md")
+	if !strings.Contains(string(c), "\n## [Unreleased]\n") {
+		t.Error("CHANGELOG.md lost its ## [Unreleased] heading")
+	}
+	f, _ := os.ReadFile(filepath.Join("Formula", "hop.rb"))
+	if !regexp.MustCompile(`(?m)^  url "https://github\.com/etknorr/hop\.git", tag: "v[0-9]+\.[0-9]+\.[0-9]+"$`).Match(f) {
+		t.Error("Formula/hop.rb's url line is the shape release.yml and ci.yml rewrite")
 	}
 }

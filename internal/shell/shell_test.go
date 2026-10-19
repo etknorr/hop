@@ -212,3 +212,26 @@ func TestCompleteCoversEveryFlag(t *testing.T) {
 		t.Errorf("the scan found only %d options in hop.go, so it no longer reads the option loop", n)
 	}
 }
+
+// TestInitSilent is suite_smoke's "sourcing in a non-interactive shell is silent": an rc file that prints breaks scp and rsync.
+func TestInitSilent(t *testing.T) {
+	for _, c := range []struct{ shell, argv0 string }{{"zsh", "zsh"}, {"bash", "bash"}, {"bash", "/bin/bash"}, {"fish", "fish"}} {
+		if _, err := exec.LookPath(c.argv0); err != nil {
+			t.Logf("%s not installed, skipped", c.argv0)
+			continue
+		}
+		s, _ := Init(c.shell, "")
+		f := filepath.Join(t.TempDir(), "init")
+		os.WriteFile(f, []byte(s), 0o644)
+		args := []string{"-c", ". " + f}
+		if c.argv0 == "zsh" {
+			args = append([]string{"-f"}, args...)
+		}
+		if c.argv0 == "fish" {
+			args = []string{"--no-config", "-c", "source " + f}
+		}
+		if out, err := exec.Command(c.argv0, args...).CombinedOutput(); err != nil || len(out) != 0 {
+			t.Errorf("%s: sourcing the init printed %q (%v)", c.argv0, out, err)
+		}
+	}
+}
