@@ -6,6 +6,68 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 ## [Unreleased]
 
+This is hop 1.0.0: hop is now one Go binary instead of a zsh plugin.
+The picker, the keys, the jump rules and the history ranking work as they did in 0.3.1, and your history and workspaces files are read as they are.
+
+### Migrating from 0.3
+
+1. Install the binary first: `brew tap etknorr/hop https://github.com/etknorr/hop` and then `brew install etknorr/hop/hop`, or `go install github.com/etknorr/hop@latest`.
+   While zsh hop is still loaded, its `hop` function shadows the binary, so use `command hop` until step 3.
+2. Convert your config with `command hop import -o ~/.config/hop/config.toml`.
+   It reads `~/.config/hop/config.zsh` and leaves it alone.
+3. In `~/.zshrc`, replace the line that sources `hop.zsh` (or your plugin manager's entry) with `eval "$(hop init zsh)"`, after `compinit`, and run `exec zsh`.
+
+Don't run 0.3's `hop upgrade` once 1.0.0 is out.
+It fast-forwards the zsh checkout to the Go tree, which has no `hop.zsh`, so the `source` line in `~/.zshrc` fails.
+`git -C ~/.local/share/hop checkout --detach v0.3.1` puts it back.
+
+### Changed
+
+- hop is a Go binary for macOS and Linux.
+  `hop init zsh|bash|fish` prints the shell function, `hopr`, `hopw`, the `^G` and `alt-g` widget and completion.
+  `--cmd NAME` names the function something else, so it can run beside zsh hop while you try it.
+- The config is TOML, at `$HOP_CONFIG` or `~/.config/hop/config.toml`.
+  A `HOP_CONFIG` ending in `.zsh`, which zsh hop exports, is never read as TOML.
+  Until you import, hop runs on its zero-config kinds and says it found a `config.zsh`.
+- Every `HOP_*` variable has a `[settings]` key too, and the environment beats the file.
+  In 0.3 a `typeset` in `config.zsh` beat the environment.
+- With no config, hop lists `dir`, `project` and `file`, not the eight presets.
+  The old presets are recipes you name with `recipes = [...]`, and `hop import` writes out 0.3.1's own definitions, so your rows don't change.
+- `hop upgrade` upgrades the way hop was installed: `brew upgrade`, `go install`, or a checkout moved to the newest release tag and rebuilt.
+  `hop upgrade --check` reads release tags with `git ls-remote`, so it needs no GitHub token.
+- `hop -V` says when your shell's `hop init` output is older than the binary and needs `exec $SHELL`.
+- `hop --doctor` reports the install method, the binary and the shell integration, each setting with where it came from, and the recipes available and loaded.
+- `l` on a workspace lists all its repos, `h` is bound only where there's a level above, and `/` in the `:` menu prompts `:/ `.
+  Enter on a `:` menu row makes that kind the view `r` and a later `esc` come back to.
+- The `:` menu counts each kind live instead of caching the counts per `HEAD`.
+
+### Added
+
+- bash (5.x and macOS's 3.2) and fish, alongside zsh.
+- The `project` kind: every dir holding a common build manifest, such as `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `pom.xml` or `Dockerfile`, outermost only.
+- Recipes: `dir`, `project`, `file`, `terragrunt`, `terraform-modules`, `helm`, `serverless`, `puppet` and `backstage`.
+- `[[kind.source]]`, to build one kind from several `dirs`, `files` or `marker` shapes, and `marker` lists, globs and relative paths, `min_depth`, `nested` and `skip`.
+- `env_colors` in `[settings]`, to add your own words to the env column's colours.
+- `hop import`, which turns a zsh hop `config.zsh` into TOML.
+- A Homebrew formula in this repo, `go install github.com/etknorr/hop`, and release archives for darwin and linux on amd64 and arm64.
+- `l` on a repo opens that repo's targets, so you can drill from a workspace to a repo to a target without leaving the picker.
+
+### Removed
+
+- The zsh plugin and its plugin-manager installs: zinit, antidote, sheldon and oh-my-zsh have no 1.0 equivalent.
+- `hop_kind`, `hop_preset` and `--fn` provider functions.
+  Declare a kind in TOML, or as an `exec` kind that prints rows.
+- A repo's `.hoprc`.
+  `HOP_HOPRC` now only prints a warning.
+- The `:` menu's kind-count cache.
+- `HOP_HOME`.
+
+### Deliberate differences from 0.3.1
+
+- The non-modal legend says `M-a all` where 0.3.1 said `M-a +conf`.
+- `init`, `import` and `upgrade` are the only first-word verbs, so `hop -- init` searches for `init`.
+- `~` forms expand `$HOME` only, not zsh's `hash -d` named directories.
+
 ## [0.3.1] - 2026-10-15
 
 ### Fixed
