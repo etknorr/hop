@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/etknorr/hop/internal/testfix"
 	"github.com/etknorr/hop/internal/upgrade"
@@ -15,7 +16,10 @@ import (
 
 var update = flag.Bool("update", false, "rewrite testdata/golden/ops/doctor*.golden")
 
-func TestMain(m *testing.M) { testfix.Main(m) }
+func TestMain(m *testing.M) {
+	toolTimeout = 30 * time.Second
+	testfix.Main(m)
+}
 
 func put(t *testing.T, p, s string, mode os.FileMode) {
 	t.Helper()

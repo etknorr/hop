@@ -314,12 +314,15 @@ func onPath(code string) (bool, string) {
 	return true, ""
 }
 
-// toolLine is one external command's first version line; stdin is /dev/null and it gets 3 s, so a wrapper that reads stdin can't hang the report.
+// toolTimeout bounds each version probe; a test on a loaded machine raises it, since a slow stub would read as "present".
+var toolTimeout = 3 * time.Second
+
+// toolLine is one external command's first version line; stdin is /dev/null and it gets toolTimeout, so a wrapper that reads stdin can't hang the report.
 func toolLine(name string) string {
 	if _, err := exec.LookPath(name); err != nil {
 		return fmt.Sprintf("  %-8s %s", name, "NOT INSTALLED")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), toolTimeout)
 	defer cancel()
 	c := exec.CommandContext(ctx, name, "--version")
 	c.WaitDelay = time.Second
