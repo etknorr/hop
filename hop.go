@@ -295,9 +295,7 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 		Legend: pick.Legend(s.mode, lv.folder, len(lv.reload) > 0), Menu: lv.root != "", Drill: lv.drill != nil, Up: lv.up != nil,
 		Vim: s.vim, Enter: pick.EnterName(s.mode, lv.folder), Cols: s.cols,
 	}
-	if v := s.fzf.Version(); v != "" {
-		o.FreezeLeft, o.ShellQuotes = !match.Less(v, "0.67.0"), !match.Less(v, "0.71.0")
-	}
+	o.FreezeLeft, o.ShellQuotes = pick.Features(s.fzf.Version())
 	input := lv.targets
 	switch res.Verdict {
 	case "pick":

@@ -68,6 +68,15 @@ func WithShell(self string, quotes bool) string {
 	return "hop __sh"
 }
 
+// Features is what fzf v can take: --freeze-left from 0.67.0 (0.60.3 exits 2 on it), quotes in --with-shell from 0.71.0.
+// - An unreadable version gets neither, as hop gives it no --freeze-left.
+func Features(v string) (freezeLeft, shellQuotes bool) {
+	if v == "" {
+		return false, false
+	}
+	return !match.Less(v, "0.67.0"), !match.Less(v, "0.71.0")
+}
+
 // Args is _hop_pick's argv: every callback is a `hop __verb`, and no bind string holds a path.
 func Args(o Opts) []string {
 	expect := Expect

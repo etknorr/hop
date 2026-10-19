@@ -103,8 +103,7 @@ func TestArgvParses(t *testing.T) {
 	}
 	// hop passes --freeze-left only from fzf 0.67.0, as the fzf under test would see it.
 	old := (&match.FZF{Bin: fzf}).Version()
-	frozen := old != "" && !match.Less(old, "0.67.0")
-	quotes := old != "" && !match.Less(old, "0.71.0")
+	frozen, quotes := Features(old)
 	for _, c := range argvCases() {
 		c.o.FreezeLeft = c.o.FreezeLeft && frozen
 		c.o.ShellQuotes = c.o.ShellQuotes && quotes
@@ -352,5 +351,16 @@ func TestPreview(t *testing.T) {
 	}
 	if got := pv("", ""); !strings.Contains(got, "nothing to preview") {
 		t.Errorf("no arguments: %q", got)
+	}
+}
+
+func TestFeatures(t *testing.T) {
+	for v, want := range map[string][2]bool{
+		"": {false, false}, "0.60.3": {false, false}, "0.66.9": {false, false}, "0.67.0": {true, false},
+		"0.70.0": {true, false}, "0.71.0": {true, true}, "0.73.1": {true, true}, "1.0": {true, true},
+	} {
+		if f, q := Features(v); f != want[0] || q != want[1] {
+			t.Errorf("Features(%q) = %v %v, want %v", v, f, q, want)
+		}
 	}
 }
