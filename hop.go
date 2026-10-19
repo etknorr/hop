@@ -14,6 +14,7 @@ import (
 
 	"github.com/etknorr/hop/internal/act"
 	"github.com/etknorr/hop/internal/config"
+	"github.com/etknorr/hop/internal/debuglog"
 	"github.com/etknorr/hop/internal/kinds"
 	"github.com/etknorr/hop/internal/match"
 	"github.com/etknorr/hop/internal/mru"
@@ -205,6 +206,7 @@ func gitToplevel() string {
 // listRows is _hop_rows: generate, keep what -c keeps, lay that out, then rank by history.
 // - The status is hop's: 1 when the kinds list nothing, 2 when nothing is under the -c dir.
 func listRows(cfg *config.Config, root, under string, names []string, stderr io.Writer) ([]string, int) {
+	debuglog.Printf("generate root=%s kinds=%s", root, strings.Join(names, ","))
 	gen := kinds.Generate(cfg, root, names, stderr)
 	if len(gen) == 0 {
 		return nil, 1
@@ -271,6 +273,26 @@ func (s *session) resolver(root, under string) *resolve.Resolver {
 	return &resolve.Resolver{Match: s.fzf, Root: root, Action: s.mode, Jump: s.jump, Under: under, Kinds: s.cfg.AllKinds(), Vim: s.vim}
 }
 
+// resolveIn is Resolve plus _hop_resolve_log's line, the one every resolve writes.
+func (s *session) resolveIn(r *resolve.Resolver, query string, targets []string) resolve.Result {
+	t0 := time.Now()
+	res := r.Resolve(query, targets)
+	debuglog.Printf("resolve tier=%s rule=%s verdict=%s n=%d inj=%d q=%s target=%s ms=%s",
+		orDash(res.Tier), orDash(res.Rule), res.Verdict, res.N, res.Inj, query, orDash(res.Target.Rel), since(t0))
+	return res
+}
+
+func orDash(v string) string {
+	if v == "" {
+		return "-"
+	}
+	return v
+}
+
+func since(t0 time.Time) string {
+	return strconv.FormatFloat(float64(time.Since(t0).Microseconds())/1000, 'f', 1, 64)
+}
+
 func (s *session) actor(folder bool) *act.Actor {
 	set := s.cfg.Settings
 	return &act.Actor{
@@ -293,6 +315,7 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 		return a.Dispatch("", t.Dir, t.Preview, t.Rel)
 	}
 	if !tty.Available() {
+		debuglog.Printf("headless label=%s rows=%d query=%s", lv.label, res.N, query)
 		accept, rc := resolve.Report(s.stderr, res, query, s.jump, s.kword)
 		if accept {
 			t := res.Target
@@ -319,6 +342,7 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 	}
 	sess := &pick.Session{Root: lv.root, Under: lv.under, Kinds: lv.kinds, All: s.cfg.AllKinds(), Keys: o.Keys()}
 	out, st, err := pick.Run(s.fzf.Bin, o, sess, input, s.stderr)
+	debuglog.Printf("pick label=%s rows=%d query=%s st=%d", lv.label, len(input), query, st)
 	switch {
 	case err != nil:
 		fmt.Fprintln(s.stderr, "hop: fzf:", err)
@@ -360,7 +384,15 @@ func (s *session) elsewhere(query, root, pwd string) (rc int, done bool) {
 	for _, w := range wss {
 		places = append(places, resolve.Place{Name: w.Name, Path: w.Path, Workspace: true})
 	}
+	t0 := time.Now()
 	a, hint, ok := resolve.Elsewhere(query, root, pwd, places, s.jump, mru.Load(set.HistFile))
+	if ok {
+		n := len(a.Rows)
+		if a.Res.Verdict == "jump" {
+			n = a.Res.N
+		}
+		debuglog.Printf("resolve tier=T0 rule=elsewhere verdict=%s n=%d inj=0 q=%s target=%s ms=%s", a.Res.Verdict, n, query, orDash(a.Res.Target.Rel), since(t0))
+	}
 	if !ok {
 		if hint != "" {
 			fmt.Fprintln(s.stderr, hint)
@@ -399,10 +431,10 @@ func (s *session) wsLevel(query string, fallback bool) int {
 		fmt.Fprintf(s.stderr, "hop: no workspaces configured (edit %s)\n", s.cfg.Settings.WorkspacesFile)
 		return 1
 	}
-	res := s.resolver("", "").Resolve(query, targets)
+	res := s.resolveIn(s.resolver("", ""), query, targets)
 	if fallback && res.Verdict != "jump" && res.Verdict != "empty" && res.Tier != "T1" {
 		if repos, rc := s.repoRows(s.allRepos()); rc == 0 {
-			rr := s.resolver("", "").Resolve(query, repos)
+			rr := s.resolveIn(s.resolver("", ""), query, repos)
 			if rr.Rank() > res.Rank() {
 				return s.pick(rr, query, s.repoLv(repos, s.allRepos, s.upToWorkspaces()))
 			}
@@ -445,7 +477,7 @@ func (s *session) reposOf(list func() []string, up func() int) int {
 		fmt.Fprintln(s.stderr, "hop: no readable repos in $HOP_REPOS")
 		return 1
 	}
-	return s.pick(s.resolver("", "").Resolve("", repos), "", s.repoLv(repos, list, up))
+	return s.pick(s.resolveIn(s.resolver("", ""), "", repos), "", s.repoLv(repos, list, up))
 }
 
 func (s *session) repoLevel(query string) int {
@@ -458,7 +490,7 @@ func (s *session) repoLevel(query string) int {
 		fmt.Fprintln(s.stderr, "hop: no readable repos in $HOP_REPOS")
 		return 1
 	}
-	return s.pick(s.resolver("", "").Resolve(query, repos), query, s.repoLv(repos, s.allRepos, s.upToWorkspaces()))
+	return s.pick(s.resolveIn(s.resolver("", ""), query, repos), query, s.repoLv(repos, s.allRepos, s.upToWorkspaces()))
 }
 
 // targetsIn is l on a repo row, new in 1.0: that repo's default kinds, with no cd until the final Enter decides.
@@ -475,7 +507,7 @@ func (s *session) targetsIn(root string, up func() int) int {
 	}
 	r := s.resolver(root, "")
 	r.Like = all[0]
-	return s.pick(r.Resolve("", all), "", s.targetsLv(root, "", all, names, up))
+	return s.pick(s.resolveIn(r, "", all), "", s.targetsLv(root, "", all, names, up))
 }
 
 func (s *session) targetsLv(root, under string, all, names []string, up func() int) level {
@@ -504,6 +536,9 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	set := cfg.Settings
+	debuglog.Configure(set.Debug, set.DebugLog)
+	// The guard runs in fzf's callbacks, which read the window from the environment, so a [settings] value travels there.
+	os.Setenv("HOP_GUARD_WINDOW", set.GuardWindow)
 	s := &session{cfg: cfg, stdout: stdout, stderr: stderr, mode: o.enterMode(set.Action), jump: set.Jump, vim: *set.Vim, cols: termCols()}
 	if o.vim != nil {
 		s.vim = *o.vim
@@ -570,7 +605,9 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 
 	// T0: a typed path is a filesystem fact, so it jumps before fzf or any enumeration is paid for.
 	if !o.wss && !o.repos && len(o.words) == 1 && s.jump != "never" {
+		t0 := time.Now()
 		if t, ok := resolve.Literal(o.words[0], root, pwd); ok {
+			debuglog.Printf("resolve tier=T0 rule=path verdict=jump n=1 inj=0 q=%s target=%s ms=%s", o.words[0], t.Rel, since(t0))
 			return s.actor(false).Dispatch("", t.Dir, t.Preview, t.Rel)
 		}
 	}
@@ -581,7 +618,7 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "hop: fzf is not installed")
 		return 1
 	}
-	if err := s.fzf.CheckVersion(os.Getenv("HOP_FZF_MIN")); err != nil {
+	if err := s.fzf.CheckVersion(set.FzfMin); err != nil {
 		fmt.Fprint(stderr, err)
 		return 1
 	}
@@ -625,7 +662,7 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 	}
 	r := s.resolver(root, under)
 	r.Like = all[0]
-	res := r.Resolve(query, all)
+	res := s.resolveIn(r, query, all)
 	if err := r.Err(); err != nil {
 		fmt.Fprintln(stderr, "hop:", err)
 	}
@@ -691,7 +728,7 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 			return errUsage
 		}
 	}
-	cfg, err := load(stderr)
+	cfg, err := loadHop(stderr)
 	if err != nil {
 		return err
 	}

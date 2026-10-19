@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/etknorr/hop/internal/collate"
+	"github.com/etknorr/hop/internal/debuglog"
 	"github.com/etknorr/hop/internal/mru"
 	"github.com/etknorr/hop/internal/tty"
 )
@@ -40,6 +41,11 @@ func (a *Actor) Dispatch(key, dir, preview, rel string) int {
 	if preview == "" {
 		preview = dir
 	}
+	k := key
+	if k == "" {
+		k = "<enter>"
+	}
+	debuglog.Printf("dispatch key=%s dir=%s preview=%s rel=%s", k, dir, preview, rel)
 	if !filepath.IsAbs(dir) {
 		fmt.Fprintln(a.Stderr, "hop: not a target directory:", dir)
 		return 1

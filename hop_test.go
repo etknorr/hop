@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -344,4 +345,35 @@ func TestFlagsAgainstHop(t *testing.T) {
 		cases = append(cases, headlessCase{link, nil, args}, headlessCase{link + "/acct-infrastructure", nil, args})
 	}
 	e.compare(t, cases)
+}
+
+// TestDebugLogAgainstHop is 2.11's HOP_DEBUG lines against zsh hop 0.3.1's, timestamps and timings aside.
+func TestDebugLogAgainstHop(t *testing.T) {
+	if !testfix.HaveZsh() {
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
+	}
+	e := newE2E(t)
+	clean := regexp.MustCompile(`(?m)^\S+ |ms=\S+`)
+	ws := "HOP_WORKSPACES=" + e.ws
+	for _, c := range []headlessCase{
+		{e.root, nil, []string{"eks", "security"}},
+		{e.root, nil, []string{"vpc"}},
+		{e.root, nil, []string{"zzqx"}},
+		{e.root, nil, []string{"terraform/acct-security-tooling-prod"}},
+		{e.root, nil, []string{"file", "README.md"}},
+		{e.home, []string{ws}, []string{"configuration"}},
+		{e.home, []string{ws}, []string{"-R", "hop"}},
+	} {
+		var logs [2]string
+		for i, side := range []func(*testing.T, string, []string, []string) landing{e.zshHop, e.goHop} {
+			p := filepath.Join(e.tmp, "debug.log")
+			os.Remove(p)
+			side(t, c.dir, append([]string{"HOP_DEBUG=1", "HOP_DEBUG_LOG=" + p}, c.env...), c.args)
+			b, _ := os.ReadFile(p)
+			logs[i] = clean.ReplaceAllString(string(b), "")
+		}
+		if logs[0] != logs[1] {
+			t.Errorf("%v %v:\nzsh:\n%s\ngo:\n%s", c.env, c.args, logs[0], logs[1])
+		}
+	}
 }
