@@ -95,7 +95,10 @@ func Parse(list []string, file string) []Workspace {
 		if p == "" {
 			continue
 		}
-		p = Canon(Expand(p))
+		if p = Expand(p); p == "" {
+			continue
+		}
+		p = Canon(p)
 		if !searchableDir(p) {
 			continue
 		}
