@@ -2,6 +2,7 @@ package act
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,5 +168,77 @@ func TestKeys(t *testing.T) {
 	}
 	if rc := r.a.Dispatch("ctrl-q", r.unit, main, ""); rc != 1 || !strings.Contains(r.err.String(), "unhandled key: ctrl-q") {
 		t.Errorf("unknown key: rc %d", rc)
+	}
+}
+
+// TestCodeUsable is _hop_code_usable's cases: the launcher, a live IPC socket, SSH, and a Linux display or WSL.
+func TestCodeUsable(t *testing.T) {
+	r := newRig(t)
+	for _, k := range []string{"VSCODE_IPC_HOOK_CLI", "SSH_CONNECTION", "SSH_TTY", "DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME", "WSL_INTEROP", "HOP_CODE"} {
+		t.Setenv(k, "")
+	}
+	usable := func() (bool, string) { return CodeUsable() }
+	if ok, why := usable(); !ok {
+		t.Errorf("the stub on PATH is usable: %s", why)
+	}
+	t.Setenv("HOP_CODE", "nocode-here -x")
+	if ok, why := usable(); ok || why != "nocode-here is not installed, cannot open VS Code" {
+		t.Errorf("a launcher not installed is unusable with need's reason: %q", why)
+	}
+	t.Setenv("HOP_CODE", "/no/such/code")
+	if ok, why := usable(); ok || why != "/no/such/code does not exist, cannot open VS Code" {
+		t.Errorf("a launcher path that doesn't exist: %q", why)
+	}
+	t.Setenv("HOP_CODE", "")
+	sock := filepath.Join(t.TempDir(), "s")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", sock)
+	if ok, why := usable(); ok || why != "VSCODE_IPC_HOOK_CLI names no live VS Code socket: "+sock {
+		t.Errorf("a stale IPC hook is unusable: %q", why)
+	}
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skip("no unix sockets here:", err)
+	}
+	defer l.Close()
+	defer func(g string) { goos = g }(goos)
+	goos = "linux"
+	t.Setenv("SSH_CONNECTION", "1 2 3 4")
+	if ok, why := usable(); !ok {
+		t.Errorf("a live socket is usable even over SSH on Linux with no DISPLAY: %s", why)
+	}
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	if ok, why := usable(); ok || why != "this is an SSH session with no VS Code window attached" {
+		t.Errorf("SSH_CONNECTION with no hook: %q", why)
+	}
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("SSH_TTY", "/dev/ttys001")
+	if ok, _ := usable(); ok {
+		t.Error("SSH_TTY with no hook is unusable too")
+	}
+	t.Setenv("SSH_TTY", "")
+	if ok, why := usable(); ok || why != "there is no DISPLAY or WAYLAND_DISPLAY for VS Code to open on" {
+		t.Errorf("Linux with no display: %q", why)
+	}
+	for _, k := range []string{"DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME", "WSL_INTEROP"} {
+		t.Setenv(k, "x")
+		if ok, why := usable(); !ok {
+			t.Errorf("%s alone is enough: %s", k, why)
+		}
+		t.Setenv(k, "")
+	}
+	r.a.Mode = "open"
+	if rc := r.a.Dispatch("ctrl-o", r.unit, r.file, ""); rc != 0 || r.codeLog() != "" || strings.Join(r.execd, " ") != "vi -n "+r.file ||
+		!strings.Contains(r.err.String(), "hop: there is no DISPLAY or WAYLAND_DISPLAY for VS Code to open on; using the terminal editor instead") {
+		t.Errorf("ctrl-o with VS Code unreachable says why and falls back to the editor: rc %d exec %q %q", rc, r.execd, r.err)
+	}
+}
+
+func TestBrowseNamesTheDrill(t *testing.T) {
+	r := newRig(t)
+	os.WriteFile(filepath.Join(filepath.Dir(r.log), "bin", "gh"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	real, _ := filepath.EvalSymlinks(r.unit)
+	if rc := r.a.Dispatch("ctrl-g", r.unit, r.unit, ""); rc != 1 ||
+		!strings.Contains(r.err.String(), "hop: not in a git repository: "+real+"\nhop: to go INTO a repo from a workspace, press l (NORMAL) or ctrl-l (SEARCH)\n") {
+		t.Errorf("browse outside a repo names the drill key: rc %d %q", rc, r.err)
 	}
 }

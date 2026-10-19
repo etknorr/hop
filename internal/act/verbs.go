@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/etknorr/hop/internal/collate"
@@ -115,8 +116,41 @@ func (a *Actor) codeArgv() []string {
 	return argv
 }
 
-// codeUsable is _hop_code_usable reduced to "on PATH or not", as the spec allows.
-func (a *Actor) codeUsable() error { return need(a.codeArgv()[0], "open VS Code") }
+func (a *Actor) codeUsable() error { return codeUsable(a.codeArgv()[0]) }
+
+// CodeUsable is the check every code verb runs, for --doctor: HOP_CODE's launcher, else code.
+func CodeUsable() (bool, string) {
+	argv := strings.Fields(os.Getenv("HOP_CODE"))
+	if len(argv) == 0 {
+		argv = []string{"code"}
+	}
+	if err := codeUsable(argv[0]); err != nil {
+		return false, err.Error()
+	}
+	return true, ""
+}
+
+// codeUsable is _hop_code_usable: the launcher exists, and a window can open where this shell is.
+// - Inside VS Code's terminal the IPC socket is the window; a stale one means the window it named is gone.
+// - Over SSH with no socket, or on Linux with no display, `code` would start nowhere a person can see.
+func codeUsable(launcher string) error {
+	if err := need(launcher, "open VS Code"); err != nil {
+		return err
+	}
+	if s := os.Getenv("VSCODE_IPC_HOOK_CLI"); s != "" {
+		if st, err := os.Stat(s); err == nil && st.Mode()&os.ModeSocket != 0 {
+			return nil
+		}
+		return fmt.Errorf("VSCODE_IPC_HOOK_CLI names no live VS Code socket: %s", s)
+	}
+	if os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" {
+		return errors.New("this is an SSH session with no VS Code window attached")
+	}
+	if goos == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" && os.Getenv("WSL_DISTRO_NAME") == "" && os.Getenv("WSL_INTEROP") == "" {
+		return errors.New("there is no DISPLAY or WAYLAND_DISPLAY for VS Code to open on")
+	}
+	return nil
+}
 
 // code runs the launcher as a child; it returns at once, so there is nothing to exec into.
 func (a *Actor) code(args ...string) int {
@@ -226,7 +260,11 @@ func (a *Actor) copy(what string) int {
 	return 0
 }
 
+// goos is runtime.GOOS, a variable so a test can take the Linux display branch on macOS.
+var goos = runtime.GOOS
+
 // browse is alt-B, _hop_act_browse: gh resolves the remote from the cwd, so it runs in the repo with a relative path.
+// - Outside a repo it's most often b on a workspace row meant as "go in", so the drill key is named where the mistake shows.
 func (a *Actor) browse(dir string) int {
 	if err := need("gh", "browse on GitHub"); err != nil {
 		fmt.Fprintln(a.Stderr, "hop:", err)
@@ -242,6 +280,7 @@ func (a *Actor) browse(dir string) int {
 	}
 	if err != nil || root == "" {
 		fmt.Fprintln(a.Stderr, "hop: not in a git repository:", dir)
+		fmt.Fprintln(a.Stderr, "hop: to go INTO a repo from a workspace, press l (NORMAL) or ctrl-l (SEARCH)")
 		return 1
 	}
 	argv := []string{"gh", "browse"}
