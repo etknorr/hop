@@ -97,8 +97,10 @@ func TestGuardCallback(t *testing.T) {
 	if o, _, _ := runHop(t, "__guard", "check", "c"); o != "ignore" {
 		t.Errorf("c on a menu row does nothing: %q", o)
 	}
-	if _, _, rc := runHop(t, "__guard", "check", "j"); rc != 2 {
-		t.Error("only the verbs that leave the picker are guarded")
+	for _, args := range [][]string{{"check", "j"}, {"check"}, {"bogus"}, {}} {
+		if o, e, rc := runHop(t, append([]string{"__guard"}, args...)...); rc != 0 || o != "" || e != "" {
+			t.Errorf("__guard %v is silent and succeeds, since fzf shows a failed bind as a dead key: rc %d %q %q", args, rc, o, e)
+		}
 	}
 }
 

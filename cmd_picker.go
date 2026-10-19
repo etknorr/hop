@@ -62,9 +62,10 @@ func cmdKeys(args []string, stdout, stderr io.Writer) int {
 
 // cmdGuard is `hop __guard mark` and `hop __guard check <key>`; the mark lives in the session's private directory.
 // - check prints the key's NORMAL action, or ignore when the guard refuses it; c on a menu row is ignore either way.
+// - Anything malformed is silent and succeeds, since fzf would show a failed transform as a dead key.
 func cmdGuard(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return 2
+		return 0
 	}
 	mark := ""
 	if p := pick.Path(); p != "" {
@@ -75,9 +76,12 @@ func cmdGuard(args []string, stdout, stderr io.Writer) int {
 		guard.Mark(mark)
 		return 0
 	case "check":
+		if len(args) < 2 || !slices.Contains(keymap.GuardKeys, args[1]) {
+			return 0
+		}
 		s := loadSession(stderr)
-		if s == nil || len(args) < 2 || !slices.Contains(keymap.GuardKeys, args[1]) {
-			return 2
+		if s == nil {
+			return 0
 		}
 		k := args[1]
 		a := s.Keys.Verb(k)
@@ -92,9 +96,8 @@ func cmdGuard(args []string, stdout, stderr io.Writer) int {
 			a = "ignore"
 		}
 		io.WriteString(stdout, a)
-		return 0
 	}
-	return 2
+	return 0
 }
 
 // cmdHopw is hopw: cd to the workspace holding the physical $PWD, longest prefix first, since workspaces can nest.
