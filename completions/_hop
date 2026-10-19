@@ -4,7 +4,7 @@
 # Flags:
 # - -a/--all, -k/--kinds <kinds>, -c/--cwd/--here, -R/--repos, -w/--workspaces
 # - -p/--pick, and what Enter does: --cd, -o/--open, -e/--reveal, --action=MODE
-# - --vim/--no-vim, --doctor[=short], -h/--help, -V/--version
+# - --vim/--no-vim, --doctor[=short], -h/--help, -V/-v/--version
 # -k takes a comma-separated list of kind names, completed one at a time with
 # already-chosen kinds excluded (that is what `_values -s ,` gives us).
 # The exclusion lists mirror the combinations hop itself refuses with exit 2.
@@ -74,7 +74,7 @@ _hop() {
     '(--vim --no-vim)--vim[force the modal layer on when HOP_VIM=0 is set]' \
     '(- *)--doctor=-[dump config, tools and kind counts for a bug report]:mode:(short)' \
     '(- *)'{-h,--help}'[show usage and exit]' \
-    '(- *)'{-V,--version}'[show the installed version and exit]' \
+    '(- *)'{-V,-v,--version}'[show the loaded version, and the installed one when it differs]' \
     '*::query:_hop_query'
 }
 

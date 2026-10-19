@@ -140,7 +140,8 @@ _hop_provider_ws() {
 	_hop_ws_parse || return 0
 	entries=("${reply[@]}")
 
-	local e name path n
+	local e name path n REPLY
+	local -a rows
 	for e in "${entries[@]}"; do
 		name=${e%%$'\t'*}
 		path=${e#*$'\t'}
@@ -151,6 +152,10 @@ _hop_provider_ws() {
 		fi
 		local unit=repos
 		(( n == 1 )) && unit=repo
-		_hop_row ws "${path/#$HOME/~}" "${n} ${unit}" - "$name" "$path" "$path"
+		_hop_row_raw ws "${path/#$HOME/~}" "${n} ${unit}" - "$name" "$path" "$path"
+		rows+=("$REPLY")
 	done
+	(( $#rows )) || return 0
+	_hop_layout "${(F)rows}"
+	print -r -- "$REPLY"
 }

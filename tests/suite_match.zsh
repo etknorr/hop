@@ -132,6 +132,9 @@ mt_case infrastructure terraform/acct-infrastructure/env-prod cd auto c
 mt_case infrastructure terraform/acct-infrastructure/env-prod
 mt_case 'acct-l[a]b*#/env-prod'
 mt_case env-prod 'terraform/acct-l[a]b*#' cd auto c
+mt_case terrafrom/acct-securty-tooling-prd
+mt_case wvlomp/qarnix
+mt_case fixrepo/zqvelt/morpan
 
 print -rl -- "${MT_CASES[@]}" > "$MT_WORK/cases"
 export MT_REPO MT_WORK
@@ -237,6 +240,18 @@ t 'resolve: terraform/nope/x falls through to the matcher'
 mt_get terraform/nope/x
 assert_ne T0 "${reply[7]}" 'a path that does not exist is not a literal target'
 assert_eq none "${reply[6]}"
+
+# Pinned as reported: three typos in a real account path, which must read back as that account and never jump.
+mt_pick T2 - "$SP/" terrafrom/acct-securty-tooling-prd
+mt_get terrafrom/acct-securty-tooling-prd
+assert_eq 'terraform acct security tooling prod' "${reply[15]}"
+assert_eq 'no exact match for: terrafrom/acct-securty-tooling-prd (showing: terraform acct security tooling prod)' "${reply[16]}"
+
+t 'resolve: a path no row is close to is NONE, which is the only verdict that looks in other repos'
+mt_get wvlomp/qarnix
+assert_eq 'none T4' "${reply[6]} ${reply[7]}" 'the cross-repo tests below lean on this being NONE inside the fixture'
+mt_get fixrepo/zqvelt/morpan
+assert_eq 'none T4' "${reply[6]} ${reply[7]}" 'and on this one too'
 
 t 'resolve: a literal path under HOP_JUMP=never opens the picker instead'
 mt_get terraform/acct-security-tooling-prod . cd never
@@ -353,7 +368,7 @@ for w in zzqx zzzz; do
 	t "resolve: ${w}"
 	mt_get "$w"
 	assert_eq 'none T4' "${reply[6]} ${reply[7]}"
-	assert_eq "nothing close to: ${w} (esc clears)" "${reply[16]}"
+	assert_eq "nothing close to: ${w} (esc twice clears)" "${reply[16]}"
 done
 mt_pick relaxed 5 - 'vpc zzqx'
 mt_get 'vpc zzqx'
@@ -635,8 +650,21 @@ mt_pickrun "$MT_STUB" 'hop zzqx' >/dev/null
 mt_argv "$MT_STUB"
 t 'picker: nothing close opens on the query as typed, with a header saying so'
 assert_eq 1 ${#${(M)reply:#--query=zzqx}}
-assert_contains "${(F)reply}" 'nothing close to: zzqx (esc clears)'
+assert_contains "${(F)reply}" 'nothing close to: zzqx (esc twice clears)'
 assert_eq 0 ${#${(M)reply:#--no-sort}} 'there is nothing to order, so ordered mode stays off'
+
+t 'picker: without the modal layer, the nothing-close header names ctrl-u, since esc quits there'
+stub_fzf_select '' 1
+MT_STUB=$REPLY
+mt_pickrun "$MT_STUB" 'hop --no-vim zzqx' >/dev/null
+mt_argv "$MT_STUB"
+assert_contains "${(F)reply}" 'nothing close to: zzqx (ctrl-u clears)' '--no-vim'
+assert_not_contains "${(F)reply}" 'esc twice' '--no-vim'
+stub_fzf_select '' 1
+MT_STUB=$REPLY
+mt_pickrun "$MT_STUB" 'hop zzqx' HOP_VIM=0 >/dev/null
+mt_argv "$MT_STUB"
+assert_contains "${(F)reply}" 'nothing close to: zzqx (ctrl-u clears)' 'HOP_VIM=0'
 
 stub_fzf_select '' 1
 MT_STUB=$REPLY
@@ -785,6 +813,263 @@ assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/lit/deep" 'an absolute path that is 
 MT_RUN=$(mt_headless "$MT_WSH" 'hop lit/deep' "HOP_WORKSPACES=$MT_WS")
 assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/lit/deep" 'outside a repo a path is $PWD-relative'
 
+t 'T0 through hop: inside a repo, a path the repo spells differently is still a typo, not a cross-repo lookup'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop terrafrom/acct-securty-tooling-prd')
+assert_contains "$MT_RUN" 'hop: no exact match for: terrafrom/acct-securty-tooling-prd (read as: terraform acct security tooling prod)'
+assert_contains "$MT_RUN" "hop: best matches: $SP/," 'the account dir is the first candidate'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" 'a typo never jumps'
+
+# ---------------------------------------------------------------------------
+# T0 in other repos: a path typed outside the repo that holds it.
+# ---------------------------------------------------------------------------
+# The workspace repos above are empty, so each path here is made in exactly the repos a case needs.
+typeset MT_CF=$MT_WSH/strava/configuration
+mkdir -p -- "$MT_CF/$SP" "$MT_CF/acct-security-tooling-prod/env-prod" "$MT_CF/terraform/acount-security" "$MT_CF/wvlomp/qarnix" \
+	"$MT_WSH/strava/hop/shared/dir" "$MT_WSH/personal/hop/shared/dir" "$MT_WSH/strava/notes-dir/sub"
+print -r -- 'locals {}' > "$MT_CF/$SP/terragrunt_aws_account.hcl"
+
+t 'elsewhere: outside any repo, a repo-relative path jumps into the one repo that has it, and says where'
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP"
+assert_contains "$MT_RUN" "hop: $SP -> ~/strava/configuration/$SP/ (found in configuration)"
+
+t 'elsewhere: from a workspace root, the same path jumps the same way'
+MT_RUN=$(mt_headless "$MT_WSH/strava" "hop $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP"
+
+t 'elsewhere: a path that starts with its repo name jumps from outside any repo'
+MT_RUN=$(mt_headless "$MT_WSH" "hop configuration/$SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP"
+assert_contains "$MT_RUN" "hop: configuration/$SP -> ~/strava/configuration/$SP/ (found in configuration)"
+MT_RUN=$(mt_headless "$MT_WSH" "hop configuration/$SP" "HOP_REPOS=$MT_CF")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'the repo name works with no workspace holding the repo'
+
+t 'elsewhere: a workspace-relative path that names no repo jumps too, and says which workspace'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop notes-dir/sub' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/strava/notes-dir/sub"
+assert_contains "$MT_RUN" '(found in workspace strava-ws)'
+
+t 'elsewhere: one repo reached by two spellings is one target, so it still jumps'
+ln -s -- "$MT_CF" "$MT_WSH/cflink"
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_REPOS=$MT_CF:$MT_WSH/cflink")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'a symlinked copy of the same repo made a pick of one dir'
+
+t 'elsewhere: the wrong case lands on the on-disk spelling'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop Terraform/ACCT-Security-Tooling-Prod' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'the cd target must be spelled the way the disk spells it'
+
+t 'elsewhere: a path in no repo still says nothing matched'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop zzqx/nothing' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'nothing matched the query: zzqx/nothing'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+
+t 'elsewhere: a misspelt path no repo has names the repo that holds its first dir'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop terraform/acct-securty-tooling-prd' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'hop: no repo has terraform/acct-securty-tooling-prd, but terraform/ is in configuration; hop corrects a misspelt path from inside its repo.'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop zzqx/nothing' "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'no repo has' 'no repo holds zzqx/, so there is no repo to name'
+
+t 'elsewhere: a path two repos have never jumps, and the report names both'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+assert_contains "$MT_RUN" 'hop: 2 targets matched the query: shared/dir, and picking one needs a terminal.'
+assert_contains "$MT_RUN" 'hop: best matches: ~/personal/hop/shared/dir/, ~/strava/hop/shared/dir/' 'with no history, by path'
+assert_contains "$MT_RUN" 'put the repo name in front of the path'
+assert_not_contains "$MT_RUN" 'no exact match' 'both paths are exact, so nothing was read as anything'
+
+t 'elsewhere: of two, the repo visited most recently comes first'
+fixture_histfile "$MT_WSH/strava/hop/somewhere" "$MT_WSH/personal/notes"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
+export HOP_HISTFILE=/dev/null
+assert_contains "$MT_RUN" 'hop: best matches: ~/strava/hop/shared/dir/, ~/personal/hop/shared/dir/'
+
+t 'elsewhere: with a terminal, the two open in the picker on the path, and Enter cds to the one picked'
+stub_fzf_select '' 2
+MT_STUB=$REPLY
+MT_RUN=$(mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_WSH}; hop shared/dir" "HOP_WORKSPACES=$MT_WS")
+mt_argv "$MT_STUB"
+MT_IN=("${(@f)$(mt_slurp "$MT_STUB/stdin")}")
+assert_eq 1 ${#${(M)reply:#--query=shared/dir}} 'the picker opens on the path as typed'
+assert_contains "${(F)reply}" 'found in 2 places: ~/personal/hop, ~/strava/hop' 'the header names each repo by its path, since two can share a name'
+assert_eq 2 ${#MT_IN} 'the picker holds just the two candidates'
+assert_contains "$MT_RUN" "PWD=$MT_WSH/strava/hop/shared/dir" 'row 2 is the strava copy'
+
+t 'elsewhere: a visit inside hop.old ranks hop.old, never the hop whose name it starts with'
+mkdir -p -- "$MT_WSH/strava/hop.old/shared/dir"
+_hop_fix_git -C "$MT_WSH/strava/hop.old" init -q -b main
+fixture_histfile "$MT_WSH/strava/hop.old/shared"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop shared/dir' "HOP_WORKSPACES=$MT_WS")
+export HOP_HISTFILE=/dev/null
+assert_contains "$MT_RUN" 'hop: best matches: ~/strava/hop.old/shared/dir/, ~/personal/hop/shared/dir/, ~/strava/hop/shared/dir/'
+
+t 'elsewhere: the picker names each repo and lines its rows up as one list, from outside a repo or inside one'
+typeset MT_CWD MT_SHAPE
+typeset -a MT_SHAPES
+for MT_CWD in "$MT_WSH" "$MT_REPO"; do
+	stub_fzf_select '' 1
+	MT_STUB=$REPLY
+	mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_CWD}; HOP_JUMP=unique hop shared/dir" "HOP_WORKSPACES=$MT_WS" >/dev/null
+	MT_IN=("${(@f)$(mt_slurp "$MT_STUB/stdin")}")
+	assert_eq 3 ${#MT_IN} "from ${MT_CWD}: the picker holds hop.old and both hop repos"
+	MT_SHAPES=()
+	for MT_SHAPE in "${MT_IN[@]}"; do
+		MT_SHAPE=${(S)${MT_SHAPE%%$'\t'*}//$'\e'\[*m/}
+		MT_SHAPES+=("${#MT_SHAPE} ${(j: :)${=MT_SHAPE}}")
+	done
+	assert_eq '25 hop dir|25 hop dir|25 hop.old dir' "${(j:|:)${(@o)MT_SHAPES}}" "from ${MT_CWD}: each row is the repo name and kind, at one width"
+done
+
+typeset MT_SORT MT_SORT_T='elsewhere: candidates sort in byte order, so a name comes before every name it prefixes'
+MT_SORT=$(hop_probe 'export LC_ALL=en_US.UTF-8
+typeset tab
+printf -v tab "\t"
+typeset -a reply k=("a.b${tab}x" "a${tab}x")
+print -rn -- "${${(@o)k}[1]%%${tab}*} "
+_hop_sort_bytes "${k[@]}"
+print -r -- "${reply[1]%%${tab}*}"')
+if [[ $MT_SORT == 'a a' ]]; then
+	# Byte order is already this locale's collation, so the claim cannot be told apart from (o) here.
+	if [[ $OSTYPE == linux* ]]; then
+		skip_cap "$MT_SORT_T" 'en_US.UTF-8 sorts like bytes here, so it is probably not installed'
+	else
+		skip "$MT_SORT_T" "${OSTYPE} collates en_US.UTF-8 in byte order, so (o) and byte order agree"
+	fi
+else
+	t "$MT_SORT_T"
+	assert_eq 'a.b a' "$MT_SORT" 'the control is (o) putting a.b first; then _hop_sort_bytes must put a first'
+fi
+
+# mt_co <name> <origin|-> <main|detached|branch> <path> -> a checkout in the co workspace, on that branch, holding that path.
+# - origin/HEAD names origin/main whenever there is an origin, which is what a fresh clone has.
+mt_co() {
+	emulate -L zsh
+	local d=$MT_WSH/co/$1 url=$2 br=$3
+	mkdir -p -- "$d/$4"
+	_hop_fix_git -C "$d" init -q -b main
+	_hop_fix_git -c user.name=hop -c user.email=hop@example.invalid -C "$d" commit -q --allow-empty -m co
+	if [[ $url != - ]]; then
+		_hop_fix_git -C "$d" remote add origin "$url"
+		_hop_fix_git -C "$d" update-ref refs/remotes/origin/main HEAD
+		_hop_fix_git -C "$d" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+	fi
+	case $br in
+		main) ;;
+		detached) _hop_fix_git -C "$d" checkout -q --detach ;;
+		*) _hop_fix_git -C "$d" checkout -q -b "$br" ;;
+	esac
+}
+typeset MT_CO="co=$MT_WSH/co"
+mt_co a-main https://github.com/acme/conf.git main p1/x
+mt_co a-feat git@github.com:acme/conf feat p1/x
+mt_co b1 https://github.com/acme/b main p2/x
+mt_co b2 https://github.com/acme/b main p2/x
+mt_co c1 https://github.com/acme/one main p3/x
+mt_co c2 https://github.com/acme/two feat p3/x
+mt_co d1 - main p4/x
+mt_co d2 https://github.com/acme/d feat p4/x
+mt_co e1 https://github.com/acme/e detached p5/x
+mt_co e2 https://github.com/acme/e feat p5/x
+# A linked worktree on main beside its own primary on a branch, with no origin/HEAD, so the default falls back to main.
+mt_co f1 - feat p6/x
+_hop_fix_git -C "$MT_WSH/co/f1" remote add origin https://github.com/acme/f
+_hop_fix_git -C "$MT_WSH/co/f1" worktree add -q "$MT_WSH/co/f1wt" main
+mkdir -p -- "$MT_WSH/co/f1wt/p6/x"
+
+t 'elsewhere: of two checkouts of one origin, the one on its default branch is jumped to, and the note says why'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p1/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/a-main/p1/x" 'git@host:org/repo and https://host/org/repo.git are one origin'
+assert_contains "$MT_RUN" 'hop: p1/x -> ~/co/a-main/p1/x/ (found in a-main, the main checkout of 2)'
+
+t 'elsewhere: HOP_JUMP=unique keeps the default-branch checkout a pick, since the path names two targets'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p1/x' "HOP_WORKSPACES=$MT_CO" HOP_JUMP=unique)
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+assert_contains "$MT_RUN" '2 targets matched the query: p1/x'
+
+t 'elsewhere: a linked worktree on main beats its primary on a branch, with main as the default when origin/HEAD is unset'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p6/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/f1wt/p6/x"
+
+# Two checkouts with no origin/HEAD and no main, one on master with every ref packed, so master is the default.
+typeset g
+for g in g1 g2; do
+	mkdir -p -- "$MT_WSH/co/$g/p7/x"
+	_hop_fix_git -C "$MT_WSH/co/$g" init -q -b master
+	_hop_fix_git -c user.name=hop -c user.email=hop@example.invalid -C "$MT_WSH/co/$g" commit -q --allow-empty -m co
+	_hop_fix_git -C "$MT_WSH/co/$g" remote add origin https://github.com/acme/g
+done
+_hop_fix_git -C "$MT_WSH/co/g1" pack-refs --all
+_hop_fix_git -C "$MT_WSH/co/g2" checkout -q -b feat
+t 'elsewhere: with no origin/HEAD and no main, a packed master is the default branch'
+MT_RUN=$(mt_headless "$MT_WSH" 'hop p7/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_WSH/co/g1/p7/x"
+assert_contains "$MT_RUN" '(found in g1, the master checkout of 2)'
+
+t 'elsewhere: two on main, different origins, a checkout with no origin, and a detached HEAD all still pick'
+for w in p2/x p3/x p4/x p5/x; do
+	MT_RUN=$(mt_headless "$MT_WSH" "hop $w" "HOP_WORKSPACES=$MT_CO")
+	assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH" "${w} jumped"
+	assert_contains "$MT_RUN" "2 targets matched the query: ${w}"
+done
+
+t 'elsewhere: inside a repo, a path only another repo has jumps there, because this repo has nothing close'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/wvlomp/qarnix"
+assert_contains "$MT_RUN" 'hop: wvlomp/qarnix -> ~/strava/configuration/wvlomp/qarnix/ (found in configuration)'
+
+t 'elsewhere: inside a repo, a path that starts with that repo'"'"'s own name finds it, with no workspace holding it'
+mkdir -p -- "$MT_REPO/zqvelt/morpan"
+ln -s -- "$MT_REPO" "$MT_WORK/fixrepo"
+MT_RUN=$(mt_headless "$MT_REPO" 'hop fixrepo/zqvelt/morpan' "HOP_REPOS=$MT_WORK/fixrepo")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/zqvelt/morpan" 'T0 never tried the path with the repo name taken off, so the current repo must not be skipped for it'
+
+t 'elsewhere: inside a repo, its own match wins: a T0 path, a J2 jump, and a typo pick all stay here'
+MT_RUN=$(mt_headless "$MT_REPO" "hop $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/$SP"
+MT_RUN=$(mt_headless "$MT_REPO" 'hop acct-security-tooling-prod/env-prod' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_REPO/$SP/env-prod"
+MT_RUN=$(mt_headless "$MT_REPO" 'hop terraform/acount-security' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" 'configuration has terraform/acount-security, but this repo reads it as a typo first'
+assert_contains "$MT_RUN" 'no exact match for: terraform/acount-security'
+
+t 'elsewhere: -c and -R never look in other repos'
+MT_RUN=$(mt_headless "$MT_REPO" 'hop -c wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_REPO" '-c means under $PWD'
+MT_RUN=$(mt_headless "$MT_WSH" "hop -R $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+MT_RUN=$(mt_headless "$MT_WSH" "hop -w $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+
+t 'elsewhere: -p and HOP_JUMP=never still look in other repos, and open the picker on even one hit'
+MT_RUN=$(mt_headless "$MT_WSH" "hop -p $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH" 'nothing jumps under -p'
+assert_contains "$MT_RUN" "hop: 1 target matched the query: $SP, and picking one needs a terminal."
+assert_contains "$MT_RUN" "hop: best matches: ~/strava/configuration/$SP/" 'the workspace picker opened instead of the lookup'
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS" HOP_JUMP=never)
+assert_contains "$MT_RUN" "hop: best matches: ~/strava/configuration/$SP/"
+MT_RUN=$(mt_headless "$MT_WSH" 'hop -p p1/x' "HOP_WORKSPACES=$MT_CO")
+assert_contains "$MT_RUN" '2 targets matched the query: p1/x' 'the default-branch checkout is a jump, so -p keeps it a pick'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_WSH"
+
+t 'elsewhere: the lookup logs as T0 with its own timing'
+fixture_tmpdir mtxdbg
+MT_RUN=$(mt_headless "$MT_WSH" "hop $SP" "HOP_WORKSPACES=$MT_WS" HOP_DEBUG=1 "HOP_DEBUG_LOG=$REPLY/log")
+assert_contains "$(mt_slurp "$REPLY/log")" "resolve tier=T0 rule=elsewhere verdict=jump n=1 inj=0 q=$SP target=~/strava/configuration/$SP/ ms="
+
+# mt_xcode <hop-args> -> run hop from outside any repo on the account path, then print its code calls and the result.
+mt_xcode() {
+	emulate -L zsh
+	stub_reset
+	local out
+	out=$(mt_headless "$MT_WSH" "hop $1 $SP" "HOP_WORKSPACES=$MT_WS")
+	print -r -- "${(j:|:)${(@f)$(stub_calls code)}//$'\t'/ } ${(@M)${(@f)out}:#st=*}"
+}
+
+t 'elsewhere: every action flag applies to a cross-repo jump'
+assert_eq "code -n $MT_CF/$SP st=0 PWD=$MT_WSH" "$(mt_xcode -o)"
+assert_eq "code -r $MT_CF/$SP/terragrunt_aws_account.hcl st=0 PWD=$MT_WSH" "$(mt_xcode -e)"
+assert_eq "code -r $MT_CF/$SP/terragrunt_aws_account.hcl st=0 PWD=$MT_CF/$SP" "$(mt_xcode '--cd -e')"
+
 t 'resolve: an injected dir previews its top-level README, and a dir with none previews itself'
 typeset MT_PREV
 MT_PREV=$(hop_probe "
@@ -893,3 +1178,108 @@ assert_eq "${reply[3]}" "${reply[5]}" 'under never, every jump today is lost'
 assert_contains "$MT_RUN" 'lost     names  abg  today -> sandbox/abg/  now pick T1 -'
 assert_contains "$MT_RUN" 'eval_real: FAIL'
 assert_contains "$MT_RUN" 'st=1'
+
+# ---------------------------------------------------------------------------
+# A first word that names an inactive kind, read as -k.
+# ---------------------------------------------------------------------------
+# Its own repo and config: tg and dir active, file and puppet registered but not, and a top-level puppet/ as a real repo has.
+typeset MT_KW MT_KWCFG
+fixture_repo kindword || return 1
+MT_KW=$REPLY
+fixture_write terraform/acct-a/vpc/terragrunt.hcl 'include {}'
+fixture_write terraform/acct-b/vpc/terragrunt.hcl 'include {}'
+fixture_write puppet/README.md '# puppet'
+fixture_write kubernetes/services/networking/aeraki.yaml 'kind: Application'
+fixture_commit kindword
+fixture_tmpdir kwcfg || return 1
+MT_KWCFG=$REPLY/config.zsh
+print -rl -- 'hop_preset terragrunt dir file puppet' "hop_kind solo --dirs 'kubernetes/services' --desc 'one row'" \
+	"hop_kind net --dirs 'kubernetes/services' --desc 'a name inside kubernetes'" "hop_kind ghost --dirs 'nowhere' --desc 'no rows here'" > "$MT_KWCFG"
+
+# mt_kw <cwd> <hop-args> [VAR=value...] -> the run under the kind-word config, then its code calls on one line.
+mt_kw() {
+	emulate -L zsh
+	local cwd=$1 args=$2
+	shift 2
+	stub_reset
+	mt_headless "$cwd" "hop ${args}" "HOP_CONFIG=$MT_KWCFG" "$@"
+	print -r -- "calls=${(j:|:)${(@f)$(stub_calls code)}//$'\t'/ }"
+}
+
+t 'kind word: file as the first word is -k file, says so, and the action still applies'
+MT_RUN=$(mt_kw "$MT_KW" 'file -e aeraki.yaml')
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" "calls=code -r $MT_KW/kubernetes/services/networking/aeraki.yaml"
+assert_contains "$MT_RUN" "st=0 PWD=$MT_KW"
+MT_RUN=$(mt_kw "$MT_KW" 'File -e aeraki.yaml')
+assert_contains "$MT_RUN" 'hop: reading "File" as -k file' 'the kind name is compared without case'
+
+t 'kind word: file alone opens on the file kind and never jumps'
+MT_RUN=$(mt_kw "$MT_KW" file)
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" 'targets matched, and picking one needs a terminal.'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_KW"
+
+t 'kind word: a kind with one row alone still waits for a pick'
+MT_RUN=$(mt_kw "$MT_KW" solo)
+assert_contains "$MT_RUN" 'hop: reading "solo" as -k solo'
+assert_contains "$MT_RUN" "st=1 PWD=$MT_KW" 'the one networking row auto-accepted'
+assert_contains "$MT_RUN" 'picking one needs a terminal'
+assert_contains "$MT_RUN" 'hop: a kind word alone lists that kind and never jumps; hop -k solo jumps to its one target.'
+assert_not_contains "$MT_RUN" 'narrow the query' 'one target already matched, so narrowing is no advice'
+stub_fzf_select '' 1
+MT_STUB=$REPLY
+mt_pickrun "$MT_STUB" "builtin cd -q -- ${(q)MT_KW}; hop solo" "HOP_CONFIG=$MT_KWCFG" >/dev/null
+mt_argv "$MT_STUB"
+assert_eq 0 ${#${(M)reply:#--select-1}} 'with a terminal, --select-1 would accept the one row unseen'
+assert_ne 0 ${#reply} 'the picker never ran, so the absence above means nothing'
+
+t 'kind word: a rest that matches nothing is reported with -k, never as an ignored word'
+MT_RUN=$(mt_kw "$MT_KW" 'file zzqx')
+assert_contains "$MT_RUN" 'hop: nothing matched the query: zzqx with -k file'
+assert_not_contains "$MT_RUN" 'ignored'
+
+t 'kind word: puppet, which a row holds, tg, an active kind, a typed -k, and a later word all stay plain words'
+MT_RUN=$(mt_kw "$MT_KW" puppet)
+assert_contains "$MT_RUN" "st=0 PWD=$MT_KW/puppet" 'the top-level puppet/ dir is what puppet means here'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" 'tg vpc')
+assert_contains "$MT_RUN" '2 targets matched the query: tg vpc'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" '-k dir file')
+assert_contains "$MT_RUN" 'nothing matched the query: file, so'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" 'vpc file')
+assert_contains "$MT_RUN" 'ignored: file'
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" '-a file -e aeraki.yaml')
+assert_not_contains "$MT_RUN" 'reading' '-a already includes every kind'
+
+t 'kind word: a kind that is only part of a word some row holds is still read as -k'
+MT_RUN=$(mt_kw "$MT_KW" net)
+assert_contains "$MT_RUN" 'hop: reading "net" as -k net' 'net is inside kubernetes, but no row holds net as a word'
+
+t 'kind word: a kind with no rows in this repo stays a plain word'
+MT_RUN=$(mt_kw "$MT_KW" ghost "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading'
+assert_contains "$MT_RUN" 'nothing matched the query: ghost, so'
+
+t 'kind word: a typed -k whose kind has no rows here still finds a path in another repo'
+MT_RUN=$(mt_kw "$MT_KW" '-k ghost wvlomp/qarnix' "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/wvlomp/qarnix"
+assert_not_contains "$MT_RUN" 'no targets'
+
+t 'kind word: -w and -R keep it a plain word, and outside a repo it is read only before a path'
+MT_RUN=$(mt_kw "$MT_WSH" 'file strava' "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading' 'outside a repo no kind is listed, so -k would only drop the word'
+assert_not_contains "$MT_RUN" 'REPLY=' 'a redeclared local printed itself to stdout'
+MT_RUN=$(mt_kw "$MT_WSH" puppet "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_WSH" "file $SP" "HOP_WORKSPACES=$MT_WS")
+assert_contains "$MT_RUN" 'hop: reading "file" as -k file'
+assert_contains "$MT_RUN" "st=0 PWD=$MT_CF/$SP" 'the path reaches the lookup in other repos, as after a typed -k'
+MT_RUN=$(mt_kw "$MT_KW" '-w file strava' "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading'
+MT_RUN=$(mt_kw "$MT_KW" '-R file' "HOP_WORKSPACES=$MT_WS")
+assert_not_contains "$MT_RUN" 'reading'
+assert_contains "$MT_RUN" 'nothing matched the query: file, so'

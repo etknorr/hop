@@ -152,23 +152,21 @@ st=$?
 assert_eq 0 "$st"
 assert_eq 1 "$(_fz_forks)"
 
-t 'the floor covers every fzf action the keymap uses, including search()'
-# An UNKNOWN action makes fzf refuse to START, so adding one to the keymap is a floor question.
-# - `search()` arrived in fzf 0.59.0, which the 0.60.3 floor already covers, so it did not move.
-# - The whole BIND SET is read, not HOP_VIM_TO_NORMAL: search() moved to the esc bind and this
-#   check is about which actions the keymap uses, wherever they happen to sit.
+t "the floor covers what esc reads: a transform's FZF_PROMPT and FZF_QUERY"
+# An UNKNOWN action makes fzf refuse to START, so what the keymap uses is a floor question.
+# - esc picks its job inside a transform from $FZF_PROMPT and $FZF_QUERY.
+# - fzf CHANGELOG: `transform` arrived in 0.45.0, and the FZF_QUERY and FZF_PROMPT exports in 0.46.0.
+# - The whole BIND SET is read, so this holds wherever in it esc's action happens to sit.
+# - Whether the floor fzf really parses the bind set is suite_keymap's job, run under that fzf.
 out=$(_fz_probe '0.74.1' '
 _hop_vim_init
 typeset -a args=()
 _hop_vim_binds /bin/true "" "" "" "" "" ""
 print -rl -- "${args[@]}"')
-assert_contains "$out" 'search()' 'esc must re-match, or NORMAL is left holding an empty list'
-assert_contains "$out" 'clear-query+search()' 'search() before clear-query re-runs the dead query'
-# Ordering guard: search() has to sit AHEAD of the transform, never inside it.
-# - Folding it back in is the one edit that reintroduces the dead list without breaking anything else.
-assert_contains "$out" 'search()+transform:' 'search() from inside a transform is silently a no-op'
-out=$(_fz_probe '0.74.1' '_hop_ver_lt 0.59.0 $HOP_FZF_MIN && print -r -- covered')
-assert_eq covered "$out" 'the floor must be at or above 0.59.0, where search() was added'
+assert_contains "$out" '--bind=esc:transform:' 'esc must resolve its mode inside fzf'
+assert_contains "$out" '$FZF_QUERY' 'esc must tell an empty NORMAL query from a kept one'
+out=$(_fz_probe '0.74.1' '_hop_ver_lt 0.46.0 $HOP_FZF_MIN && print -r -- covered')
+assert_eq covered "$out" 'the floor must be at or above 0.46.0, where FZF_QUERY reached transforms'
 
 t 'HOP_FZF_MIN can be lowered, for an fzf that is fine despite its version string'
 out=$(_fz_probe '0.44.1' 'HOP_FZF_MIN=0.1.0 _hop_fzf_ok' 2>&1)

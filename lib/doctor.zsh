@@ -84,6 +84,18 @@ _hop_doctor_actions() {
 	printf '  %-22s %s\n' 'VS Code reachable' "$v"
 }
 
+# _hop_doctor_loaded -> the version this shell loaded, flagged when VERSION on disk has moved since.
+_hop_doctor_loaded() {
+	emulate -L zsh
+	local REPLY
+	_hop_version_disk
+	if [[ $REPLY == "$_HOP_LOADED_VERSION" ]]; then
+		printf '  %-22s %s\n' loaded "$_HOP_LOADED_VERSION"
+	else
+		printf '  %-22s %s\n' loaded "${_HOP_LOADED_VERSION}, but ${REPLY} is installed: run 'exec zsh'"
+	fi
+}
+
 _hop_doctor_body() {
 	emulate -L zsh
 	setopt local_options no_nomatch
@@ -98,6 +110,7 @@ _hop_doctor_body() {
 	local ver
 	ver=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null) || ver='not a git checkout'
 	printf '  %-22s %s\n' version "$ver"
+	_hop_doctor_loaded
 	printf '  %-22s %s\n' 'entry point' "$HOP_HOME/hop.zsh"
 	print -r -- ''
 
@@ -160,7 +173,8 @@ _hop_doctor_body() {
 		for k in "${_HOP_ALL_KINDS[@]}"; do
 			# One child per kind prints its rows and then its legacy count, which _hop_rel_upgrade adds up as it goes.
 			# - The count has to leave the same child the rows came from, since the upgrade runs inside it.
-			out=$(local -i _hop_gen_legacy=0; _hop_generate "$root" "$k" 2>/dev/null; print -r -- "$_hop_gen_legacy")
+			# - Raw rows, because laying them out runs the generate in a child of its own, which would keep the count.
+			out=$(local -i _hop_gen_legacy=0 _hop_gen_raw=1; _hop_generate "$root" "$k" 2>/dev/null; print -r -- "$_hop_gen_legacy")
 			lines=("${(@f)out}")
 			(( ${lines[-1]:-0} )) && legacy+=("${k} (${lines[-1]} rows)")
 			lines=("${(@)lines[1,-2]}")
@@ -226,6 +240,7 @@ _hop_doctor_short_body() {
 	local ver
 	ver=$(git -C "$HOP_HOME" describe --tags --always --dirty 2>/dev/null) || ver='not a git checkout'
 	printf '  %-22s %s\n' version "$ver"
+	_hop_doctor_loaded
 	printf '  %-22s %s\n' 'entry point' "$HOP_HOME/hop.zsh"
 	print -r -- ''
 

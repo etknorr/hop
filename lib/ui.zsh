@@ -159,21 +159,25 @@ _hop_vim_binds() {
 	nh=$(_hop_vim_header NORMAL "$root")
 	sh=$(_hop_vim_header SEARCH)
 
-	local to_search="${unbind_all}+enable-search+change-prompt(/ )+change-header(${sh})+${prev_restore}"
+	# end-of-line because ctrl-a is not a NORMAL key, so it can leave the kept query's cursor at the start.
+	local to_search="${unbind_all}+enable-search+end-of-line+change-prompt(/ )+change-header(${sh})+${prev_restore}"
 
-	# Esc clears the query on the way back to NORMAL, exactly as it drops the filter in k9s.
-	# - A query still displayed but no longer filtering anything is worse than no query at all.
-	# - `clear-query+search()` is deliberately NOT here; it sits on the esc bind, statically.
-	# - fzf does NOT honour `search()` emitted BY a `transform:`, and esc has to be a transform.
-	# - Measured: from a transform the list stayed pos=0 count=0, from a static bind pos=1 count=4.
-	# - Untreated, esc out of a query matching nothing left NORMAL holding a permanently dead list.
-	HOP_VIM_TO_NORMAL="${rebind_all}+disable-search+change-prompt(> )+change-header(${nh})+${prev_restore}"
+	# Esc keeps the query on the way back to NORMAL, so j/k walk the filtered rows and a verb acts on one.
+	# - Search stays ENABLED in NORMAL: every printable ASCII key is bound there, so none of them types into the query.
+	# - A non-ASCII key, such as Option+p sending π, or a paste still lands in the query and filters; fzf has no bind for either.
+	# - disable-search is deliberately absent, because it is what once left NORMAL holding a dead list.
+	# - With search off, a cleared query was never re-matched, so a query matching nothing froze at 0 rows.
+	# - With search on, a `clear-query` emitted by esc's transform re-filters by itself, and no search() is needed.
+	# - Measured on fzf 0.60.3, 0.67.0 and 0.73.1: `/` `zzz` esc esc went from 0 rows back to all 4.
+	HOP_VIM_TO_NORMAL="${rebind_all}+change-prompt(> )+change-header(${nh})+${prev_restore}"
 
-	# Esc has three meanings, resolved from fzf's own exported state rather than a file.
+	# Esc has four meanings, resolved from fzf's own exported state rather than a file.
 	# - In the kind menu it goes back to the view you came from, which is the k9s behaviour.
-	# - In SEARCH it returns to NORMAL and drops the filter.
-	# - In NORMAL it quits.
-	local esc_act='transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; *) if [ "$FZF_INPUT_STATE" = disabled ]; then printf abort; else printf %s "$HOP_VIM_TO_NORMAL"; fi ;; esac'
+	# - In SEARCH it returns to NORMAL with the filter still applied.
+	# - In NORMAL with a query it clears the query and stays in NORMAL.
+	# - In NORMAL with no query it quits.
+	# - The prompt is the mode, not FZF_INPUT_STATE: NORMAL is search-off at startup and search-on after an esc.
+	local esc_act='transform:case "$FZF_PROMPT" in ": "*) printf %s "${HOP_VIM_MENU_BACK:-abort}" ;; "/ "*) printf %s "$HOP_VIM_TO_NORMAL" ;; *) if [ -n "$FZF_QUERY" ]; then printf clear-query; else printf abort; fi ;; esac'
 
 	# The preview label is the overlay's own state, so `?` needs no file and no counter either.
 	HOP_VIM_HELP_ON="show-preview+change-preview(${help_cmd})+change-preview-label( keys )"
@@ -187,7 +191,8 @@ _hop_vim_binds() {
 	local kind_act='' enter_act='' mh
 	if [[ -n $root ]]; then
 		mh='VIEW  enter switch  esc back  j/k move  / filter'
-		HOP_VIM_TO_MENU="change-prompt(: )+change-header(${mh})+change-preview-label()+reload(${kinds_bin} menu ${(q)root})"
+		# clear-query first, because a query kept from SEARCH would otherwise filter the kind list down to nothing.
+		HOP_VIM_TO_MENU="clear-query+change-prompt(: )+change-header(${mh})+change-preview-label()+reload(${kinds_bin} menu ${(q)root})"
 		kind_act="$HOP_VIM_TO_MENU"
 
 		# {2} is the kind name, because hop-kinds menu puts it in field 2 for exactly this.
@@ -279,12 +284,7 @@ _hop_vim_binds() {
 			args+=(--bind="alt-${ak}:execute-silent(${guard_bin} mark ${(q)guard})")
 		done
 	fi
-	# clear-query+search() runs unconditionally, BEFORE the transform picks one of esc's three jobs.
-	# - It has to be static: fzf ignores a `search()` that a transform emits, which is the live bug.
-	# - It has to come after clear-query, or search() re-runs the query that matched nothing.
-	# - It is harmless in the two branches that abort or leave the menu, since both discard the list.
-	# - `search()` needs fzf 0.59.0, which HOP_FZF_MIN covers; an unknown action makes fzf refuse.
-	args+=(--bind="esc:clear-query+search()+${esc_act}")
+	args+=(--bind="esc:${esc_act}")
 	# Binding enter at all is new; the non-menu branch is a literal accept so cd is unchanged.
 	[[ -n $enter_act ]] && args+=(--bind="enter:${enter_act}")
 
@@ -292,6 +292,8 @@ _hop_vim_binds() {
 	# - No --disabled in that branch, because the typed query has to FILTER the list it opens on.
 	# - A resolver note rides --header, and its start bind skips change-header, which would wipe it.
 	# - The note embeds the query, and a `)` in it would end a change-header(...) action early.
+	# - An empty query opens --disabled and the first `/` turns search on, so NORMAL is search-off only until then.
+	# - That is harmless: with an empty query, search on and search off list exactly the same rows.
 	if [[ -n $query ]]; then
 		_hop_vim_prompt='/ '
 		_hop_vim_head=$sh
