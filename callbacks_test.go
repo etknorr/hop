@@ -94,20 +94,3 @@ func itoa(n int) string {
 		}
 	}
 }
-
-func TestInitAndComplete(t *testing.T) {
-	setup(t)
-	if o, _, rc := runHop(t, "init", "bash", "--cmd", "j"); rc != 0 || !strings.Contains(o, "j() {") || !strings.Contains(o, "complete -F _j_complete j") {
-		t.Errorf("init bash --cmd j: rc %d", rc)
-	}
-	if _, _, rc := runHop(t, "init"); rc != 2 {
-		t.Errorf("init with no shell: rc %d", rc)
-	}
-	if _, e, rc := runHop(t, "init", "tcsh"); rc != 1 || !strings.Contains(e, "unsupported shell") {
-		t.Errorf("init tcsh: rc %d %q", rc, e)
-	}
-	o, _, _ := runHop(t, "__complete", "-k", "sv")
-	if !strings.Contains(o, "svc\tdirs\n") || !strings.Contains(o, "svc2\tdepth2\n") {
-		t.Errorf("kinds complete from the loaded config, with descriptions: %q", o)
-	}
-}

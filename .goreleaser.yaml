@@ -1,0 +1,40 @@
+# Release archives for darwin and linux, built by .github/workflows/release.yml from a v* tag.
+# - Homebrew is not here: Formula/hop.rb builds from source, so it needs no bottles and no goreleaser brew support.
+# - Windows is cross-compiled by scripts/build.sh and CI only; nobody ships or supports it.
+version: 2
+project_name: hop
+
+builds:
+  - id: hop
+    main: .
+    binary: hop
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/etknorr/hop/internal/version.Version={{ .Version }}
+
+archives:
+  - id: hop
+    formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+# The body is the CHANGELOG section, passed by release.yml as --release-notes, never generated from commits.
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: etknorr
+    name: hop
+  name_template: 'v{{ .Version }}'

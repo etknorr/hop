@@ -8,7 +8,7 @@
 		return
 	fi
 	local f="${TMPDIR:-/tmp}/hop.$$.$RANDOM" rc dir=
-	HOP_CMDFILE=$f command hop "$@"
+	HOP_CMDFILE=$f HOP_SHELL=bash HOP_INIT_HASH=@HASH@ command hop "$@"
 	rc=$?
 	if [[ -e $f ]]; then
 		IFS= read -r -d '' dir <"$f"

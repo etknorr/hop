@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'v1/**']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -161,3 +162,228 @@ jobs:
           # the test runner itself.
           zsh -n tests/run || status=1
           exit $status
+
+  # The Go jobs. The zsh jobs above stay until the zsh implementation is deleted.
+  go:
+    name: go (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      # Full history, because the live-zsh tests unpack the v0.3.1 tag as their reference.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install zsh (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          grep -rl packages.microsoft.com /etc/apt/sources.list.d 2>/dev/null | xargs -r sudo rm -f || true
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Install fzf (Ubuntu)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo junegunn/fzf --pattern 'fzf-*-linux_amd64.tar.gz' --output fzf.tar.gz --clobber
+          tar -xzf fzf.tar.gz fzf
+          sudo install -m 0755 fzf /usr/local/bin/fzf
+          rm -f fzf fzf.tar.gz
+
+      - name: Install fzf (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fzf
+
+      - name: Print tool versions
+        run: |
+          go version
+          fzf --version
+          zsh --version
+
+      - name: Fetch the public test repos
+        run: |
+          if [ -x testdata/fetch-repos.sh ]; then testdata/fetch-repos.sh; fi
+
+      - run: go vet ./...
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then printf '%s\n' "$out"; exit 1; fi
+
+      - name: go test (macOS)
+        if: runner.os == 'macOS'
+        run: go test ./...
+
+      # internal/collate reproduces macOS's en_US order, which zsh hop's sorts follow on Eric's Mac; glibc's en_US differs,
+      # so the two live-zsh comparisons that sort through the C library can't agree here, and only those two are skipped.
+      - name: go test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          go list ./... | grep -v -e '/internal/collate$' -e '/internal/resolve$' | xargs go test
+          go test -skip '^(TestSortMatchesLiveZsh|TestLiveZsh)$' ./internal/collate ./internal/resolve
+
+  # The go job gets the latest fzf; these are the floor and the first release with --freeze-left.
+  go-floor:
+    name: go floor (fzf ${{ matrix.fzf }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Known red until workstream A's floor work lands: TestArgvParses on 0.60.3 and TestPicker on both, as at v1/go 2e60cd6.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        fzf: ['0.60.3', '0.67.0']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install zsh
+        run: |
+          set -euo pipefail
+          grep -rl packages.microsoft.com /etc/apt/sources.list.d 2>/dev/null | xargs -r sudo rm -f || true
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Install fzf ${{ matrix.fzf }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FZF_VER: ${{ matrix.fzf }}
+        run: |
+          set -euo pipefail
+          dl=$(mktemp -d)
+          tarball="fzf-${FZF_VER}-linux_amd64.tar.gz"
+          gh release download "v${FZF_VER}" --repo junegunn/fzf --dir "$dl" \
+            --pattern "$tarball" --pattern "fzf_${FZF_VER}_checksums.txt"
+          line=$(grep -E "^[0-9a-f]{64}  ${tarball}\$" "$dl/fzf_${FZF_VER}_checksums.txt")
+          (cd "$dl" && printf '%s\n' "$line" | sha256sum --check --strict -)
+          tar -xzf "$dl/$tarball" -C "$dl" fzf
+          sudo install -m 0755 "$dl/fzf" /usr/local/bin/fzf
+          rm -rf -- "$dl"
+
+      - name: Assert fzf is ${{ matrix.fzf }}
+        env:
+          FZF_VER: ${{ matrix.fzf }}
+        run: |
+          set -euo pipefail
+          got=$(fzf --version)
+          printf '%s\n' "$got"
+          case "$got" in
+            "${FZF_VER} "*) ;;
+            *) echo "expected fzf ${FZF_VER}, got: ${got}" >&2; exit 1 ;;
+          esac
+
+      - name: The argv and matcher tests
+        run: go test ./internal/match/ ./internal/pick/ ./internal/ptytest/
+
+      - name: The pty picker test
+        run: go test -run 'TestPicker$' .
+
+  # zsh, bash and fish on Linux; zsh, macOS's own /bin/bash 3.2 and brew's bash 5 on macOS. No docker on either.
+  shells:
+    name: shells (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install zsh, fish and expect (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          grep -rl packages.microsoft.com /etc/apt/sources.list.d 2>/dev/null | xargs -r sudo rm -f || true
+          sudo apt-get update
+          sudo apt-get install -y zsh fish expect
+
+      - name: Install fzf (Ubuntu)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo junegunn/fzf --pattern 'fzf-*-linux_amd64.tar.gz' --output fzf.tar.gz --clobber
+          tar -xzf fzf.tar.gz fzf
+          sudo install -m 0755 fzf /usr/local/bin/fzf
+          rm -f fzf fzf.tar.gz
+
+      - name: Install fzf and bash 5 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install fzf bash
+          echo "BASH5=$(brew --prefix)/bin/bash" >> "$GITHUB_ENV"
+
+      - name: Run the shell matrix
+        env:
+          NO_DOCKER: '1'
+        run: zsh test/shell/run-all.sh
+
+  cross:
+    name: cross-compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - run: scripts/build.sh
+
+  # Installs this commit through a throwaway local tap: --HEAD would build main, and Homebrew refuses a formula file outside a tap.
+  formula:
+    name: formula (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Put brew on PATH (Linux)
+        if: runner.os == 'Linux'
+        run: echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+
+      - run: brew style Formula/hop.rb
+
+      - name: Install this commit from a local tap
+        run: |
+          set -euo pipefail
+          brew tap-new --no-git hop-ci/local
+          tap=$(brew --repository hop-ci/local)
+          v=$(tr -d '[:space:]' < VERSION)
+          perl -pe 's{^  url "https://github\.com/etknorr/hop\.git", tag: "v[0-9.]+"$}{  url "file://$ENV{GITHUB_WORKSPACE}", using: :git, revision: "$ENV{GITHUB_SHA}"\n  version "'"$v"'"}' \
+            Formula/hop.rb > "$tap/Formula/hop.rb"
+          grep -q "revision: \"$GITHUB_SHA\"" "$tap/Formula/hop.rb"
+          brew install --build-from-source hop-ci/local/hop
+          brew test hop-ci/local/hop
+          hop -V

@@ -13,7 +13,6 @@ git init -q
 git add -A
 cat >"$d/config.toml" <<'TOML'
 version = 1
-recipes = []
 
 [[kind]]
 name = 'u'

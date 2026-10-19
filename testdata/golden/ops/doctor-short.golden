@@ -1,0 +1,57 @@
+--- hop --doctor=short (paste-safe: paths and names withheld) ---
+
+install
+  version                1.0.0 (abc1234)
+  method                 checkout at /src/hop
+  binary                 /src/hop/bin/hop
+  shell                  zsh, but its integration predates this hop: run 'exec zsh'
+
+config
+  HOP_CONFIG             ~/.config/hop/config.toml (default, readable)
+  HOP_WORKSPACES_FILE    ~/.config/hop/workspaces (default, readable)
+  HOP_HISTFILE           ~/.local/state/hop/history (default, MISSING)
+  HOP_HIST_MAX           50 (config)
+  HOP_DEFAULT_KINDS      unset, so each kind's own default
+  HOP_VIM                on (default)
+  HOP_ACTION             (not a mode, withheld) (env), so Enter cds
+  HOP_JUMP               auto (default)
+  HOP_CODE               (customised, withheld) (env)
+  VS Code reachable      no, the HOP_CODE launcher is not runnable (withheld)
+  HOP_CLIPBOARD          unset, so the first of pbcopy, wl-copy, xclip, xsel, clip.exe
+  HOP_FZF_HEIGHT         80% (default)
+  HOP_HOPRC              unset
+  HOP_REPOS              unset, derived from workspaces
+  HOP_DEBUG              unset
+  HOP_DEBUG_LOG          ~/.local/state/hop/debug.log (default, readable)
+
+tools
+  fzf      0.60.3 (stub)
+  git      git version 2.0.0 (stub)
+  gh       gh version 2.0.0 (stub)
+  bat      bat 0.24.0
+  code     1.100.0
+  zsh      NOT INSTALLED
+
+terminal
+  TERM                   xterm-test
+  COLUMNS                100
+  completions            loaded by hop init zsh
+
+workspaces
+  configured             1
+
+kinds
+  registered             2
+  in default set         1
+  by shape:
+    dirs     1
+    files    0
+    marker   0
+    builtin  1
+    exec     0
+  recipes available: dir project file
+  recipes loaded:    none
+
+PWD, the git toplevel, workspace names and kind names are withheld deliberately.
+This is not a bug: run plain --doctor locally if you need any of those.
+--- end ---

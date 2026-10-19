@@ -8,46 +8,18 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/etknorr/hop/internal/config"
 	"github.com/etknorr/hop/internal/kinds"
 	"github.com/etknorr/hop/internal/mru"
 	"github.com/etknorr/hop/internal/pick"
-	"github.com/etknorr/hop/internal/shell"
 )
 
-// self is the binary's absolute path, which --with-shell and the pwsh script bake in.
+// self is the binary's absolute path, which --with-shell bakes in.
 func self() string {
 	p, err := os.Executable()
 	if err != nil {
 		return "hop"
 	}
 	return p
-}
-
-func cmdInit(args []string, stdout io.Writer) error {
-	sh, cmd := "", ""
-	for i := 0; i < len(args); i++ {
-		switch a := args[i]; {
-		case a == "--cmd" && i+1 < len(args):
-			i++
-			cmd = args[i]
-		case strings.HasPrefix(a, "--cmd="):
-			cmd = a[len("--cmd="):]
-		case sh == "" && !strings.HasPrefix(a, "-"):
-			sh = a
-		default:
-			return errUsage
-		}
-	}
-	if sh == "" {
-		return errUsage
-	}
-	s, err := shell.Init(sh, cmd, self())
-	if err != nil {
-		return err
-	}
-	_, err = io.WriteString(stdout, s)
-	return err
 }
 
 // cmdRowsSession is the picker's reload: the session's root and -c dir, ranked by history, as _hop_rows does.
@@ -114,21 +86,6 @@ func cmdMenu(stdout, stderr io.Writer) error {
 			continue
 		}
 		fmt.Fprintf(bw, "%s%-11s%s %s%8d%s  %s%s%s\t%s\t%s\n", menuKind, k.Name, menuOff, menuNum, counts[i], menuOff, menuDesc, k.Desc, menuOff, k.Name, s.Root)
-	}
-	return bw.Flush()
-}
-
-func cmdComplete(words []string, stdout, stderr io.Writer) error {
-	var ks []shell.Kind
-	if cfg, err := config.Load(config.Path()); err == nil {
-		for _, k := range cfg.Kinds {
-			ks = append(ks, shell.Kind{Name: k.Name, Desc: k.Desc})
-		}
-	}
-	bw := bufio.NewWriter(stdout)
-	for _, c := range shell.Complete(words, ks, config.Actions) {
-		bw.WriteString(c)
-		bw.WriteByte('\n')
 	}
 	return bw.Flush()
 }

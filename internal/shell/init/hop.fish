@@ -10,7 +10,7 @@ function @CMD@ --description 'jump to a target in this repo'
 	set -l tmp /tmp
 	set -q TMPDIR; and set tmp $TMPDIR
 	set -l f (string trim -r -c / -- $tmp)/hop.$fish_pid.(random)
-	HOP_CMDFILE=$f command hop $argv
+	HOP_CMDFILE=$f HOP_SHELL=fish HOP_INIT_HASH=@HASH@ command hop $argv
 	set -l rc $status
 	set -l dir
 	if test -e $f

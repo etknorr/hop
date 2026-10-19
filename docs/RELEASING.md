@@ -1,83 +1,100 @@
 # Releasing hop
 
-The exact, ordered steps to cut a release. Follow them in order; nothing here is optional.
+The steps to cut a release, in order. A tag push does the building and publishing; everything before
+it is the release commit.
 
-## Two names for one version, and why they differ
+## Two names for one version
 
-`VERSION` holds a **bare** semver, e.g. `0.1.0`, with no `v` prefix. `hop --version` reads it
-verbatim, and anything that parses `VERSION` programmatically (`hop upgrade` compares its contents
-against a target release) can treat it as a plain `X.Y.Z` string with no stripping required.
+`VERSION` holds a bare semver, such as `1.0.0`, with no `v`. A checkout's `hop upgrade` reads it as
+the installed version.
 
-The git tag for the same release is `vX.Y.Z`, e.g. `v0.1.0`. The `v` prefix is the conventional
-git tag spelling, and `git describe --tags` needs an actual tag to describe against — `hop
---version`'s `(describe)` suffix comes from that tag, not from `VERSION`.
+The git tag for the same release is `vX.Y.Z`, such as `v1.0.0`. goreleaser stamps the binary with
+the tag minus its `v`, through `-X github.com/etknorr/hop/internal/version.Version`, so `hop -V`
+prints `hop 1.0.0`. `Formula/hop.rb` names the tag too.
 
-Keep the two in sync (`VERSION` says `0.1.0` exactly when the tag is `v0.1.0`), but never write the
-`v` into `VERSION`, and never drop it from the tag.
+`release.yml` fails unless the tag is exactly `v` plus `VERSION` and `Formula/hop.rb` names that
+tag, so all three move in the release commit.
 
 ## Steps
 
-1. **Start from a clean, up-to-date `main`.**
-   ```zsh
+1. Start from a clean, up-to-date `main`:
+   ```sh
    git checkout main
    git pull --ff-only
    ```
 
-2. **Decide the new version number** using [Semantic Versioning](https://semver.org/): a breaking
-   change to the `hop_kind` DSL, verbs, or environment variables is major; a backward-compatible
-   feature is minor; anything else is a patch.
+2. Decide the version with [Semantic Versioning](https://semver.org/). A breaking change to the
+   config schema, the command line or an environment variable is major. A backward-compatible
+   feature is minor. Anything else is a patch.
 
-3. **Bump `VERSION`** to the bare number, no `v`, no trailing content beyond the one line:
-   ```zsh
-   echo '0.2.0' > VERSION
+3. Bump `VERSION` to the bare number, one line:
+   ```sh
+   echo '1.1.0' > VERSION
    ```
 
-4. **Move the `## [Unreleased]` entries** in `CHANGELOG.md` under a new dated heading, and leave
-   `## [Unreleased]` in place above it, empty, ready for the next round of changes:
+4. Bump the formula's tag to match (drop the `''` after `-i` with GNU sed):
+   ```sh
+   sed -i '' 's/tag: "v[0-9.]*"/tag: "v1.1.0"/' Formula/hop.rb
+   ```
+
+5. Move the `## [Unreleased]` entries in `CHANGELOG.md` under a new dated heading, and leave
+   `## [Unreleased]` in place above it, empty:
    ```markdown
    ## [Unreleased]
 
-   ## [0.2.0] - 2026-09-01
+   ## [1.1.0] - 2026-11-01
 
    ### Added
    - ...
    ```
-   Use today's date, `YYYY-MM-DD`. Add the link-reference definitions for the new version at the
-   bottom of the file, alongside the existing ones:
+   Use today's date, `YYYY-MM-DD`. Add the link definitions for the new version at the bottom,
+   beside the others, and repoint `[Unreleased]`:
    ```markdown
-   [Unreleased]: https://github.com/etknorr/hop/compare/v0.2.0...HEAD
-   [0.2.0]: https://github.com/etknorr/hop/compare/v0.1.0...v0.2.0
+   [Unreleased]: https://github.com/etknorr/hop/compare/v1.1.0...HEAD
+   [1.1.0]: https://github.com/etknorr/hop/compare/v1.0.0...v1.1.0
    ```
-   and repoint the previous version's `[Unreleased]` comparison, which is now superseded.
+   The release workflow publishes this section as the GitHub release body, and fails when the
+   section is missing or empty.
 
-5. **Run the suite** and confirm it is still green:
-   ```zsh
-   tests/run
-   ```
-
-6. **Commit the release.** One line, under 72 characters, no ticket reference:
-   ```zsh
-   git add VERSION CHANGELOG.md
-   git commit -m 'release 0.2.0'
+6. Check that it builds and passes. The snapshot builds the four archives into `dist/` and
+   publishes nothing:
+   ```sh
+   go vet ./... && test -z "$(gofmt -l .)" && go test ./...
+   go run github.com/goreleaser/goreleaser/v2@v2.18.3 release --snapshot --clean
    ```
 
-7. **Tag it**, with the `v` prefix, as an annotated tag. The message is `hop` plus the bare
-   version, matching `v0.1.0`; the `v` belongs to the tag name, not to the message:
-   ```zsh
-   git tag -a v0.2.0 -m 'hop 0.2.0'
+7. Commit the release. One line, under 72 characters, no ticket reference:
+   ```sh
+   git add VERSION Formula/hop.rb CHANGELOG.md
+   git commit -m 'release 1.1.0'
    ```
 
-8. **Push the commit, then the tag:**
-   ```zsh
+8. Tag it with the `v`, as an annotated tag whose message is `hop` plus the bare version:
+   ```sh
+   git tag -a v1.1.0 -m 'hop 1.1.0'
+   ```
+
+9. Push the commit, then the tag:
+   ```sh
    git push
-   git push origin v0.2.0
+   git push origin v1.1.0
    ```
 
-9. **Create the GitHub release**, using the tag and the matching `CHANGELOG.md` section as the
-   notes. `--notes-from-tag` is the wrong tool here: step 7's annotation is the single line
-   `hop 0.2.0`, so it would publish that as the entire release body. Pass the changelog section
-   instead:
-   ```zsh
-   awk '/^## \[0\.2\.0\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md > /tmp/notes-0.2.0.md
-   gh release create v0.2.0 --title v0.2.0 --notes-file /tmp/notes-0.2.0.md
-   ```
+10. Watch the release workflow. The tag push runs `.github/workflows/release.yml`, which checks the
+    tag against `VERSION` and the formula, builds darwin and linux archives for amd64 and arm64 with
+    goreleaser, uploads them with `checksums.txt`, and uses the `CHANGELOG.md` section as the
+    release notes. Its last job taps this repo on macOS and Linux, runs
+    `brew install etknorr/hop/hop`, and checks that `hop -V` names the tag:
+    ```sh
+    gh run watch --repo etknorr/hop "$(gh run list --repo etknorr/hop --workflow release.yml --limit 1 --json databaseId -q '.[0].databaseId')"
+    ```
+
+`go install github.com/etknorr/hop@v1.1.0` works as soon as the tag is pushed, since the Go module
+proxy fetches tags from GitHub on demand.
+
+## If the workflow fails
+
+A failure before the goreleaser step publishes nothing. Fix the cause on `main`, delete the tag with
+`git tag -d v1.1.0 && git push origin :refs/tags/v1.1.0`, then tag and push again. Once the release
+exists on GitHub, or the module proxy has fetched the tag, don't move the tag. Cut the next patch
+release instead, because the proxy keeps a tag's contents for good.

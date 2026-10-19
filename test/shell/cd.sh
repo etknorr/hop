@@ -33,3 +33,8 @@ left=$(ls "$TMPDIR" | grep -c '^hop\.')
 if [ "$left" = 0 ]; then echo "PASS no-cmdfile-left"; else echo "FAIL no-cmdfile-left $left"; fi
 if head -1 "$HOP_HISTFILE" | grep -q '/beta/gamma$' && grep -q '/alpha$' "$HOP_HISTFILE"; then echo "PASS mru"; else echo "FAIL mru"; fi
 if [ -z "${HOP_CMDFILE:-}" ]; then echo "PASS env-clean"; else echo "FAIL env-clean HOP_CMDFILE leaked"; fi
+cd "$R/beta/gamma"; hopr; check hopr "$R"
+cd "$R/beta"; HOP_WORKSPACES=$HOP_T hopw 2>/dev/null
+if [ "$PWD" = "$HOP_T" ]; then echo "PASS hopw"; else echo "XFAIL hopw: needs hop __hopw, workstream A's; PWD=$PWD"; fi
+cd "$R"; v=$(hop -V)
+case $v in "hop "*predates*) echo "FAIL version-current: $v" ;; "hop "*) echo "PASS version-current" ;; *) echo "FAIL version-current: $v" ;; esac

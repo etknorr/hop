@@ -1,6 +1,6 @@
 # expect complete.exp <label> <shell argv...>: TAB completes a flag, and a kind from the binary's own config.
 # - Line editors redraw only the inserted suffix, so the completed line is echoed back as words rather than read off the screen.
-# - printf '<%s>' brackets each word, which the typed command line itself never shows, in every shell including pwsh.
+# - printf '<%s>' brackets each word, which the typed command line itself never shows.
 set timeout 8
 set label [lindex $argv 0]
 log_user 0

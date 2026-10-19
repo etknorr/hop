@@ -14,7 +14,7 @@ zmodload -F zsh/files b:zf_rm 2>/dev/null
 	fi
 	local f="${TMPDIR:-/tmp}/hop.$$.$RANDOM" dir=''
 	local -i rc
-	HOP_CMDFILE=$f command hop "$@"
+	HOP_CMDFILE=$f HOP_SHELL=zsh HOP_INIT_HASH=@HASH@ command hop "$@"
 	rc=$?
 	if [[ -e $f ]]; then
 		IFS= read -r -d '' dir <"$f"
