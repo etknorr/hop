@@ -20,27 +20,6 @@ import (
 	"github.com/etknorr/hop/internal/workspace"
 )
 
-const version = "0.0.0-spike"
-
-const usage = `usage: hop [-a | -k KINDS] [-c] [-p] [--cd] [-o | -e | --action=MODE] [query...]
-       hop -w | -R [query...]
-       hop / | -
-       hop <command> [args]
-
-  hop [query...]                          jump on a clear match, else pick in fzf; with no terminal, report
-  hop init zsh|bash|fish|pwsh [--cmd NAME] print the shell function, widget and completion
-  hop rows [-k KINDS] [--root DIR] [-a]   print the rows hop's list would hold, unranked
-  hop rows -w                             workspace rows
-  hop rows -R                             repo rows
-  hop kinds                               the kind registry, * marking a default
-  hop config import [CONFIG.zsh] [-o OUT] convert zsh hop's config.zsh to TOML
-  hop config check                        load the config and report problems
-  hop config path                         print the config path hop reads
-  hop -V, -v                              version
-
-The config is $HOP_CONFIG, else ${XDG_CONFIG_HOME:-~/.config}/hop/config.toml.
-`
-
 // errUsage is exit 2, which hop also uses for a bad flag combination.
 var errUsage = errors.New("usage")
 
@@ -57,7 +36,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case err == nil:
 		return 0
 	case errors.Is(err, errUsage):
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, synopsis)
 		return 2
 	case errors.Is(err, errNoRows):
 		return 1
@@ -85,8 +64,9 @@ func argAt(a []string, i int) string {
 }
 
 // subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hop -- rows`.
+// - -h, -V and --doctor aren't here: they are cases of hop's option loop, so `hop -a -V` works as 0.3.1's does.
 var subcommands = map[string]bool{
-	"-h": true, "--help": true, "help": true, "-V": true, "-v": true, "--version": true, "init": true,
+	"init": true, "upgrade": true,
 	"rows": true, "kinds": true, "config": true, "__rows": true, "__resolve-dump": true,
 	"__sh": true, "__preview": true, "__menu": true, "__key": true, "__header": true, "__complete": true,
 }
@@ -96,12 +76,8 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 		return errUsage
 	}
 	switch args[0] {
-	case "-h", "--help", "help":
-		fmt.Fprint(stdout, usage)
-		return nil
-	case "-V", "-v", "--version":
-		fmt.Fprintln(stdout, "hop", version)
-		return nil
+	case "upgrade":
+		return exitCode(cmdUpgrade(args[1:], stdout, stderr))
 	case "rows":
 		return cmdRows(args[1:], stdout, stderr)
 	case "__rows":

@@ -31,6 +31,7 @@ type hopOpts struct {
 	all, repos, wss, here, pick bool
 	actCD, actOpen, actReveal   bool
 	actFlag, mode               string
+	info                        string
 }
 
 // parseHop is hop()'s option loop (hop.zsh:458), with its exit-2 rules.
@@ -40,6 +41,18 @@ func parseHop(args []string, stderr io.Writer) (*hopOpts, int) {
 	for len(args) > 0 {
 		a := args[0]
 		switch {
+		case a == "-h" || a == "--help":
+			o.info = "help"
+			return o, 0
+		case a == "-V" || a == "-v" || a == "--version":
+			o.info = "version"
+			return o, 0
+		case a == "--doctor" || strings.HasPrefix(a, "--doctor="):
+			o.info = a[2:]
+			if a == "--doctor" && len(args) > 1 && args[1] == "short" {
+				o.info = "doctor=short"
+			}
+			return o, 0
 		case a == "-a" || a == "--all":
 			o.all, opts = true, true
 		case a == "-R" || a == "--repos":
@@ -344,6 +357,9 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 	o, rc := parseHop(args, stderr)
 	if o == nil {
 		return rc
+	}
+	if o.info != "" {
+		return info(o.info, stdout, stderr)
 	}
 	if o.mode == "-" {
 		fmt.Fprintln(stderr, "hop: `hop -` is the shell function's own cd -; run `eval \"$(hop init zsh)\"` or your shell's equivalent")
