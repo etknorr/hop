@@ -1,0 +1,12 @@
+adservice                proj… src	@ROOT@/src/adservice	@ROOT@/src/adservice/README.md	src/adservice/
+cartservice              proj… src	@ROOT@/src/cartservice	@ROOT@/src/cartservice	src/cartservice/
+checkoutservice          proj… src	@ROOT@/src/checkoutservice	@ROOT@/src/checkoutservice/README.md	src/checkoutservice/
+currencyservice          proj… src	@ROOT@/src/currencyservice	@ROOT@/src/currencyservice/package.json	src/currencyservice/
+emailservice             proj… src	@ROOT@/src/emailservice	@ROOT@/src/emailservice/Dockerfile	src/emailservice/
+frontend                 proj… src	@ROOT@/src/frontend	@ROOT@/src/frontend/README.md	src/frontend/
+loadgenerator            proj… src	@ROOT@/src/loadgenerator	@ROOT@/src/loadgenerator/Dockerfile	src/loadgenerator/
+paymentservice           proj… src	@ROOT@/src/paymentservice	@ROOT@/src/paymentservice/package.json	src/paymentservice/
+productcatalogservice    proj… src	@ROOT@/src/productcatalogservice	@ROOT@/src/productcatalogservice/README.md	src/productcatalogservice/
+recommendationservice    proj… src	@ROOT@/src/recommendationservice	@ROOT@/src/recommendationservice/Dockerfile	src/recommendationservice/
+shippingservice          proj… src	@ROOT@/src/shippingservice	@ROOT@/src/shippingservice/README.md	src/shippingservice/
+shoppingassistantservice proj… src	@ROOT@/src/shoppingassistantservice	@ROOT@/src/shoppingassistantservice/Dockerfile	src/shoppingassistantservice/

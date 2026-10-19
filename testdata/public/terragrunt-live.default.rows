@@ -1,0 +1,5 @@
+<root>               dir 	@ROOT@	@ROOT@/README.md	./
+.github              dir 	@ROOT@/.github	@ROOT@/.github	.github/
+_envcommon           dir 	@ROOT@/_envcommon	@ROOT@/_envcommon/README.md	_envcommon/
+non-prod             dir 	@ROOT@/non-prod	@ROOT@/non-prod	non-prod/
+prod                 dir 	@ROOT@/prod	@ROOT@/prod	prod/

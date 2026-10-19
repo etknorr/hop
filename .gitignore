@@ -7,3 +7,4 @@ history
 # Go build output: scripts/build.sh writes dist/, and a local `go build -o bin/hop .` writes bin/hop.
 dist/
 bin/hop
+testdata/repos/

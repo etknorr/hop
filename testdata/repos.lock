@@ -1,0 +1,4 @@
+# name	url	commit	kind its golden exercises, beside the zero-config default set
+microservices-demo	https://github.com/GoogleCloudPlatform/microservices-demo	38e7348eb289eb5b87c0c6e8cb19ced0449dc389	project
+terragrunt-live	https://github.com/gruntwork-io/terragrunt-infrastructure-live-example	d106b47ad1e22cae3a841cd495eae48e9bbe3a03	tg
+helm-charts	https://github.com/prometheus-community/helm-charts	70e7805d8592cbb6fe12032a0c82ed9b0cd9aa87	helm
