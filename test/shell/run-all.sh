@@ -2,7 +2,8 @@
 # run-all.sh: builds hop for the host and linux, then runs the shell checks in zsh, bash 5, bash 3.2, fish and pwsh.
 # - Each shell gets a fresh fixture, a clean environment, and its own history and temp dir.
 # - cd.* runs with no terminal; pick.* runs under script(1), which gives it one.
-# - fish and pwsh run in docker (test/docker), since neither is on the host.
+# - fish and pwsh run in docker, since neither is on the host: `docker build -f test/docker/Dockerfile.fish -t hop-test-fish test/docker`,
+#   and the same for pwsh. NO_DOCKER=1 runs the host shells only.
 # - Prints one PASS, FAIL or XFAIL line per case, then a count per shell; exits 1 on any FAIL.
 emulate -L zsh
 setopt pipe_fail
