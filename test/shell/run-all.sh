@@ -41,10 +41,11 @@ ttyrun() {
 }
 
 # fxenv <fixture>: reply is the scrubbed environment every host shell runs in.
+# - DISPLAY, because on Linux the code verbs won't start VS Code without one, and cd-then-fail needs the stub to run.
 fxenv() {
 	local fx=$1
 	reply=(env -i HOME="$fx/home" PATH="$B/host:$fx/stub:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin" LANG=en_US.UTF-8
-		TERM=xterm-256color TMPDIR="$fx/tmp/" HOP_T="$fx" HOP_CONFIG="$fx/config.toml" HOP_HISTFILE="$fx/tmp/hist" HOP_FZF_HEIGHT=
+		TERM=xterm-256color DISPLAY=:0 TMPDIR="$fx/tmp/" HOP_T="$fx" HOP_CONFIG="$fx/config.toml" HOP_HISTFILE="$fx/tmp/hist" HOP_FZF_HEIGHT=
 		ZDOTDIR="$T/rc")
 }
 
