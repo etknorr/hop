@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
+	"github.com/etknorr/hop/internal/config"
 	"github.com/etknorr/hop/internal/rows"
 	"github.com/etknorr/hop/internal/workspace"
 )
@@ -28,27 +30,15 @@ func previewDoc(dir string) string {
 	return dir
 }
 
-// previewHelm is _hop_preview_helm: a runbook, the chart, its values, a subchart, any YAML, a README.
-func previewHelm(dir string) string {
-	if p := firstFile(dir, "docs/playbooks.md", "Chart.yaml", "values.yaml"); p != "" {
-		return p
-	}
-	if c := zglob(dir, "charts/*/Chart.yaml"); len(c) > 0 {
-		return c[0]
-	}
-	if c := zglob(dir, "*.y*ml"); len(c) > 0 {
-		return c[0]
-	}
-	if p := firstFile(dir, "README.md"); p != "" {
-		return p
-	}
-	return dir
-}
+var dirSkip = []string{"target", "tmp"}
 
-var dirSkip = map[string]bool{"target": true, "tmp": true}
-
-// builtinDir is _hop_provider_dir: the root plus every top-level tracked directory.
-func (e *Engine) builtinDir() []rows.Row {
+// builtinDir is _hop_provider_dir: the root plus every top-level tracked directory not in the kind's skip.
+// - With no preview set it keeps _hop_preview_doc's -f test, which a declared preview chain loosens to -s.
+func (e *Engine) builtinDir(k *config.Kind) []rows.Row {
+	skip := k.Skip
+	if skip == nil {
+		skip = dirSkip
+	}
 	rs := []rows.Row{rows.New("dir", "-", "-", "-", "<root>", e.Root, "", false)}
 	if ls, ok := e.ls(); ok {
 		seen := map[string]bool{}
@@ -62,7 +52,7 @@ func (e *Engine) builtinDir() []rows.Row {
 				continue
 			}
 			seen[top] = true
-			if dirSkip[top] {
+			if slices.Contains(skip, top) {
 				continue
 			}
 			dir := e.Root + "/" + top
@@ -72,56 +62,10 @@ func (e *Engine) builtinDir() []rows.Row {
 			rs = append(rs, rows.New("dir", "-", "-", "-", top, dir, "", false))
 		}
 	}
+	if k.Preview != nil {
+		return withPreviews(rs, func(dir string) string { return previewFor(dir, k) })
+	}
 	return withPreviews(rs, previewDoc)
-}
-
-// builtinHelm is _hop_provider_helm: chart, values and app families, each probed rather than assumed.
-func (e *Engine) builtinHelm() []rows.Row {
-	root := e.Root
-	var rs []rows.Row
-	var dirRows []rows.Row
-	for _, fam := range []string{"kubernetes/values", "services", "charts"} {
-		if !isDir(root + "/" + fam) {
-			continue
-		}
-		kids, ok := e.childDirs(fam, 1)
-		if !ok {
-			continue
-		}
-		for _, child := range kids {
-			dirRows = append(dirRows, rows.New("helm", fam, "-", "-", child, root+"/"+fam+"/"+child, "", false))
-		}
-	}
-	rs = append(rs, withPreviews(dirRows, previewHelm)...)
-	if isDir(root + "/kubernetes/charts") {
-		if ls, ok := e.ls(":(glob)kubernetes/charts/**/Chart.yaml"); ok {
-			for _, rel := range ls {
-				name := strings.TrimSuffix(strings.TrimPrefix(rel, "kubernetes/charts/"), "/Chart.yaml")
-				rs = append(rs, rows.New("helm", "kubernetes/charts", "-", "-", name, root+"/"+zHead(rel), root+"/"+rel, false))
-			}
-		}
-	}
-	if isDir(root + "/kubernetes/services") {
-		if ls, ok := e.ls(":(glob)kubernetes/services/**/*.yaml"); ok {
-			for _, rel := range ls {
-				if strings.Contains(rel, "/tests/") {
-					continue
-				}
-				name := strings.TrimSuffix(strings.TrimPrefix(rel, "kubernetes/services/"), ".yaml")
-				rs = append(rs, rows.New("helm", "kubernetes/services", "-", "-", name, root+"/"+zHead(rel), root+"/"+rel, true))
-			}
-		}
-	}
-	capps := "cluster-apps/charts/cluster-apps/templates"
-	if isDir(root + "/" + capps) {
-		if ls, ok := e.ls(":(glob)" + capps + "/*.yaml"); ok {
-			for _, rel := range ls {
-				name := strings.TrimSuffix(path.Base(rel), ".yaml")
-				rs = append(rs, rows.New("helm", "cluster-apps", "-", "-", name, root+"/"+capps, root+"/"+rel, true))
-			}
-		}
-	}
-	return rs
 }
 
 // RepoRows is _hop_provider_repo: one row per existing repo dir, rendered with no root so rel is ~-relative.

@@ -1,5 +1,0 @@
-[[kind]]
-name = "serverless"
-desc = "lambda deployables"
-dirs = ["serverless"]
-preview = ["serverless.yml", "serverless.yaml", "template.yaml", "requirements.txt", "README.md"]

@@ -1,0 +1,9 @@
+# Terraform modules: a dir holding main.tf or variables.tf, outermost only, so a module's examples stay inside it.
+[[kind]]
+name = "mod"
+desc = "terraform modules"
+default = true
+marker = ["main.tf", "variables.tf"]
+nested = false
+exclude = ["(*/|).terraform/*", "(*/|).terragrunt-cache/*"]
+preview = ["README.md", "main.tf", "*.tf"]

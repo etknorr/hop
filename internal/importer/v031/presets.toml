@@ -1,0 +1,109 @@
+# zsh hop 0.3.1's eight presets, frozen for hop import, which inlines them so an imported config keeps 0.3.1's rows.
+# - Never edit these to change a recipe: config/recipes holds what a new config gets.
+# - helm was the builtin _hop_provider_helm; its four families are written out as sources, row for row.
+# - env_colors is 0.3.1's colour table (lib/providers.zsh:161), which every import writes into [settings].
+
+env_colors = { prod = ["prod"], staging = ["staging"], dev = ["dev", "playground"] }
+
+[[preset]]
+name = "terragrunt"
+
+  [[preset.kind]]
+  name = "tg"
+  desc = "terragrunt units"
+  default = true
+  marker = "terragrunt.hcl"
+  under = "terraform"
+  layout = ["scope,env,region,name...", "scope,name..."]
+  preview = ["main.tf", "*.tf", "terragrunt.hcl", "README.md"]
+  preview_skip = ["provider_*.tf", "variables_defaults.tf", "versions_override.tf"]
+
+[[preset]]
+name = "terraform-modules"
+
+  [[preset.kind]]
+  name = "mod"
+  desc = "terraform modules"
+  default = true
+  dirs = ["terraform/modules"]
+  depth = 2
+  preview = ["main.tf", "*.tf", "terragrunt.hcl", "README.md"]
+  preview_skip = ["provider_*.tf", "variables_defaults.tf", "versions_override.tf"]
+
+[[preset]]
+name = "helm"
+
+  [[preset.kind]]
+  name = "helm"
+  desc = "helm charts, values and apps"
+  default = true
+
+    [[preset.kind.source]]
+    dirs = ["kubernetes/values", "services", "charts"]
+    preview = ["docs/playbooks.md", "Chart.yaml", "values.yaml", "charts/*/Chart.yaml", "*.y*ml", "README.md"]
+
+    [[preset.kind.source]]
+    marker = "Chart.yaml"
+    under = "kubernetes/charts"
+    layout = ["name..."]
+    scope = "kubernetes/charts"
+    preview = ["Chart.yaml"]
+
+    [[preset.kind.source]]
+    files = ["kubernetes/services/**/*.yaml"]
+    under = "kubernetes/services"
+    exclude = ["*/tests/*"]
+    strip_ext = true
+    layout = ["name..."]
+    scope = "kubernetes/services"
+
+    [[preset.kind.source]]
+    files = ["cluster-apps/charts/cluster-apps/templates/*.yaml"]
+    under = "cluster-apps/charts/cluster-apps/templates"
+    strip_ext = true
+    scope = "cluster-apps"
+
+[[preset]]
+name = "serverless"
+
+  [[preset.kind]]
+  name = "serverless"
+  desc = "lambda deployables"
+  dirs = ["serverless"]
+  preview = ["serverless.yml", "serverless.yaml", "template.yaml", "requirements.txt", "README.md"]
+
+[[preset]]
+name = "puppet"
+
+  [[preset.kind]]
+  name = "puppet"
+  desc = "puppet modules"
+  dirs = ["modules"]
+  preview = ["README.md", "README", "CLAUDE.md"]
+
+[[preset]]
+name = "backstage"
+
+  [[preset.kind]]
+  name = "backstage"
+  desc = "catalog entities"
+  files = ["backstage/*.yaml"]
+  scope = "backstage"
+  name_from = "yaml:metadata.name"
+
+[[preset]]
+name = "dir"
+
+  [[preset.kind]]
+  name = "dir"
+  desc = "repo root and top-level dirs"
+  default = true
+  builtin = "dir"
+
+[[preset]]
+name = "file"
+
+  [[preset.kind]]
+  name = "file"
+  desc = "every tracked file"
+  files = ["**"]

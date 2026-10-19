@@ -175,6 +175,9 @@ func (c *Config) applyEnv() {
 	if v, ok := os.LookupEnv("HOP_DEBUG"); ok {
 		s.Debug = v != ""
 	}
+	if os.Getenv("HOP_HOPRC") != "" && os.Getenv("HOP_SESSION") == "" {
+		c.Warnings = append(c.Warnings, "hop: HOP_HOPRC is set, but hop no longer reads a repo's .hoprc; declare its kinds in "+Path())
+	}
 	if v := os.Getenv("HOP_HIST_MAX"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			s.HistMax = n

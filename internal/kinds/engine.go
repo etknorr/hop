@@ -322,38 +322,107 @@ func (e *Engine) emitFiles(k *config.Kind) []rows.Row {
 	return rs
 }
 
+// markerTail is the part of rel that one of k's markers matched, such as Chart.yaml or manifests/init.pp.
+func markerTail(rel string, markers []string) (string, bool) {
+	segs := strings.Split(rel, "/")
+	for _, m := range markers {
+		n := strings.Count(m, "/") + 1
+		if len(segs) < n {
+			continue
+		}
+		tail := strings.Join(segs[len(segs)-n:], "/")
+		if mt, err := gitls.Compile(m); err == nil && mt.Match(tail) {
+			return tail, true
+		}
+	}
+	return "", false
+}
+
+// emitMarker is _hop_dsl_emit's marker shape: one row per dir holding any of the kind's markers.
+// - p keeps dsl.zsh's ${rel%/$marker}, which leaves a root-level marker's own name, so a root row is named after its marker.
+// - min_depth and nested read the real dir instead, and nested runs after min_depth and exclude.
 func (e *Engine) emitMarker(k *config.Kind) []rows.Row {
-	spec := "**/" + k.Marker
+	prefix := ""
 	if k.Under != "" {
 		if !isDir(e.Root + "/" + k.Under) {
 			return nil
 		}
-		spec = k.Under + "/**/" + k.Marker
+		prefix = k.Under + "/"
 	}
-	ls, ok := e.ls(spec)
+	specs := make([]string, len(k.Marker))
+	for i, m := range k.Marker {
+		specs[i] = prefix + "**/" + m
+	}
+	ls, ok := e.ls(specs...)
 	if !ok {
 		return nil
 	}
-	var rs []rows.Row
+	type hit struct{ dir, p string }
+	var hits []hit
+	seen := map[string]bool{}
 	for _, rel := range ls {
 		if excluded(k, rel) {
 			continue
 		}
-		p := strings.TrimSuffix(rel, "/"+k.Marker)
-		if k.Under != "" {
-			p = strings.TrimPrefix(p, k.Under+"/")
-		}
-		c, ok := columns(k, p)
+		tail, ok := markerTail(rel, k.Marker)
 		if !ok {
 			continue
 		}
-		dir := zHead(e.Root + "/" + rel)
+		dir := strings.TrimSuffix(strings.TrimSuffix(rel, tail), "/")
+		if seen[dir] {
+			continue
+		}
+		if k.MinDepth > 0 {
+			below := dir
+			if k.Under != "" {
+				below = strings.TrimPrefix(strings.TrimPrefix(dir, k.Under), "/")
+			}
+			if len(config.SplitNonEmpty(below, "/")) < k.MinDepth {
+				continue
+			}
+		}
+		seen[dir] = true
+		p := strings.TrimSuffix(rel, "/"+tail)
+		if k.Under != "" {
+			p = strings.TrimPrefix(p, prefix)
+		}
+		hits = append(hits, hit{dir, p})
+	}
+	var rs []rows.Row
+	for _, h := range hits {
+		if !k.Nested && insideAnother(h.dir, seen) {
+			continue
+		}
+		c, ok := columns(k, h.p)
+		if !ok {
+			continue
+		}
+		dir := e.Root
+		if h.dir != "" {
+			dir += "/" + h.dir
+		}
 		rs = append(rs, rows.New(k.Name, orDefault(k.Scope, c.scope), c.env, c.region, c.name, dir, "", false))
 	}
 	return withPreviews(rs, func(dir string) string { return previewFor(dir, k) })
 }
 
-// Emit returns one kind's rows, whatever its shape.
+// insideAnother reports whether a strict ancestor of dir, the root ("") included, is also a match.
+func insideAnother(dir string, matches map[string]bool) bool {
+	if dir == "" {
+		return false
+	}
+	if matches[""] {
+		return true
+	}
+	for i := len(dir) - 1; i > 0; i-- {
+		if dir[i] == '/' && matches[dir[:i]] {
+			return true
+		}
+	}
+	return false
+}
+
+// Emit returns one kind's rows, whatever its shape; a kind with sources emits them source by source, in order.
 func (e *Engine) Emit(k *config.Kind) []rows.Row {
 	switch k.Shape {
 	case "dirs":
@@ -362,12 +431,15 @@ func (e *Engine) Emit(k *config.Kind) []rows.Row {
 		return e.emitFiles(k)
 	case "marker":
 		return e.emitMarker(k)
+	case "sources":
+		var rs []rows.Row
+		for _, s := range k.Sources {
+			rs = append(rs, e.Emit(s)...)
+		}
+		return rs
 	case "builtin":
-		switch k.Builtin {
-		case "dir":
-			return e.builtinDir()
-		case "helm":
-			return e.builtinHelm()
+		if k.Builtin == "dir" {
+			return e.builtinDir(k)
 		}
 	case "exec":
 		rs, err := e.emitExec(k)

@@ -63,7 +63,7 @@ func TestGoldenRows(t *testing.T) {
 		t.Run(k, func(t *testing.T) {
 			golden := testdata("golden/" + k + ".rows")
 			if *update {
-				out, err := testfix.Zsh(testdata("fixture.zsh"), `_hop_generate "$1" "$2"`, nil, root, k)
+				out, err := testfix.Zsh(testdata("fixture-fn.zsh"), `_hop_generate "$1" "$2"`, nil, root, k)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -92,7 +92,7 @@ func TestLiveZsh(t *testing.T) {
 	}
 	root, cfg := fixture(t)
 	kinds := cfg.AllKinds()
-	want, err := testfix.Zsh(testdata("fixture.zsh"), `r=$1; shift; _hop_generate "$r" "$@"`, nil, append([]string{root}, kinds...)...)
+	want, err := testfix.Zsh(testdata("fixture-fn.zsh"), `r=$1; shift; _hop_generate "$r" "$@"`, nil, append([]string{root}, kinds...)...)
 	if err != nil {
 		t.Fatal(err)
 	}

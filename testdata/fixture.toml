@@ -1,6 +1,58 @@
-# hop config, imported from @TESTDATA@/fixture.zsh by `hop config import`.
+# hop config, imported from @TESTDATA@/fixture.zsh by `hop import`.
+# Every kind is written out in full, so no recipe change can move these rows.
 version = 1
-presets = ['dir', 'file', 'helm', 'backstage']
+recipes = []
+
+[settings]
+env_colors = { prod = ['prod'], staging = ['staging'], dev = ['dev', 'playground'] }
+
+[[kind]]
+name = 'dir'
+desc = 'repo root and top-level dirs'
+default = true
+builtin = 'dir'
+
+[[kind]]
+name = 'file'
+desc = 'every tracked file'
+files = ['**']
+
+[[kind]]
+name = 'helm'
+desc = 'helm charts, values and apps'
+default = true
+
+  [[kind.source]]
+  dirs = ['kubernetes/values', 'services', 'charts']
+  preview = ['docs/playbooks.md', 'Chart.yaml', 'values.yaml', 'charts/*/Chart.yaml', '*.y*ml', 'README.md']
+
+  [[kind.source]]
+  marker = 'Chart.yaml'
+  under = 'kubernetes/charts'
+  layout = ['name...']
+  scope = 'kubernetes/charts'
+  preview = ['Chart.yaml']
+
+  [[kind.source]]
+  files = ['kubernetes/services/**/*.yaml']
+  under = 'kubernetes/services'
+  layout = ['name...']
+  strip_ext = true
+  exclude = ['*/tests/*']
+  scope = 'kubernetes/services'
+
+  [[kind.source]]
+  files = ['cluster-apps/charts/cluster-apps/templates/*.yaml']
+  under = 'cluster-apps/charts/cluster-apps/templates'
+  strip_ext = true
+  scope = 'cluster-apps'
+
+[[kind]]
+name = 'backstage'
+desc = 'catalog entities'
+files = ['backstage/*.yaml']
+name_from = 'yaml:metadata.name'
+scope = 'backstage'
 
 [[kind]]
 name = 'tg'
@@ -75,7 +127,9 @@ desc = 'odd names'
 files = ['odd/**', '[.]rootdot']
 exclude = ['odd/skip*']
 
+# Not imported: fixture-fn.zsh's --fn provider, which hop runs as fx.sh.
+
 [[kind]]
 name = 'fx'
 desc = 'a user provider'
-exec = ['zsh', '-fc', 'source "$HOP_COMPAT" && source "$1" && "$2" "$HOP_ROOT"', 'hop-compat', '@TESTDATA@/fixture.zsh', '_hop_provider_fx']
+exec = ['sh', '@TESTDATA@/fx.sh']

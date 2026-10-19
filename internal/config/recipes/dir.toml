@@ -1,0 +1,6 @@
+# The repo root plus every top-level tracked dir, which is what gets you back out of a deep one.
+[[kind]]
+name = "dir"
+desc = "repo root and top-level dirs"
+default = true
+builtin = "dir"

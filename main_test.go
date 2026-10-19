@@ -100,7 +100,7 @@ func TestConfigImportWritesOnlyWhereTold(t *testing.T) {
 		t.Error("stdout and -o output differ")
 	}
 	t.Setenv("HOP_CONFIG", out)
-	if o, _, rc := runHop(t, "config", "check"); rc != 0 || !strings.Contains(o, "15 kinds") {
+	if o, _, rc := runHop(t, "config", "check"); rc != 0 || !strings.Contains(o, "14 kinds") {
 		t.Errorf("check: rc %d %q", rc, o)
 	}
 }

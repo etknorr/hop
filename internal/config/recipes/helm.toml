@@ -1,0 +1,7 @@
+# Helm charts: any dir holding a Chart.yaml, subcharts included.
+[[kind]]
+name = "helm"
+desc = "helm charts"
+default = true
+marker = "Chart.yaml"
+preview = ["Chart.yaml", "values.yaml", "README.md"]

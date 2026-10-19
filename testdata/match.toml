@@ -1,6 +1,55 @@
-# hop config, imported from testdata/match.zsh by `hop config import`.
+# hop config, imported from testdata/match.zsh by `hop import`.
+# Every kind is written out in full, so no recipe change can move these rows.
 version = 1
-presets = ['helm', 'terraform-modules', 'dir']
+recipes = []
+
+[settings]
+env_colors = { prod = ['prod'], staging = ['staging'], dev = ['dev', 'playground'] }
+
+[[kind]]
+name = 'helm'
+desc = 'helm charts, values and apps'
+default = true
+
+  [[kind.source]]
+  dirs = ['kubernetes/values', 'services', 'charts']
+  preview = ['docs/playbooks.md', 'Chart.yaml', 'values.yaml', 'charts/*/Chart.yaml', '*.y*ml', 'README.md']
+
+  [[kind.source]]
+  marker = 'Chart.yaml'
+  under = 'kubernetes/charts'
+  layout = ['name...']
+  scope = 'kubernetes/charts'
+  preview = ['Chart.yaml']
+
+  [[kind.source]]
+  files = ['kubernetes/services/**/*.yaml']
+  under = 'kubernetes/services'
+  layout = ['name...']
+  strip_ext = true
+  exclude = ['*/tests/*']
+  scope = 'kubernetes/services'
+
+  [[kind.source]]
+  files = ['cluster-apps/charts/cluster-apps/templates/*.yaml']
+  under = 'cluster-apps/charts/cluster-apps/templates'
+  strip_ext = true
+  scope = 'cluster-apps'
+
+[[kind]]
+name = 'mod'
+desc = 'terraform modules'
+default = true
+dirs = ['terraform/modules']
+depth = 2
+preview = ['main.tf', '*.tf', 'terragrunt.hcl', 'README.md']
+preview_skip = ['provider_*.tf', 'variables_defaults.tf', 'versions_override.tf']
+
+[[kind]]
+name = 'dir'
+desc = 'repo root and top-level dirs'
+default = true
+builtin = 'dir'
 
 [[kind]]
 name = 'tg'

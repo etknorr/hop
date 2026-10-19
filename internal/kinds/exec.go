@@ -2,8 +2,6 @@ package kinds
 
 import (
 	"context"
-	"crypto/sha256"
-	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,26 +13,6 @@ import (
 	"github.com/etknorr/hop/internal/config"
 	"github.com/etknorr/hop/internal/rows"
 )
-
-//go:embed compat.zsh
-var compatZsh []byte
-
-// CompatPath materialises the embedded compat.zsh once per content, so an imported --fn kind can source it.
-func CompatPath() string {
-	dir := os.Getenv("XDG_CACHE_HOME")
-	if dir == "" {
-		dir = filepath.Join(os.Getenv("HOME"), ".cache")
-	}
-	p := filepath.Join(dir, "hop", fmt.Sprintf("compat-%x.zsh", sha256.Sum256(compatZsh))[:20]+".zsh")
-	if _, err := os.Stat(p); err != nil {
-		os.MkdirAll(filepath.Dir(p), 0o755)
-		tmp := p + fmt.Sprintf(".%d", os.Getpid())
-		if os.WriteFile(tmp, compatZsh, 0o644) == nil {
-			os.Rename(tmp, p)
-		}
-	}
-	return p
-}
 
 // emitExec runs a provider command in the repo root and reads its rows.
 // - Protocol, one row per line: name TAB path [TAB preview [TAB scope [TAB env [TAB region]]]].
@@ -52,7 +30,7 @@ func (e *Engine) emitExec(k *config.Kind) ([]rows.Row, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = root
 	cmd.Stderr = e.Stderr
-	cmd.Env = append(os.Environ(), "HOP_ROOT="+root, "HOP_KIND="+k.Name, "HOP_COMPAT="+CompatPath())
+	cmd.Env = append(os.Environ(), "HOP_ROOT="+root, "HOP_KIND="+k.Name)
 	out, err := cmd.Output()
 	var rs []rows.Row
 	for _, line := range strings.Split(string(out), "\n") {

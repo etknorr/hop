@@ -1,0 +1,6 @@
+# Puppet modules: the row is the dir holding manifests/init.pp.
+[[kind]]
+name = "puppet"
+desc = "puppet modules"
+marker = "manifests/init.pp"
+preview = ["README.md", "manifests/init.pp", "metadata.json"]

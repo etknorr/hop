@@ -1,0 +1,10 @@
+# Terragrunt units: any dir holding a terragrunt.hcl, wherever the repo keeps them.
+# - min_depth = 1 drops a root terragrunt.hcl, which is a shared include rather than a unit.
+[[kind]]
+name = "tg"
+desc = "terragrunt units"
+default = true
+marker = "terragrunt.hcl"
+min_depth = 1
+exclude = ["(*/|).terragrunt-cache/*"]
+preview = ["terragrunt.hcl", "main.tf", "*.tf", "README.md"]

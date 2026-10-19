@@ -1,6 +1,0 @@
-# One kind spanning four directory shapes, so it is a Go builtin rather than a declaration.
-[[kind]]
-name = "helm"
-desc = "helm charts, values and apps"
-default = true
-builtin = "helm"

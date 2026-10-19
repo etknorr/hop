@@ -1,5 +1,0 @@
-[[kind]]
-name = "dir"
-desc = "repo root and top-level dirs"
-default = true
-builtin = "dir"
