@@ -1,70 +1,71 @@
 # Contributing to hop
 
-`hop` is a zsh function, not a binary, so a change here lands directly in someone's interactive
-shell. That makes the bar "does not break a live terminal", not just "passes CI".
+`hop` is a Go binary plus a small shell function it prints, and the function runs in someone's
+interactive shell. That makes the bar "does not break a live terminal", not just "passes CI".
 
-## Running the suite
+## Running the tests
 
-```zsh
-tests/run
+```sh
+go vet ./... && go test ./...
+test/shell/run-all.sh
 ```
 
-The suite is headless and hermetic: it builds synthetic fixture repos rather than reading your
-real checkouts, and it stubs every external command so a test can never open an editor window or
-a browser tab. Run a subset with a pattern, matched against suite filenames first and test names
-second:
+`go test` is hermetic: every package runs in a temp `HOME` with the inherited `HOP_*` and `FZF_*`
+variables unset, builds synthetic fixture repos, and stubs every external command, so a test can
+never open an editor window or a browser tab or write your history. It needs `fzf` and `git`; the
+tests that compare against zsh hop 0.3.1 also need `zsh`, and read 0.3.1 from the `v0.3.1` tag, so
+fetch tags first. `pty_test.go` drives the real picker on a pseudo-terminal. Run it on fzf 0.60.3,
+the floor, as well as your own, by putting an fzf 0.60.3 first on `PATH`.
 
-```zsh
-tests/run dsl
-tests/run 'kind menu'
+`test/shell/run-all.sh` runs the shell function, widget and completion in zsh, bash 5, macOS
+`/bin/bash` 3.2 and fish. fish runs in docker unless it's on the host or `NO_DOCKER=1` is set.
+
+What can't be asserted, such as how the header wraps at 80 columns, is a manual check in
+[docs/SMOKE.md](docs/SMOKE.md). Walk through it after touching `internal/keymap`, `internal/pick`
+or the levels in `hop.go`.
+
+New behaviour needs a test. If it can only be checked by hand, add it to `docs/SMOKE.md` instead of
+skipping it.
+
+## Parity with zsh hop
+
+`test/parity/` compares this hop with an installed zsh hop 0.3.1 on a real repo, row for row and
+jump for jump. Run it after changing `internal/resolve`, `internal/kinds` or `internal/rows`:
+
+```sh
+export HOP_PARITY_HOME=<zsh hop 0.3.1 checkout> HOP_PARITY_REPO=<repo> HOP_PARITY_CONFIG=<its config.toml>
+test/parity/rows.sh && test/parity/resolve.sh && test/parity/e2e.sh
 ```
-
-Nothing in `tests/` may launch interactive `fzf` — `fzf --filter` is the only permitted mode,
-because a real fzf process blocks on `/dev/tty` and hangs a headless run. Anything that genuinely
-needs a terminal is a manual check in [SMOKE.md](SMOKE.md), not a test. Run through SMOKE.md after
-touching `lib/ui.zsh`, `bin/hop-kinds`, or the keymap; nothing else exercises the modal layer.
-
-New behaviour needs a test in `tests/`. If it can only be checked by hand, add it to SMOKE.md
-instead of skipping it.
 
 ## House style
 
-- **TAB indent**, everywhere except `completions/_hop`, which follows zsh's own completion-function
-  convention of 2-space indent. `.editorconfig` encodes both.
-- **`emulate -L zsh` as the first line of every function.** Without it, a function inherits
-  whatever options the caller's shell happens to have set, which is exactly the kind of bug that
-  only reproduces in someone else's `.zshrc`.
-- **Quote every expansion.** `"$var"`, `"${arr[@]}"`, `"$(cmd)"`. An unquoted expansion is a
-  word-splitting bug waiting for a path with a space in it.
-- **One idea per comment line, and never wrap a comment to a column limit.** Break a comment where
-  the thought breaks, not where a line-length rule says to. A `# - ` bulleted list of short, related
-  points is fine; two consecutive prose sentences crammed onto one line, or one sentence sliced
-  across two lines to fit a column, are not.
-- Match the file you're editing. `lib/dsl.zsh`, `lib/ui.zsh`, and the presets are the clearest
-  examples of the conventions above in practice.
+- `gofmt`, and `go vet` clean.
+- No comment unless it names a constraint, a trap or a non-obvious reason. One idea per comment
+  line; a `// - ` list of short related points is fine.
+- No new dependencies beyond `github.com/BurntSushi/toml`, `golang.org/x/sys` and
+  `golang.org/x/term`.
+- The shell scripts in `internal/shell/init` and `test/` use TAB indents; `.editorconfig` encodes it.
 
 ## Commit messages
 
-**One line, subject only, no body.** If the change does not fit on one line, it is more than one
-commit. Match the repo's existing `git log` style; there is no ticket system wired into this repo,
-so commit subjects never carry an issue reference.
+One line, subject only, no body. If the change doesn't fit on one line, it is more than one commit.
+Match the repo's `git log` style; commit subjects never carry an issue reference.
 
 ## Adding a kind
 
-Nearly every family you'd want to navigate is one of the shapes `hop_kind` already knows: `--dirs`,
-`--files`, or `--marker`. Declare it in `$HOP_CONFIG` (`~/.config/hop/config.zsh` by default) —
-see [Configuring kinds](README.md#configuring-kinds) in the README for the full option table and
-worked examples. A family too irregular for the three shapes gets `--fn` and a hand-written
-provider function in `lib/providers.zsh`, which is still a first-class kind everywhere: `--help`,
-the `:` menu, and completions.
+Nearly every family you'd want to navigate is one of the shapes a kind already has: `dirs`, `files`
+or `marker`, alone or combined as `[[kind.source]]` tables. Declare it in your own
+`~/.config/hop/config.toml`; [Configuring kinds](README.md#configuring-kinds) has the option table
+and worked examples. A family too irregular for those gets an `exec` kind, a command that prints the
+rows.
 
-Patching the code to add a repo-specific kind is a sign the declaration belongs in your own
-`config.zsh` instead — nothing repo-specific should ship in `hop` itself.
+Patching the code to add a repo-specific kind is a sign the declaration belongs in your own config.
+Nothing repo-specific ships in hop itself, and a recipe in `internal/config/recipes` has to be
+useful in repos you've never seen.
 
 ## Before opening a pull request
 
-- `tests/run` is green.
-- Any change to `lib/ui.zsh`, `bin/hop-kinds`, or the keymap has been walked through
-  [SMOKE.md](SMOKE.md) by hand.
-- New behaviour has a test in `tests/`, or a documented reason it can't.
-- Any change to `lib/match.zsh` passes `HOP_TEST_REPO=<a real checkout> zsh tests/eval_real.zsh`.
+- `go vet ./...`, `gofmt` and `go test ./...` are clean, and so is `test/shell/run-all.sh`.
+- Any change to the keymap, the picker or the levels has been walked through
+  [docs/SMOKE.md](docs/SMOKE.md) by hand.
+- New behaviour has a test, or a stated reason it can't.

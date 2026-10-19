@@ -6,9 +6,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before requesting a new kind *shape*, check whether `--dirs`, `--files`, `--marker`, or
-        `--fn` in your own `config.zsh` already covers it — most repo-specific navigation belongs
-        there, not in hop itself. See the README's "Configuring kinds" section.
+        Before requesting a new kind *shape*, check whether `dirs`, `files`, `marker`, a
+        `[[kind.source]]` list or an `exec` kind in your own `config.toml` already covers it. Most
+        repo-specific navigation belongs there, not in hop itself. See the README's "Configuring
+        kinds" section.
 
   - type: textarea
     id: problem
@@ -22,7 +23,7 @@ body:
     id: proposal
     attributes:
       label: Proposed behaviour
-      description: What would the new command, flag, or hop_kind option do? A worked example (a config snippet or a keystroke sequence) is more useful than a description.
+      description: What would the new command, flag, or kind option do? A worked example (a config snippet or a keystroke sequence) is more useful than a description.
     validations:
       required: true
 
@@ -30,6 +31,6 @@ body:
     id: alternatives
     attributes:
       label: What have you tried instead?
-      description: Existing hop_kind options, config, or workarounds you've already ruled out.
+      description: Existing kind options, config, or workarounds you've already ruled out.
     validations:
       required: false

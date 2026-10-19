@@ -4,7 +4,7 @@
 
 ## Tests
 
-- [ ] `tests/run` is green.
-- [ ] New behaviour has a test in `tests/`, or this PR explains why it can't.
-- [ ] N/A, or: this touches `lib/ui.zsh`, `bin/hop-kinds`, or the keymap, and I re-ran
-      [SMOKE.md](../SMOKE.md) by hand.
+- [ ] `go vet ./...` and `go test ./...` are green.
+- [ ] New behaviour has a test, or this PR explains why it can't.
+- [ ] N/A, or: this touches `internal/keymap`, `internal/pick` or the levels in `hop.go`, and I re-ran
+      [docs/SMOKE.md](../docs/SMOKE.md) by hand.
