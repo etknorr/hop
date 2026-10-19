@@ -1,0 +1,65 @@
+--- hop --doctor ---
+
+install
+  version                1.0.0 (abc1234)
+  method                 checkout at /src/hop
+  binary                 /src/hop/bin/hop
+  shell                  zsh, but its integration predates this hop: run 'exec zsh'
+
+config
+  HOP_CONFIG             ~/.config/hop/config.toml (default, readable)
+  warning                action "bogus" is not one of cd, open, reveal, cd+open, cd+reveal; using cd
+  HOP_WORKSPACES_FILE    ~/.config/hop/workspaces (default, readable)
+  HOP_HISTFILE           ~/.local/state/hop/history (default, MISSING)
+  HOP_HIST_MAX           50 (config)
+  HOP_DEFAULT_KINDS      unset, so each kind's own default
+  HOP_VIM                on (default)
+  HOP_ACTION             bogus (env), so Enter cds
+  HOP_JUMP               auto (default)
+  HOP_CODE               ~/bin/code (env)
+  VS Code reachable      no, ~/bin/code is not runnable
+  HOP_CLIPBOARD          unset, so the first of pbcopy, wl-copy, xclip, xsel, clip.exe
+  HOP_FZF_HEIGHT         80% (default)
+  HOP_HOPRC              unset
+  HOP_REPOS              unset, derived from workspaces
+  HOP_DEBUG              unset
+  HOP_DEBUG_LOG          ~/.local/state/hop/debug.log (default, readable)
+
+tools
+  fzf      0.60.3 (stub)
+  git      git version 2.0.0 (stub)
+  gh       gh version 2.0.0 (stub)
+  bat      bat 0.24.0
+  code     1.100.0
+  zsh      NOT INSTALLED
+
+terminal
+  TERM                   xterm-test
+  COLUMNS                100
+  completions            loaded by hop init zsh
+
+where you are
+  PWD                    ~/code/repo
+  git toplevel           ~/code/repo
+  workspace for PWD      ~/code
+
+workspaces
+  zzsentinelws           ~/code
+
+kinds, with row counts here
+  * zzsentinelkind       1  dirs     the sentinel
+    dir               4  builtin  repo root and top-level dirs
+  (* is in the default set)
+  recipes available: dir project file
+  recipes loaded:    none
+
+keys people mix up
+  l / ctrl-l    go INTO the thing under the cursor (workspace -> repos -> targets)
+  h / ctrl-h    come back OUT a level
+  b / ctrl-g    open on your git host, NOT navigation
+  ^G / alt-g    launch hop from the shell prompt
+
+last 15 debug lines (~/.local/state/hop/debug.log)
+  2026-10-19T10:00:00 pick label=repo rows=3 query= st=0
+  2026-10-19T10:00:01 dispatch key=enter dir=~/code/repo/alpha preview= rel=alpha
+--- end ---
