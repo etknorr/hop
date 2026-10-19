@@ -111,7 +111,7 @@ echo "== end to end through the shell function, auto, every ${every}th query (wa
 		awk -v s="$set" -v n="$every" 'NR % n == 1 { print s "\t" $0 }' "$out/$set.q"
 	done
 	awk '{ print "v03\t" $0 }' "$here/corpus/v03.q"
-	awk -v h="$HOME" '{ print "away\t" $0 "\t" h }' "$here/corpus/away.q"
+	awk -v h="$HOME" -v r="${root/#$HOME/\~}" '{ gsub(/@REPO@/, r); print "away\t" $0 "\t" h }' "$here/corpus/away.q"
 } >"$out/e2e.cases"
 detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP=auto \
 	HOP_CONFIG="$zshcfg" zsh -f "$here/e2e_run.zsh" zsh "$hophome" "$root" "$out/e2e.cases" "$out/e2e.zsh"

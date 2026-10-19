@@ -8,7 +8,7 @@
 # - text counts agreeing queries whose rc, remembered dir or any byte of stderr still differ.
 # - Both run headless: hop's _hop_tty_ok is stubbed, and every shard runs in a new session, so neither can open /dev/tty.
 # - v03 and away are hand-written, for what hop 0.3.0 changed: v03 has kind words, paths and clipped names.
-# - away is paths into other repos, typed from ~.
+# - away is paths into other repos, typed from ~; its @REPO@ is HOP_PARITY_REPO written with ~.
 # - Each run is repeated with the modal layer on and off (PARITY_VIM, default "1 0"), which the T4 hint in a report reads.
 # - Exit status is the number of queries that disagree under auto, capped at 99.
 set -u
@@ -52,7 +52,8 @@ detached() {
 now() { perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
 
 clean HOP_HISTFILE=/dev/null HOP_CONFIG="$zshcfg" zsh -f "$here/sets.zsh" "$hophome" "$root" "$out" || exit 98
-cp "$here/corpus/v03.q" "$here/corpus/away.q" "$out"/
+cp "$here/corpus/v03.q" "$out"/
+TILDE=${root/#$HOME/\~} perl -pe 's/\@REPO\@/$ENV{TILDE}/g' "$here/corpus/away.q" >"$out/away.q"
 for set in $sets; do
 	from=
 	[ "$set" = away ] && from=$HOME

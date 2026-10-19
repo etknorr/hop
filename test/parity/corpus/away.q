@@ -6,7 +6,7 @@ README.md
 terraform/acct-nope
 configuration/terraform/acct-nope
 file strava/configuration/README.md
-file ~/strava/configuration/README.md
+file @REPO@/README.md
 strava/configuration
 strava
 configuration
