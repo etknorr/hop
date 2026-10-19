@@ -2,6 +2,7 @@ package act
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -240,5 +241,75 @@ func TestBrowseNamesTheDrill(t *testing.T) {
 	if rc := r.a.Dispatch("ctrl-g", r.unit, r.unit, ""); rc != 1 ||
 		!strings.Contains(r.err.String(), "hop: not in a git repository: "+real+"\nhop: to go INTO a repo from a workspace, press l (NORMAL) or ctrl-l (SEARCH)\n") {
 		t.Errorf("browse outside a repo names the drill key: rc %d %q", rc, r.err)
+	}
+}
+
+// TestClipboardProbe is suite_clipboard: the probe order, HOP_CLIPBOARD's word-split override, and the text on stdin, never argv.
+func TestClipboardProbe(t *testing.T) {
+	r := newRig(t)
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	t.Setenv("PATH", bin)
+	tools := []string{"pbcopy", "wl-copy", "xclip", "xsel", "clip.exe"}
+	want := []string{"pbcopy", "wl-copy", "xclip -selection clipboard", "xsel --clipboard --input", "clip.exe"}
+	for _, n := range tools {
+		os.WriteFile(filepath.Join(bin, n), []byte("#!/bin/sh\nprintf '%s %s|' \""+n+"\" \"$*\" >>\""+log+"\"\n/bin/cat >>\""+log+"\"\n"), 0o755)
+	}
+	text := "/a/b c/it's here.hcl"
+	for i := range tools {
+		os.Remove(log)
+		if rc := r.a.Dispatch("alt-y", r.unit, text, ""); rc != 0 {
+			t.Fatalf("copy with %s: rc %d %s", tools[i], rc, r.err)
+		}
+		b, _ := os.ReadFile(log)
+		args := strings.TrimPrefix(strings.TrimPrefix(want[i], tools[i]), " ")
+		if string(b) != tools[i]+" "+args+"|"+text {
+			t.Errorf("%s is chosen once the tools before it are gone, with the text on stdin: %q", want[i], b)
+		}
+		os.Remove(filepath.Join(bin, tools[i]))
+	}
+	os.Remove(log)
+	r.err.Reset()
+	if rc := r.a.Dispatch("ctrl-y", r.unit, text, ""); rc != 1 || r.err.String() != "hop: no clipboard tool found, install pbcopy, wl-copy, xclip, xsel, or clip.exe (WSL)\n" {
+		t.Errorf("no tool: one stderr line naming the install options: rc %d %q", rc, r.err)
+	}
+	os.WriteFile(filepath.Join(bin, "xclip"), []byte("#!/bin/sh\nprintf '%s|' \"$*\" >>\""+log+"\"\n/bin/cat >>\""+log+"\"\n"), 0o755)
+	r.a.Clipboard = "xclip -sel c"
+	if rc := r.a.Dispatch("ctrl-y", r.unit, text, ""); rc != 0 {
+		t.Fatalf("HOP_CLIPBOARD: rc %d", rc)
+	}
+	if b, _ := os.ReadFile(log); string(b) != "-sel c|"+r.unit {
+		t.Errorf("HOP_CLIPBOARD word-splits, so its arguments reach the tool: %q", b)
+	}
+}
+
+// TestNeed is suite_editor_path's _hop_need: a bare name on PATH, a path with a slash checked where it is, with hop's wording.
+func TestNeed(t *testing.T) {
+	d := t.TempDir()
+	exe, plain := filepath.Join(d, "ed"), filepath.Join(d, "plain")
+	os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(plain, []byte("x"), 0o644)
+	t.Setenv("PATH", d)
+	for _, c := range []struct{ cmd, want string }{
+		{"ed", ""},
+		{"nope", "nope is not installed, cannot edit a file"},
+		{exe, ""},
+		{filepath.Join(d, "missing"), filepath.Join(d, "missing") + " does not exist, cannot edit a file"},
+		{plain, plain + " is not executable, cannot edit a file"},
+		{d, d + " is not executable, cannot edit a file"},
+	} {
+		err := need(c.cmd, "edit a file")
+		if got := fmt.Sprint(err); (c.want == "" && err != nil) || (c.want != "" && got != c.want) {
+			t.Errorf("need(%s) = %v, want %q", c.cmd, err, c.want)
+		}
+	}
+	t.Chdir(d)
+	if err := need("./ed", "edit a file"); err != nil {
+		t.Errorf("a relative path with a slash is checked against the cwd: %v", err)
+	}
+	r := newRig(t)
+	t.Setenv("EDITOR", filepath.Join(d, "missing"))
+	if rc := r.a.Dispatch("alt-o", r.unit, r.file, ""); rc != 1 || r.execd != nil || !strings.Contains(r.err.String(), "does not exist, cannot edit a file") {
+		t.Errorf("an absolute $EDITOR that doesn't exist fails and is never run: rc %d %q", rc, r.err)
 	}
 }
