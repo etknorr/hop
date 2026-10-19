@@ -47,10 +47,10 @@ func TestWorkspaceAndRepoRowsMatchZsh(t *testing.T) {
 		t.Fatal(err)
 	}
 	if ws != zws {
-		t.Errorf("ws rows\n--- hopx\n%s--- zsh\n%s", rowsStripped(ws), rowsStripped(zws))
+		t.Errorf("ws rows\n--- go\n%s--- zsh\n%s", rowsStripped(ws), rowsStripped(zws))
 	}
 	if repo != zrepo {
-		t.Errorf("repo rows\n--- hopx\n%s--- zsh\n%s", rowsStripped(repo), rowsStripped(zrepo))
+		t.Errorf("repo rows\n--- go\n%s--- zsh\n%s", rowsStripped(repo), rowsStripped(zrepo))
 	}
 }
 

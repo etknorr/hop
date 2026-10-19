@@ -68,7 +68,7 @@ func BuildMatch(dir string) error {
 		}
 	}
 	git := func(args ...string) error {
-		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "commit.gpgsign=false", "-c", "user.email=hopx@example.invalid", "-c", "user.name=hopx"}, args...)...)
+		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "commit.gpgsign=false", "-c", "user.email=hop@example.invalid", "-c", "user.name=hop"}, args...)...)
 		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_TEMPLATE_DIR=")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git %s: %v\n%s", strings.Join(args, " "), err, out)

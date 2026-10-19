@@ -625,7 +625,7 @@ func (r *Resolver) Resolve(q string, rs []string) Result {
 }
 
 // none is _hop_resolve_none: T4, nothing close, so the picker opens on the query as typed.
-// - The hint is hop 0.3's for HOP_VIM=0, since hopx has no modal layer and esc cancels its picker.
+// - The hint is hop 0.3's for HOP_VIM=0, since the picker has no modal layer yet and esc cancels it.
 func (s *state) none() {
 	s.res.Verdict, s.res.Tier, s.res.Query = "none", "T4", s.q
 	s.res.Note = "nothing close to: " + s.q + " (ctrl-u clears)"

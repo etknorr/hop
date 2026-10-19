@@ -98,7 +98,7 @@ func TestPresetsMatchHop(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got.RegistryKey() != want.RegistryKey() {
-				t.Errorf("embedded preset differs from hop's\nhop:  %s\nhopx: %s", got.RegistryKey(), want.RegistryKey())
+				t.Errorf("embedded preset differs from zsh hop's\nzsh: %s\ngo:  %s", got.RegistryKey(), want.RegistryKey())
 			}
 		})
 	}
@@ -161,8 +161,8 @@ func TestImportErrors(t *testing.T) {
 
 // TestEricConfig re-imports Eric's live config.zsh, only for a parity run, since that file is his to change.
 func TestEricConfig(t *testing.T) {
-	if os.Getenv("HOPX_PARITY_REPO") == "" {
-		t.Skip("set HOPX_PARITY_REPO to check testdata/eric.toml against ~/.config/hop/config.zsh")
+	if os.Getenv("HOP_PARITY_REPO") == "" {
+		t.Skip("set HOP_PARITY_REPO to check testdata/eric.toml against ~/.config/hop/config.zsh")
 	}
 	needZsh(t)
 	src := filepath.Join(os.Getenv("HOME"), ".config", "hop", "config.zsh")

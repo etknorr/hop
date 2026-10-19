@@ -12,8 +12,8 @@ import (
 	"github.com/etknorr/hop/internal/tty"
 )
 
-// ExecEditor replaces hopx with the editor, so it owns the terminal, the signals and the job slot.
-// - A key-handler caller can hand hopx pipes, so fds 0-2 are pointed at the terminal first.
+// ExecEditor replaces hop with the editor, so it owns the terminal, the signals and the job slot.
+// - A key-handler caller can hand hop pipes, so fds 0-2 are pointed at the terminal first.
 // - The shell function is waiting on this pid, so a cmdfile written before the exec is still read afterwards.
 func ExecEditor(argv []string) int {
 	path, err := exec.LookPath(argv[0])
@@ -24,11 +24,11 @@ func ExecEditor(argv []string) int {
 	tty.Attach()
 	var env []string
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "HOPX_CMDFILE=") && !strings.HasPrefix(e, "HOPX_SESSION=") {
+		if !strings.HasPrefix(e, "HOP_CMDFILE=") && !strings.HasPrefix(e, "HOP_SESSION=") {
 			env = append(env, e)
 		}
 	}
 	err = syscall.Exec(path, argv, env)
-	fmt.Fprintln(os.Stderr, "hopx: exec:", err)
+	fmt.Fprintln(os.Stderr, "hop: exec:", err)
 	return 1
 }

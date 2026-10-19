@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # bench_shells.zsh [ROOT] [RUNS]: what the shell function costs, per shell, against hop in zsh.
 # - jump: one `<fn> eks security` through the shell function, cd included, as (T(15 jumps) - T(0 jumps)) / 15 in one shell.
-# - init: `eval "$(hopx init <shell>)"` (or `source hop.zsh`) over a bare `<shell> -c :`, median of RUNS.
+# - init: `eval "$(hop init <shell>)"` (or `source hop.zsh`) over a bare `<shell> -c :`, median of RUNS.
 # - fish and pwsh run in the test/docker images with ROOT mounted read-only at /repo, so their numbers include
 #   docker's bind-mount filesystem and are not comparable to the host rows.
 # - /repo and not ROOT's own path: a ~/strava path mounted at itself shows up empty under Docker Desktop.
@@ -14,10 +14,12 @@ local -i runs=${2:-15} n=15
 local tmp
 tmp=$(mktemp -d) || return 1
 mkdir -p "$tmp/darwin" "$tmp/linux"
-(cd "$repo" && go build -o "$tmp/darwin/hopx" . && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "$tmp/linux/hopx" .) || return 1
-local cfg="$repo/testdata/eric.toml"
+(cd "$repo" && go build -o "$tmp/darwin/hop" . && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "$tmp/linux/hop" .) || return 1
+local cfg="$repo/testdata/eric.toml" zshcfg="$HOME/.config/hop/config.zsh"
 local -a envv=(env -i HOME="$tmp" PATH="$tmp/darwin:/usr/bin:/bin:/opt/homebrew/bin" LANG=en_US.UTF-8 TERM=xterm-256color TMPDIR="$tmp/"
-	HOPX_CONFIG="$cfg" HOPX_HISTFILE="$tmp/hist" HOP_CONFIG="$HOME/.config/hop/config.zsh" HOP_HISTFILE=/dev/null XDG_CACHE_HOME="$tmp/cache")
+	XDG_CACHE_HOME="$tmp/cache")
+# HOP_CONFIG and HOP_HISTFILE name different files to the two hops; each row's argv starts with its side's, which env reads.
+local zenv="HOP_CONFIG=$zshcfg HOP_HISTFILE=/dev/null" genv="HOP_CONFIG=$cfg HOP_HISTFILE=$tmp/hist"
 
 median() {
 	emulate -L zsh
@@ -53,13 +55,13 @@ row() {
 	printf '%s\t%.1f\t%.1f\n' "$label" "$(( (jn - j0) / n ))" "$(( full - bare ))"
 }
 
-local bashloop='i=0; while [ $i -lt @N@ ]; do hopx eks security; cd "'$root'"; i=$((i+1)); done'
+local bashloop='i=0; while [ $i -lt @N@ ]; do hop eks security; cd "'$root'"; i=$((i+1)); done'
 print -r -- "shell	ms per jump	init ms"
-row 'hop (zsh, sourced)' 'zsh -f' "source '$hopdir/hop.zsh'" 'repeat @N@ { hop eks security; cd "'$root'" }'
-row 'hopx zsh' 'zsh -f' 'eval "$(hopx init zsh)"' 'repeat @N@ { hopx eks security; cd "'$root'" }'
-row 'hopx bash 5.3' '/opt/homebrew/bin/bash --norc --noprofile' 'eval "$(hopx init bash)"' "$bashloop"
-row 'hopx bash 3.2' '/bin/bash --norc --noprofile' 'eval "$(hopx init bash)"' "$bashloop"
-row 'bare binary (no shell function)' 'zsh -f' ':' 'repeat @N@ { hopx eks security >/dev/null }'
+row 'hop (zsh, sourced)' "$zenv zsh -f" "source '$hopdir/hop.zsh'" 'repeat @N@ { hop eks security; cd "'$root'" }'
+row 'go zsh' "$genv zsh -f" 'eval "$(hop init zsh)"' 'repeat @N@ { hop eks security; cd "'$root'" }'
+row 'go bash 5.3' "$genv /opt/homebrew/bin/bash --norc --noprofile" 'eval "$(hop init bash)"' "$bashloop"
+row 'go bash 3.2' "$genv /bin/bash --norc --noprofile" 'eval "$(hop init bash)"' "$bashloop"
+row 'bare binary (no shell function)' "$genv zsh -f" ':' 'repeat @N@ { hop eks security >/dev/null }'
 
 # The containers time themselves with GNU date, since neither image has zsh.
 local inner='
@@ -73,16 +75,16 @@ dock() {
 	emulate -L zsh
 	local image=$1
 	shift
-	docker run --rm -v "$root:/repo:ro" -v "$cfg:/cfg.toml:ro" -v "$tmp/linux:/hopxbin:ro" -w /repo \
-		-e PATH=/hopxbin:/usr/local/bin:/usr/bin:/bin -e HOPX_CONFIG=/cfg.toml -e HOPX_HISTFILE=/tmp/hist -e TMPDIR=/tmp/ \
-		"$@" "hopx-b3-$image" sh -c "$inner"
+	docker run --rm -v "$root:/repo:ro" -v "$cfg:/cfg.toml:ro" -v "$tmp/linux:/hopbin:ro" -w /repo \
+		-e PATH=/hopbin:/usr/local/bin:/usr/bin:/bin -e HOP_CONFIG=/cfg.toml -e HOP_HISTFILE=/tmp/hist -e TMPDIR=/tmp/ \
+		"$@" "hop-test-$image" sh -c "$inner"
 }
-local fl='set i 0; while test $i -lt @N@; hopx eks security; cd /repo; set i (math $i + 1); end'
-dock fish -e LABEL='hopx fish 3.7 (docker)' -e SH_BARE="fish -c :" -e SH_INIT="fish -c 'hopx init fish | source'" \
-	-e SH_J0="fish -c 'hopx init fish | source; ${fl//@N@/0}'" -e SH_JN="fish -c 'hopx init fish | source; ${fl//@N@/$n}'"
-local pl='for ($i = 0; $i -lt @N@; $i++) { hopx eks security; Set-Location /repo }'
-local pi='Invoke-Expression (& hopx init pwsh | Out-String)'
-dock pwsh -e LABEL='hopx pwsh 7.5 (docker)' -e SH_BARE="pwsh -NoProfile -Command 0" -e SH_INIT="pwsh -NoProfile -Command '$pi'" \
+local fl='set i 0; while test $i -lt @N@; hop eks security; cd /repo; set i (math $i + 1); end'
+dock fish -e LABEL='go fish 3.7 (docker)' -e SH_BARE="fish -c :" -e SH_INIT="fish -c 'hop init fish | source'" \
+	-e SH_J0="fish -c 'hop init fish | source; ${fl//@N@/0}'" -e SH_JN="fish -c 'hop init fish | source; ${fl//@N@/$n}'"
+local pl='for ($i = 0; $i -lt @N@; $i++) { hop eks security; Set-Location /repo }'
+local pi='Invoke-Expression (& hop init pwsh | Out-String)'
+dock pwsh -e LABEL='go pwsh 7.5 (docker)' -e SH_BARE="pwsh -NoProfile -Command 0" -e SH_INIT="pwsh -NoProfile -Command '$pi'" \
 	-e SH_J0="pwsh -NoProfile -Command '$pi; ${pl//@N@/0}'" -e SH_JN="pwsh -NoProfile -Command '$pi; ${pl//@N@/$n}'"
-local zl='i=0; while [ $i -lt @N@ ]; do hopx eks security >/dev/null; i=$((i+1)); done'
+local zl='i=0; while [ $i -lt @N@ ]; do hop eks security >/dev/null; i=$((i+1)); done'
 dock fish -e LABEL='bare binary (docker)' -e SH_BARE=":" -e SH_INIT=":" -e SH_J0="${zl//@N@/0}" -e SH_JN="${zl//@N@/$n}"

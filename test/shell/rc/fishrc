@@ -1,4 +1,4 @@
 function fish_prompt; echo -n "["(basename $PWD)"]> "; end
 function fish_greeting; end
-hopx init fish | source
-cd $HOPX_T/repo
+hop init fish | source
+cd $HOP_T/repo

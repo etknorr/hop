@@ -1,4 +1,4 @@
-# hopx config, imported from testdata/match.zsh by `hopx config import`.
+# hop config, imported from testdata/match.zsh by `hop config import`.
 version = 1
 presets = ['helm', 'terraform-modules', 'dir']
 

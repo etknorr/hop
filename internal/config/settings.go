@@ -93,7 +93,7 @@ func (c *Config) applyEnv() {
 	str("HOP_JUMP", &s.Jump)
 	str("HOP_CODE", &s.Code)
 	str("HOP_CLIPBOARD", &s.Clipboard)
-	str("HOPX_HISTFILE", &s.HistFile)
+	str("HOP_HISTFILE", &s.HistFile)
 	str("HOP_WORKSPACES_FILE", &s.WorkspacesFile)
 	if v, ok := os.LookupEnv("HOP_FZF_HEIGHT"); ok {
 		s.FzfHeight = &v
@@ -149,7 +149,7 @@ func (c *Config) applyEnv() {
 		if base == "" {
 			base = filepath.Join(os.Getenv("HOME"), ".local", "state")
 		}
-		s.HistFile = filepath.Join(base, "hopx", "history")
+		s.HistFile = filepath.Join(base, "hop", "history")
 	}
 	if s.WorkspacesFile == "" {
 		base := os.Getenv("XDG_CONFIG_HOME")

@@ -1,4 +1,4 @@
-# Fixture config for the engine tests: every hop_kind option, run by zsh hop and imported for hopx.
+# Fixture config for the engine tests: every hop_kind option, run by zsh hop and imported for hop.
 hop_preset dir file helm backstage
 hop_kind tg --default --marker terragrunt.hcl --under infra/ \
 	--layout 'scope,env,region,name...' --layout 'scope,name...' \

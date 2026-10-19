@@ -60,7 +60,7 @@ func matchFix(t *testing.T) *fix {
 			fixErr = err
 			return
 		}
-		d, err := os.MkdirTemp("", "hopx-match-")
+		d, err := os.MkdirTemp("", "hop-match-")
 		if err != nil {
 			fixErr = err
 			return
@@ -222,7 +222,7 @@ func (f *fix) zshTable(t *testing.T, ks []kase) map[string]string {
 }
 
 // byKey indexes a table by its case. The worktree's hop is 0.2.0, whose T4 hint names its modal layer's esc.
-// - hopx words it as hop 0.3 does with no modal layer, so that one hint is read in hopx's wording.
+// - The binary words it as hop 0.3 does with no modal layer, so that one hint is read in that wording.
 func byKey(text string) map[string]string {
 	text = strings.ReplaceAll(text, " (esc clears)\t", " (ctrl-u clears)\t")
 	m := map[string]string{}

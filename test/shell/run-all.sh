@@ -1,5 +1,5 @@
 #!/bin/zsh
-# run-all.sh: builds hopx for the host and linux, then runs the shell checks in zsh, bash 5, bash 3.2, fish and pwsh.
+# run-all.sh: builds hop for the host and linux, then runs the shell checks in zsh, bash 5, bash 3.2, fish and pwsh.
 # - Each shell gets a fresh fixture, a clean environment, and its own history and temp dir.
 # - cd.* runs with no terminal; pick.* runs under script(1), which gives it one.
 # - fish and pwsh run in docker (test/docker), since neither is on the host.
@@ -8,13 +8,13 @@ emulate -L zsh
 setopt pipe_fail
 T=${0:A:h}
 REPO=${T:h:h}
-W=$(mktemp -d "${TMPDIR:-/tmp}/hopx-shells.XXXXXX") || exit 1
+W=$(mktemp -d "${TMPDIR:-/tmp}/hop-shells.XXXXXX") || exit 1
 # Physical, because git reports the repo root that way and macOS's /var is a symlink.
 W=${W:A}
 B=$W/bin
-go -C "$REPO" build -o "$B/darwin/hopx" . || exit 1
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go -C "$REPO" build -o "$B/linux/hopx" . || exit 1
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go -C "$REPO" test -c -o "$B/linux/hopx.test" . || exit 1
+go -C "$REPO" build -o "$B/darwin/hop" . || exit 1
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go -C "$REPO" build -o "$B/linux/hop" . || exit 1
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go -C "$REPO" test -c -o "$B/linux/hop.test" . || exit 1
 BASH5=${BASH5:-/opt/homebrew/bin/bash}
 typeset -a docker_shells=(fish pwsh)
 [[ -n ${NO_DOCKER:-} ]] && docker_shells=()
@@ -26,14 +26,14 @@ host() {
 	local fx=$W/$label
 	sh "$T/fixture.sh" "$fx" || return 1
 	local -a envv=(env -i HOME="$fx/home" PATH="$B/darwin:$fx/stub:/usr/bin:/bin:/opt/homebrew/bin" LANG=en_US.UTF-8
-		TERM=xterm-256color TMPDIR="$fx/tmp/" HOPX_T="$fx" HOPX_CONFIG="$fx/config.toml" HOPX_HISTFILE="$fx/tmp/hist" HOP_FZF_HEIGHT=
+		TERM=xterm-256color TMPDIR="$fx/tmp/" HOP_T="$fx" HOP_CONFIG="$fx/config.toml" HOP_HISTFILE="$fx/tmp/hist" HOP_FZF_HEIGHT=
 		ZDOTDIR="$T/rc")
-	local pre="eval \"\$(hopx init $init)\";"
+	local pre="eval \"\$(hop init $init)\";"
 	"${envv[@]}" "$@" -c "$pre . '$T/cd.sh'" 2>&1
 	"${envv[@]}" script -q /dev/null "$@" -c "$pre . '$T/pick.sh'" </dev/null 2>&1 | tr -d '\r'
 	local -a parse=("$@")
 	[[ $init == zsh ]] && parse=(zsh)
-	"${envv[@]}" "${parse[@]}" -n <("${envv[@]}" hopx init "$init" 2>&1) && print -r -- 'PASS init-parses'
+	"${envv[@]}" "${parse[@]}" -n <("${envv[@]}" hop init "$init" 2>&1) && print -r -- 'PASS init-parses'
 	local t
 	for t in widget complete; do
 		"${envv[@]}" expect "$T/$t.exp" "$label" ${=iargv} </dev/null 2>&1
@@ -44,11 +44,11 @@ host() {
 box() {
 	local image=$1
 	shift
-	docker run --rm -v "$REPO:/hop:ro" -v "$B/linux:/hopxbin:ro" "hopx-b3-$image" sh -c '
+	docker run --rm -v "$REPO:/hop:ro" -v "$B/linux:/hopbin:ro" "hop-test-$image" sh -c '
 		sh /hop/test/shell/fixture.sh /fx >/dev/null || exit 1
 		for c; do
-			env -i HOME=/fx/home PATH=/hopxbin:/fx/stub:/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 TERM=xterm-256color \
-				TMPDIR=/fx/tmp/ HOPX_T=/fx HOPX_CONFIG=/fx/config.toml HOPX_HISTFILE=/fx/tmp/hist HOP_FZF_HEIGHT= sh -c "$c" </dev/null
+			env -i HOME=/fx/home PATH=/hopbin:/fx/stub:/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 TERM=xterm-256color \
+				TMPDIR=/fx/tmp/ HOP_T=/fx HOP_CONFIG=/fx/config.toml HOP_HISTFILE=/fx/tmp/hist HOP_FZF_HEIGHT= sh -c "$c" </dev/null
 		done' box "$@" 2>&1 | tr -d '\r'
 }
 
@@ -74,29 +74,29 @@ X=/hop/test/shell
 for s in $docker_shells; do
 	case $s in
 		fish)
-			box fish "fish -c 'hopx init fish | source; source $X/cd.fish'" \
-				"script -qec \"fish -c 'hopx init fish | source; source $X/pick.fish'\" /dev/null" \
-				"hopx init fish | fish -n && echo 'PASS init-parses'" \
+			box fish "fish -c 'hop init fish | source; source $X/cd.fish'" \
+				"script -qec \"fish -c 'hop init fish | source; source $X/pick.fish'\" /dev/null" \
+				"hop init fish | fish -n && echo 'PASS init-parses'" \
 				"expect $X/widget.exp fish fish -i -C 'source $X/rc/fishrc'" \
 				"expect $X/complete.exp fish fish -i -C 'source $X/rc/fishrc'" | tally fish
 			;;
 		pwsh)
 			box pwsh "pwsh -NoLogo -NoProfile -File $X/cd.ps1" \
 				"script -qec 'pwsh -NoLogo -NoProfile -File $X/pick.ps1' /dev/null" \
-				"pwsh -NoLogo -NoProfile -Command '\$null = [scriptblock]::Create((& hopx init pwsh | Out-String)); \"PASS init-parses\"'" \
+				"pwsh -NoLogo -NoProfile -Command '\$null = [scriptblock]::Create((& hop init pwsh | Out-String)); \"PASS init-parses\"'" \
 				"expect $X/widget.exp pwsh pwsh -NoLogo -NoProfile -NoExit -Command '. $X/rc/pwshrc.ps1'" \
 				"expect $X/complete.exp pwsh pwsh -NoLogo -NoProfile -NoExit -Command '. $X/rc/pwshrc.ps1'" | tally pwsh
 			;;
 	esac
 done
 
-# G6: the Go pty test drives the real picker with $SHELL set to each shell, since every callback goes through `hopx __sh`.
+# G6: the Go pty test drives the real picker with $SHELL set to each shell, since every callback goes through `hop __sh`.
 # - It needs the module at its own path, for testdata, so the worktree is mounted read-only where it lives.
 g6() {
 	local image=$1 shells=$2 out
-	out=$(docker run --rm -v "$REPO:$REPO:ro" -v "$B/linux:/hopxbin:ro" -w "$REPO" \
-		-e HOPX_TEST_BIN=/hopxbin/hopx -e HOPX_TEST_SHELLS="$shells" "hopx-b3-$image" \
-		/hopxbin/hopx.test -test.run 'TestPicker$' -test.v 2>&1)
+	out=$(docker run --rm -v "$REPO:$REPO:ro" -v "$B/linux:/hopbin:ro" -w "$REPO" \
+		-e HOP_TEST_BIN=/hopbin/hop -e HOP_TEST_SHELLS="$shells" "hop-test-$image" \
+		/hopbin/hop.test -test.run 'TestPicker$' -test.v 2>&1)
 	print -r -- "$out" | grep -E '^ +--- (PASS|FAIL)' | sed -E 's/^ +--- (PASS|FAIL): TestPicker\/([^ ]+).*/\1 g6-picker-callbacks SHELL=\2/'
 	print -r -- "$out" | grep -E '^ +pty_test' | sed 's/^ */FAIL detail: /'
 }

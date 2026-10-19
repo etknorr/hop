@@ -48,7 +48,7 @@ func relTo(root, p string) string {
 	return p
 }
 
-// Preview is `hopx __preview {2} {3}`, a port of bin/hop-preview without the `--keys` overlay.
+// Preview is `hop __preview {2} {3}`, a port of bin/hop-preview without the `--keys` overlay.
 // - A dir lists up to 200 entries, dotfiles included, in zsh's glob order; a file shows its first 400 lines.
 // - It never fails loudly: a bad argument prints one line.
 func Preview(w io.Writer, dir, target string) {

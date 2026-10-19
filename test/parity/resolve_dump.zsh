@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # resolve_dump.zsh <hop-dir> <root> <out-dir> <jump> [repo-dir]: eval_real.zsh's five query sets, resolved by zsh hop.
-# - Writes <set>.q, one query per line, so hopx reads the identical list, and <set>.zsh, hx_runner's line per query.
+# - Writes <set>.q, one query per line, so the Go hop reads the identical list, and <set>.zsh, hx_runner's line per query.
 # - The five sets are built exactly as tests/eval_real.zsh builds them; that file is copied from, never edited.
 # - Three more stress the approximate tiers: corpus, typo (letters 2 and 3 of each name swapped), and relaxed (name plus nonsense).
 emulate -L zsh

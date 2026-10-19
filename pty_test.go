@@ -14,7 +14,7 @@ import (
 	"github.com/etknorr/hop/internal/testfix"
 )
 
-// picker is a built hopx on the match fixture, run under a real pty the way a shell function would run it.
+// picker is a built hop on the match fixture, run under a real pty the way a shell function would run it.
 type picker struct {
 	bin, root, tmp, stub string
 }
@@ -25,9 +25,9 @@ func newPicker(t *testing.T) *picker {
 		t.Skip("fzf not installed")
 	}
 	tmp := testfix.Resolved(t.TempDir())
-	p := &picker{bin: os.Getenv("HOPX_TEST_BIN"), root: filepath.Join(tmp, "repo"), tmp: tmp, stub: filepath.Join(tmp, "stub")}
+	p := &picker{bin: os.Getenv("HOP_TEST_BIN"), root: filepath.Join(tmp, "repo"), tmp: tmp, stub: filepath.Join(tmp, "stub")}
 	if p.bin == "" {
-		p.bin = filepath.Join(tmp, "hopx")
+		p.bin = filepath.Join(tmp, "hop")
 		if out, err := exec.Command("go", "build", "-o", p.bin, ".").CombinedOutput(); err != nil {
 			t.Fatalf("go build: %v\n%s", err, out)
 		}
@@ -45,7 +45,7 @@ type outcome struct {
 	cd, clip, out string
 }
 
-// run starts hopx with args on a 40x140 pty, lets drive type at it, and reports where it would have landed.
+// run starts hop with args on a 40x140 pty, lets drive type at it, and reports where it would have landed.
 func (p *picker) run(t *testing.T, shell string, drive func(*ptytest.Term) bool, args ...string) outcome {
 	t.Helper()
 	cf := filepath.Join(p.tmp, "cmd")
@@ -57,14 +57,14 @@ func (p *picker) run(t *testing.T, shell string, drive func(*ptytest.Term) bool,
 	c.Dir = p.root
 	c.Env = []string{
 		"PATH=" + p.stub + ":" + os.Getenv("PATH"), "HOME=" + p.tmp, "TMPDIR=" + p.tmp, "PWD=" + p.root, "LANG=en_US.UTF-8", "TERM=xterm-256color",
-		"SHELL=" + shell, "HOPX_CONFIG=" + testdata("match.toml"), "HOPX_HISTFILE=" + filepath.Join(p.tmp, "hist"), "HOPX_CMDFILE=" + cf,
+		"SHELL=" + shell, "HOP_CONFIG=" + testdata("match.toml"), "HOP_HISTFILE=" + filepath.Join(p.tmp, "hist"), "HOP_CMDFILE=" + cf,
 		"HOP_FZF_HEIGHT=", "FZF_DEFAULT_OPTS=", "HOP_CODE=" + filepath.Join(p.tmp, "no-code"),
 	}
 	term, err := ptytest.Start(c, 40, 140)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !term.WaitFor(`hopx ▸`, 10*time.Second) {
+	if !term.WaitFor(`hop ▸`, 10*time.Second) {
 		t.Fatalf("the picker never drew its prompt:\n%s", term.Plain())
 	}
 	if !drive(term) {
@@ -89,7 +89,7 @@ func lastScreen(s string) string {
 }
 
 func pickerShells(t *testing.T) []string {
-	if v := os.Getenv("HOPX_TEST_SHELLS"); v != "" {
+	if v := os.Getenv("HOP_TEST_SHELLS"); v != "" {
 		return strings.Fields(v)
 	}
 	shells := []string{"/bin/sh"}
@@ -99,7 +99,7 @@ func pickerShells(t *testing.T) []string {
 	return shells
 }
 
-// TestPicker drives the real fzf through each key the spec names, once per $SHELL, since every callback goes through `hopx __sh`.
+// TestPicker drives the real fzf through each key the spec names, once per $SHELL, since every callback goes through `hop __sh`.
 func TestPicker(t *testing.T) {
 	p := newPicker(t)
 	raster := p.root + "/terraform/acct-map-platform-prod/env-prod/us-east-1/raster-catalogue"
@@ -152,7 +152,7 @@ func TestPicker(t *testing.T) {
 				}
 				tm.Send("\r")
 				// The reload is asynchronous, so the helm rows themselves are what says the switch landed.
-				if !wait(`hopx ▸[\s\S]*kubernetes/values/thanos-legacy`)(tm) {
+				if !wait(`hop ▸[\s\S]*kubernetes/values/thanos-legacy`)(tm) {
 					return false
 				}
 				return typeAnd("thanos-legacy", "\r")(tm)

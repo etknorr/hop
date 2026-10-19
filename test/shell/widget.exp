@@ -18,7 +18,7 @@ send "echo half-typed"
 expect -timeout 1 timeout {}
 send "\007"
 expect {
-	"hopx ▸" { pass "opens-picker" }
+	"hop ▸" { pass "opens-picker" }
 	timeout { fail "opens-picker" }
 }
 send "gamma"
@@ -36,7 +36,7 @@ expect {
 	timeout { fail "line-restored" }
 }
 expect -re {\[gamma\]> }
-send "hopx -\r"
+send "hop -\r"
 expect {
 	-re {\[repo\]> } { pass "dash" }
 	timeout { fail "dash" }

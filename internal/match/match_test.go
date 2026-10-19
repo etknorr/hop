@@ -21,7 +21,7 @@ func TestFlagsMatchHop(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := Lines(out); !slices.Equal(got, Flags) {
-		t.Errorf("hop's flags:\n%q\nhopx's:\n%q", got, Flags)
+		t.Errorf("zsh hop's flags:\n%q\nours:\n%q", got, Flags)
 	}
 }
 

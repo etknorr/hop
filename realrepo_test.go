@@ -15,18 +15,18 @@ import (
 )
 
 // TestRealRepoPicker drives the picker on a real repo with eric.toml, logging query, key and outcome for RESULTS.md.
-// - It runs only with HOPX_PARITY_REPO set, and never writes outside its temp dir: history, clipboard, code and the editor are stubs.
+// - It runs only with HOP_PARITY_REPO set, and never writes outside its temp dir: history, clipboard, code and the editor are stubs.
 func TestRealRepoPicker(t *testing.T) {
-	repo := os.Getenv("HOPX_PARITY_REPO")
+	repo := os.Getenv("HOP_PARITY_REPO")
 	if repo == "" {
-		t.Skip("set HOPX_PARITY_REPO to a repo matching testdata/eric.toml, e.g. ~/strava/configuration")
+		t.Skip("set HOP_PARITY_REPO to a repo matching testdata/eric.toml, e.g. ~/strava/configuration")
 	}
 	if _, err := exec.LookPath("fzf"); err != nil {
 		t.Skip("fzf not installed")
 	}
 	repo = testfix.Resolved(repo)
 	tmp := testfix.Resolved(t.TempDir())
-	bin := filepath.Join(tmp, "hopx")
+	bin := filepath.Join(tmp, "hop")
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -64,14 +64,14 @@ func TestRealRepoPicker(t *testing.T) {
 		c := exec.Command(bin, s.args...)
 		c.Dir = filepath.Join(repo, s.dir)
 		c.Env = append([]string{"PATH=" + stub + ":" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "TMPDIR=" + tmp, "PWD=" + c.Dir,
-			"LANG=en_US.UTF-8", "TERM=xterm-256color", "SHELL=/bin/zsh", "HOPX_CONFIG=" + testdata("eric.toml"),
-			"HOPX_HISTFILE=" + filepath.Join(tmp, "hist"), "HOPX_CMDFILE=" + cf, "HOP_FZF_HEIGHT=", "FZF_DEFAULT_OPTS="}, s.env...)
+			"LANG=en_US.UTF-8", "TERM=xterm-256color", "SHELL=/bin/zsh", "HOP_CONFIG=" + testdata("eric.toml"),
+			"HOP_HISTFILE=" + filepath.Join(tmp, "hist"), "HOP_CMDFILE=" + cf, "HOP_FZF_HEIGHT=", "FZF_DEFAULT_OPTS="}, s.env...)
 		start := time.Now()
 		term, err := ptytest.Start(c, 45, 160)
 		if err != nil {
 			t.Fatal(err)
 		}
-		drawn := term.WaitFor(`hopx ▸`, 10*time.Second)
+		drawn := term.WaitFor(`hop ▸`, 10*time.Second)
 		first := time.Since(start)
 		for _, k := range s.keys {
 			if !drawn {
@@ -91,7 +91,7 @@ func TestRealRepoPicker(t *testing.T) {
 		if !drawn {
 			out = "no picker; " + out
 		}
-		t.Logf("| %s | `hopx %s` | %s | rc %d: %s | %.0f ms |", orDot(s.dir), strings.Join(s.args, " "), keys, rc, out, float64(first.Microseconds())/1000)
+		t.Logf("| %s | `hop %s` | %s | rc %d: %s | %.0f ms |", orDot(s.dir), strings.Join(s.args, " "), keys, rc, out, float64(first.Microseconds())/1000)
 	}
 }
 

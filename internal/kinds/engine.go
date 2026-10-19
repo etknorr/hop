@@ -39,12 +39,12 @@ func New(root string, stderr io.Writer) *Engine {
 func (e *Engine) ls(specs ...string) ([]string, bool) {
 	e.once.Do(func() { e.ix, e.err = gitls.List(e.Root) })
 	if e.err != nil {
-		e.warn.Do(func() { fmt.Fprintln(e.Stderr, "hopx:", e.err) })
+		e.warn.Do(func() { fmt.Fprintln(e.Stderr, "hop:", e.err) })
 		return nil, false
 	}
 	out, err := e.ix.Match(specs...)
 	if err != nil {
-		fmt.Fprintln(e.Stderr, "hopx:", err)
+		fmt.Fprintln(e.Stderr, "hop:", err)
 		return nil, false
 	}
 	return out, true
@@ -372,7 +372,7 @@ func (e *Engine) Emit(k *config.Kind) []rows.Row {
 	case "exec":
 		rs, err := e.emitExec(k)
 		if err != nil {
-			fmt.Fprintln(e.Stderr, "hopx:", err)
+			fmt.Fprintln(e.Stderr, "hop:", err)
 		}
 		return rs
 	}
@@ -390,7 +390,7 @@ func Generate(cfg *config.Config, root string, names []string, stderr io.Writer)
 		}
 		k, ok := cfg.Lookup(n)
 		if !ok {
-			fmt.Fprintln(e.Stderr, "hopx: unknown kind:", n)
+			fmt.Fprintln(e.Stderr, "hop: unknown kind:", n)
 			continue
 		}
 		wg.Go(func() { res[i] = e.Emit(k) })

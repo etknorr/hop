@@ -25,7 +25,7 @@ func CompatPath() string {
 	if dir == "" {
 		dir = filepath.Join(os.Getenv("HOME"), ".cache")
 	}
-	p := filepath.Join(dir, "hopx", fmt.Sprintf("compat-%x.zsh", sha256.Sum256(compatZsh))[:20]+".zsh")
+	p := filepath.Join(dir, "hop", fmt.Sprintf("compat-%x.zsh", sha256.Sum256(compatZsh))[:20]+".zsh")
 	if _, err := os.Stat(p); err != nil {
 		os.MkdirAll(filepath.Dir(p), 0o755)
 		tmp := p + fmt.Sprintf(".%d", os.Getpid())
@@ -52,7 +52,7 @@ func (e *Engine) emitExec(k *config.Kind) ([]rows.Row, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = root
 	cmd.Stderr = e.Stderr
-	cmd.Env = append(os.Environ(), "HOP_ROOT="+root, "HOP_KIND="+k.Name, "HOPX_COMPAT="+CompatPath())
+	cmd.Env = append(os.Environ(), "HOP_ROOT="+root, "HOP_KIND="+k.Name, "HOP_COMPAT="+CompatPath())
 	out, err := cmd.Output()
 	var rs []rows.Row
 	for _, line := range strings.Split(string(out), "\n") {

@@ -1,4 +1,4 @@
-// hopx is the cross-shell hop spike: subcommand dispatch only, with the work in internal/.
+// Command hop is the cross-shell hop: subcommand dispatch only, with the work in internal/.
 package main
 
 import (
@@ -22,23 +22,23 @@ import (
 
 const version = "0.0.0-spike"
 
-const usage = `usage: hopx [-a | -k KINDS] [-c] [-p] [--cd] [-o | -e | --action=MODE] [query...]
-       hopx -w | -R [query...]
-       hopx / | -
-       hopx <command> [args]
+const usage = `usage: hop [-a | -k KINDS] [-c] [-p] [--cd] [-o | -e | --action=MODE] [query...]
+       hop -w | -R [query...]
+       hop / | -
+       hop <command> [args]
 
-  hopx [query...]                          jump on a clear match, else pick in fzf; with no terminal, report
-  hopx init zsh|bash|fish|pwsh [--cmd NAME] print the shell function, widget and completion
-  hopx rows [-k KINDS] [--root DIR] [-a]   print the rows hop's list would hold, unranked
-  hopx rows -w                             workspace rows
-  hopx rows -R                             repo rows
-  hopx kinds                               the kind registry, * marking a default
-  hopx config import [CONFIG.zsh] [-o OUT] convert hop's config.zsh to TOML
-  hopx config check                        load the config and report problems
-  hopx config path                         print the config path hopx reads
-  hopx -V, -v                              version
+  hop [query...]                          jump on a clear match, else pick in fzf; with no terminal, report
+  hop init zsh|bash|fish|pwsh [--cmd NAME] print the shell function, widget and completion
+  hop rows [-k KINDS] [--root DIR] [-a]   print the rows hop's list would hold, unranked
+  hop rows -w                             workspace rows
+  hop rows -R                             repo rows
+  hop kinds                               the kind registry, * marking a default
+  hop config import [CONFIG.zsh] [-o OUT] convert zsh hop's config.zsh to TOML
+  hop config check                        load the config and report problems
+  hop config path                         print the config path hop reads
+  hop -V, -v                              version
 
-The config is $HOPX_CONFIG, else ${XDG_CONFIG_HOME:-~/.config}/hop/config.toml.
+The config is $HOP_CONFIG, else ${XDG_CONFIG_HOME:-~/.config}/hop/config.toml.
 `
 
 // errUsage is exit 2, which hop also uses for a bad flag combination.
@@ -66,7 +66,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if errors.As(err, &ec) {
 		return int(ec)
 	}
-	fmt.Fprintln(stderr, "hopx:", err)
+	fmt.Fprintln(stderr, "hop:", err)
 	return 1
 }
 
@@ -84,7 +84,7 @@ func argAt(a []string, i int) string {
 	return ""
 }
 
-// subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hopx -- rows`.
+// subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hop -- rows`.
 var subcommands = map[string]bool{
 	"-h": true, "--help": true, "help": true, "-V": true, "-v": true, "--version": true, "init": true,
 	"rows": true, "kinds": true, "config": true, "__rows": true, "__resolve-dump": true,
@@ -100,7 +100,7 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprint(stdout, usage)
 		return nil
 	case "-V", "-v", "--version":
-		fmt.Fprintln(stdout, "hopx", version)
+		fmt.Fprintln(stdout, "hop", version)
 		return nil
 	case "rows":
 		return cmdRows(args[1:], stdout, stderr)
@@ -150,7 +150,7 @@ func load(stderr io.Writer) (*config.Config, error) {
 		return nil, err
 	}
 	for _, w := range cfg.Warnings {
-		fmt.Fprintln(stderr, "hopx: warning:", w)
+		fmt.Fprintln(stderr, "hop: warning:", w)
 	}
 	return cfg, nil
 }
@@ -229,11 +229,11 @@ func cmdRows(args []string, stdout, stderr io.Writer) error {
 	return writeRows(stdout, rs, *root)
 }
 
-// cmdRowsHidden is `hopx __rows`, with no flag parsing, in two forms.
+// cmdRowsHidden is `hop __rows`, with no flag parsing, in two forms.
 // - `__rows <root> <kind...>` is the plain enumeration the parity harness compares, unranked.
 // - `__rows [kind...]` inside a picker reads the root and -c dir from the session, and ranks, as _hop_rows does for a reload.
 func cmdRowsHidden(args []string, stdout, stderr io.Writer) error {
-	if os.Getenv("HOPX_SESSION") != "" && (len(args) == 0 || !filepath.IsAbs(args[0])) {
+	if os.Getenv("HOP_SESSION") != "" && (len(args) == 0 || !filepath.IsAbs(args[0])) {
 		return cmdRowsSession(args, stdout, stderr)
 	}
 	if len(args) < 1 || args[0] == "" {
@@ -323,7 +323,7 @@ func cmdImport(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	for _, w := range res.Warnings {
-		fmt.Fprintln(stderr, "hopx: warning:", w)
+		fmt.Fprintln(stderr, "hop: warning:", w)
 	}
 	text := res.TOML(src)
 	if *out == "" {

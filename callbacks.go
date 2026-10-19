@@ -19,7 +19,7 @@ import (
 func self() string {
 	p, err := os.Executable()
 	if err != nil {
-		return "hopx"
+		return "hop"
 	}
 	return p
 }
@@ -83,7 +83,7 @@ const (
 	menuOff  = "\x1b[0m"
 )
 
-// cmdMenu is `hopx __menu`, bin/hop-kinds' menu: one row per kind holding targets here, with its live count.
+// cmdMenu is `hop __menu`, bin/hop-kinds' menu: one row per kind holding targets here, with its live count.
 // - hop caches the counts per HEAD and index because a zsh sweep costs about 1.6 s; one shared listing makes them cheap enough to count live.
 // - Field 2 is the kind name, which the enter callback gets back as {2}.
 func cmdMenu(stdout, stderr io.Writer) error {

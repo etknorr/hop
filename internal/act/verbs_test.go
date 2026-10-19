@@ -26,7 +26,7 @@ func newRig(t *testing.T) *rig {
 	os.WriteFile(filepath.Join(bin, "code"), []byte("#!/bin/sh\necho \"code $*\" >>\""+r.log+"\"\nexit ${CODE_RC:-0}\n"), 0o755)
 	os.WriteFile(filepath.Join(bin, "pbcopy"), []byte("#!/bin/sh\ncat >\""+r.log+".clip\"\n"), 0o755)
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("HOPX_CMDFILE", r.cmdfile)
+	t.Setenv("HOP_CMDFILE", r.cmdfile)
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "vi -n")
 	r.root = filepath.Join(d, "repo")

@@ -13,7 +13,7 @@ import (
 	"github.com/etknorr/hop/internal/testfix"
 )
 
-// e2e is one end-to-end world: the match fixture repo, a throwaway HOME with two workspaces, and a built hopx.
+// e2e is one end-to-end world: the match fixture repo, a throwaway HOME with two workspaces, and a built hop.
 type e2e struct {
 	bin, root, home, ws, tmp string
 	seed                     []byte
@@ -21,7 +21,7 @@ type e2e struct {
 	hophome string
 }
 
-// history writes a fresh copy of the seeded history, so hop and hopx each start every run from the same MRU.
+// history writes a fresh copy of the seeded history, so zsh hop and the binary each start every run from the same MRU.
 func (e *e2e) history(name string) string {
 	p := filepath.Join(e.tmp, name)
 	os.WriteFile(p, e.seed, 0o644)
@@ -34,7 +34,7 @@ func newE2E(t *testing.T) *e2e {
 		t.Skip("fzf not installed")
 	}
 	tmp := testfix.Resolved(t.TempDir())
-	e := &e2e{bin: filepath.Join(tmp, "hopx"), root: filepath.Join(tmp, "repo"), home: filepath.Join(tmp, "home"), tmp: tmp, hophome: testfix.HopHome()}
+	e := &e2e{bin: filepath.Join(tmp, "hop"), root: filepath.Join(tmp, "repo"), home: filepath.Join(tmp, "home"), tmp: tmp, hophome: testfix.HopHome()}
 	if out, err := exec.Command("go", "build", "-o", e.bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -77,8 +77,8 @@ type landing struct {
 	pwd    string
 }
 
-// hop runs zsh hop's own hop() and reports where its shell ended up.
-func (e *e2e) hop(t *testing.T, dir string, env []string, args []string) landing {
+// zshHop runs zsh hop's own hop() and reports where its shell ended up.
+func (e *e2e) zshHop(t *testing.T, dir string, env []string, args []string) landing {
 	t.Helper()
 	q := make([]string, len(args))
 	for i, a := range args {
@@ -92,12 +92,12 @@ func (e *e2e) hop(t *testing.T, dir string, env []string, args []string) landing
 	return landing{errs, rc, pwd}
 }
 
-// hopx runs the built binary under the cmdfile protocol and applies the cd the shell function would.
-func (e *e2e) hopx(t *testing.T, dir string, env []string, args []string) landing {
+// goHop runs the built binary under the cmdfile protocol and applies the cd the shell function would.
+func (e *e2e) goHop(t *testing.T, dir string, env []string, args []string) landing {
 	t.Helper()
 	cf := filepath.Join(e.tmp, "cmd")
 	os.Remove(cf)
-	env = append([]string{"HOPX_HISTFILE=" + e.history("hist-hopx"), "HOPX_CONFIG=" + testdata("match.toml"), "HOPX_CMDFILE=" + cf}, env...)
+	env = append([]string{"HOP_HISTFILE=" + e.history("hist-go"), "HOP_CONFIG=" + testdata("match.toml"), "HOP_CMDFILE=" + cf}, env...)
 	out, errs, rc := e.detached(dir, env, e.bin, args...)
 	if out != "" {
 		t.Errorf("stdout must stay empty under the cmdfile protocol: %q", out)
@@ -117,7 +117,7 @@ type headlessCase struct {
 	args []string
 }
 
-// TestHeadlessAgainstHop is suite_match's mt_headless cases and the four probe queries, run by hop and by hopx.
+// TestHeadlessAgainstHop is suite_match's mt_headless cases and the four probe queries, run by zsh hop and by the binary.
 // - The same stderr, byte for byte, the same status, and the same final directory.
 func TestHeadlessAgainstHop(t *testing.T) {
 	if !testfix.HaveZsh() {
@@ -127,7 +127,7 @@ func TestHeadlessAgainstHop(t *testing.T) {
 	e.compare(t, e.headlessCases())
 }
 
-// TestHeadlessAgainstHop03 holds hopx to hop 0.3.1 on the same cases, plus what 0.3.0 added.
+// TestHeadlessAgainstHop03 holds the binary to zsh hop 0.3.1 on the same cases, plus what 0.3.0 added.
 // - A first word naming a kind outside the defaults is read as -k.
 // - A path typed outside its repo is looked for in every repo and workspace, a checkout on its default branch winning.
 func TestHeadlessAgainstHop03(t *testing.T) {
@@ -137,7 +137,7 @@ func TestHeadlessAgainstHop03(t *testing.T) {
 	}
 	e := newE2E(t)
 	e.hophome = home
-	t.Setenv("HOPX_LAYOUT", "")
+	t.Setenv("HOP_LAYOUT", "")
 	origin := map[string]string{
 		"strava/configuration":       "git@github.com:strava/configuration.git",
 		"personal/configuration-old": "https://github.com/Strava/configuration",
@@ -199,18 +199,18 @@ func (e *e2e) compare(t *testing.T, cases []headlessCase) {
 	for _, tc := range cases {
 		name := strings.Join(tc.args, " ") + " from " + strings.TrimPrefix(tc.dir, e.tmp+"/")
 		t.Run(name, func(t *testing.T) {
-			want := e.hop(t, tc.dir, tc.env, tc.args)
-			got := e.hopx(t, tc.dir, tc.env, tc.args)
+			want := e.zshHop(t, tc.dir, tc.env, tc.args)
+			got := e.goHop(t, tc.dir, tc.env, tc.args)
 			if got.rc != want.rc || got.pwd != want.pwd {
-				t.Errorf("hopx: rc %d at %s\n hop: rc %d at %s", got.rc, got.pwd, want.rc, want.pwd)
+				t.Errorf("go:  rc %d at %s\n zsh: rc %d at %s", got.rc, got.pwd, want.rc, want.pwd)
 			}
 			if got.stderr != want.stderr {
-				t.Errorf("stderr differs\n--- hopx\n%s--- hop\n%s", got.stderr, want.stderr)
+				t.Errorf("stderr differs\n--- go\n%s--- zsh\n%s", got.stderr, want.stderr)
 			}
 			hh, _ := os.ReadFile(filepath.Join(e.tmp, "hist-hop"))
-			hx, _ := os.ReadFile(filepath.Join(e.tmp, "hist-hopx"))
+			hx, _ := os.ReadFile(filepath.Join(e.tmp, "hist-go"))
 			if !bytes.Equal(hh, hx) {
-				t.Errorf("history differs\n--- hopx\n%s--- hop\n%s", hx, hh)
+				t.Errorf("history differs\n--- go\n%s--- zsh\n%s", hx, hh)
 			}
 		})
 	}
@@ -263,7 +263,7 @@ func (e *e2e) headlessCases() []headlessCase {
 func TestHeadlessRemembersAndPrints(t *testing.T) {
 	e := newE2E(t)
 	hist := filepath.Join(e.tmp, "h2")
-	env := []string{"HOPX_HISTFILE=" + hist, "HOPX_CONFIG=" + testdata("match.toml")}
+	env := []string{"HOP_HISTFILE=" + hist, "HOP_CONFIG=" + testdata("match.toml")}
 	out, _, rc := e.detached(e.root, env, e.bin, "eks", "security")
 	want := e.root + "/terraform/acct-security-tooling-prod/env-prod/us-east-1/eks"
 	if rc != 0 || out != want+"\n" {
@@ -274,7 +274,7 @@ func TestHeadlessRemembersAndPrints(t *testing.T) {
 	}
 	cf := filepath.Join(e.tmp, "taken")
 	os.WriteFile(cf, nil, 0o600)
-	_, errs, rc := e.detached(e.root, append(env, "HOPX_CMDFILE="+cf), e.bin, "eks", "security")
+	_, errs, rc := e.detached(e.root, append(env, "HOP_CMDFILE="+cf), e.bin, "eks", "security")
 	if rc != 1 || !strings.Contains(errs, "cannot write the cd file") {
 		t.Errorf("an existing cmdfile is never overwritten: rc %d %q", rc, errs)
 	}

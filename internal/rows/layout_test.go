@@ -44,7 +44,7 @@ func layoutLists() [][][]string {
 	}
 }
 
-func hopxLayout() string {
+func goLayout() string {
 	var b strings.Builder
 	lists := layoutLists()
 	var first string
@@ -110,15 +110,15 @@ done`
 }
 
 func TestListLiveZsh03(t *testing.T) {
-	t.Setenv("HOPX_LAYOUT", "")
+	t.Setenv("HOP_LAYOUT", "")
 	home := testfix.RefHome(testfix.RefLayout)
 	if home == "" || !testfix.HaveZsh() {
 		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
 	}
-	got, want := hopxLayout(), zshLayout(t, home)
+	got, want := goLayout(), zshLayout(t, home)
 	gl, wl := strings.Split(got, "\n"), strings.Split(want, "\n")
 	if len(gl) != len(wl) {
-		t.Fatalf("hopx laid out %d lines, hop %s %d", len(gl), testfix.RefLayout, len(wl))
+		t.Fatalf("go laid out %d lines, zsh hop %s %d", len(gl), testfix.RefLayout, len(wl))
 	}
 	for i := range gl {
 		if gl[i] != wl[i] {
@@ -128,7 +128,7 @@ func TestListLiveZsh03(t *testing.T) {
 }
 
 func TestListWidths(t *testing.T) {
-	t.Setenv("HOPX_LAYOUT", "")
+	t.Setenv("HOP_LAYOUT", "")
 	cases := []struct {
 		name string
 		list int
@@ -154,14 +154,14 @@ func TestListWidths(t *testing.T) {
 }
 
 func TestListFixed(t *testing.T) {
-	t.Setenv("HOPX_LAYOUT", "fixed")
+	t.Setenv("HOP_LAYOUT", "fixed")
 	var rs []Row
 	for _, c := range cases {
 		rs = append(rs, New(c[0], c[1], c[2], c[3], c[4], c[5], c[6], len(c) > 7))
 	}
 	for i, got := range List(rs, "/r", nil) {
 		if want := Render(rs[i], "/r"); got != want {
-			t.Errorf("row %d under HOPX_LAYOUT=fixed\n got  %q\n want %q", i, got, want)
+			t.Errorf("row %d under HOP_LAYOUT=fixed\n got  %q\n want %q", i, got, want)
 		}
 	}
 }

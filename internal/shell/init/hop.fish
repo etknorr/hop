@@ -1,4 +1,4 @@
-# hopx init fish: `hopx init fish | source` in ~/.config/fish/config.fish.
+# hop init fish: `hop init fish | source` in ~/.config/fish/config.fish.
 
 # `cd`, not `builtin cd`: fish's cd function is what appends to dirprev, so `cd -` and prevd only work through it.
 # - string collect -N keeps a trailing newline in the name, which a plain substitution would drop.
@@ -9,8 +9,8 @@ function @CMD@ --description 'jump to a target in this repo'
 	end
 	set -l tmp /tmp
 	set -q TMPDIR; and set tmp $TMPDIR
-	set -l f (string trim -r -c / -- $tmp)/hopx.$fish_pid.(random)
-	HOPX_CMDFILE=$f command hopx $argv
+	set -l f (string trim -r -c / -- $tmp)/hop.$fish_pid.(random)
+	HOP_CMDFILE=$f command hop $argv
 	set -l rc $status
 	set -l dir
 	if test -e $f
@@ -23,22 +23,22 @@ function @CMD@ --description 'jump to a target in this repo'
 end
 
 # The current word goes through a variable: an empty `(commandline -ct)` would substitute to no argument at all.
-function __hopx_complete
+function __@CMD@_complete
 	set -l words (commandline -opc)[2..-1]
 	set -l cur (commandline -ct)
-	command hopx __complete $words "$cur"
+	command hop __complete $words "$cur"
 end
-complete -c @CMD@ -f -a '(__hopx_complete)'
+complete -c @CMD@ -f -a '(__@CMD@_complete)'
 
 # A binding body runs in this shell, so the cd sticks; repaint re-runs fish_prompt, and the half-typed line is never touched.
-function __hopx_widget
+function __@CMD@_widget
 	@CMD@ </dev/tty
 	commandline -f repaint
 end
 
 if status is-interactive
 	for mode in default insert
-		bind -M $mode \cg __hopx_widget
-		bind -M $mode \eg __hopx_widget
+		bind -M $mode \cg __@CMD@_widget
+		bind -M $mode \eg __@CMD@_widget
 	end
 end

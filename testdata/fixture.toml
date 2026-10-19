@@ -1,4 +1,4 @@
-# hopx config, imported from @TESTDATA@/fixture.zsh by `hopx config import`.
+# hop config, imported from @TESTDATA@/fixture.zsh by `hop config import`.
 version = 1
 presets = ['dir', 'file', 'helm', 'backstage']
 
@@ -78,4 +78,4 @@ exclude = ['odd/skip*']
 [[kind]]
 name = 'fx'
 desc = 'a user provider'
-exec = ['zsh', '-fc', 'source "$HOPX_COMPAT" && source "$1" && "$2" "$HOP_ROOT"', 'hopx-compat', '@TESTDATA@/fixture.zsh', '_hop_provider_fx']
+exec = ['zsh', '-fc', 'source "$HOP_COMPAT" && source "$1" && "$2" "$HOP_ROOT"', 'hop-compat', '@TESTDATA@/fixture.zsh', '_hop_provider_fx']

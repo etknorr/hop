@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
-# hopx compat layer: lets a hop --fn provider written for zsh hop run as a hopx exec kind.
-# - Sourced by the exec line `hopx config import` writes, BEFORE the user's config.zsh.
+# hop compat layer: lets a --fn provider written for zsh hop run as a Go hop exec kind.
+# - Sourced by the exec line `hop config import` writes, BEFORE the user's config.zsh.
 # - hop_kind and hop_preset become no-ops, so sourcing a whole config.zsh only defines its functions.
 # - _hop_row prints the exec protocol instead of hop's padded display row.
 # - The helpers below are copied verbatim from hop's lib/providers.zsh, so a provider calling them behaves the same.

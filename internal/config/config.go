@@ -1,4 +1,4 @@
-// Package config is hopx's TOML kind registry: presets, ordered [[kind]] tables, extend, and [settings].
+// Package config is hop's TOML kind registry: presets, ordered [[kind]] tables, extend, and [settings].
 package config
 
 import (
@@ -82,9 +82,9 @@ var Columns = []string{"scope", "env", "region", "name"}
 
 func New() *Config { return &Config{byName: map[string]*Kind{}} }
 
-// Path is $HOPX_CONFIG, else ${XDG_CONFIG_HOME:-~/.config}/hop/config.toml.
+// Path is $HOP_CONFIG, else ${XDG_CONFIG_HOME:-~/.config}/hop/config.toml.
 func Path() string {
-	if p := os.Getenv("HOPX_CONFIG"); p != "" {
+	if p := os.Getenv("HOP_CONFIG"); p != "" {
 		return p
 	}
 	base := os.Getenv("XDG_CONFIG_HOME")
@@ -187,7 +187,7 @@ func (c *Config) Apply(src, origin string, top bool) error {
 		return &Error{origin, li.line("", k[len(k)-1]), fmt.Sprintf("unknown key %q", k.String())}
 	}
 	if rf.Version > 1 {
-		return &Error{origin, li.line("", "version"), fmt.Sprintf("version %d is newer than this hopx understands", rf.Version)}
+		return &Error{origin, li.line("", "version"), fmt.Sprintf("version %d is newer than this hop understands", rf.Version)}
 	}
 	if rf.Presets != nil {
 		if !top {

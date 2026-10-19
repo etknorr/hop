@@ -3,7 +3,7 @@ setopt prompt_subst
 precmd() { PRE=${PWD:t} }
 PS1='[$PRE]> '
 # macOS /etc/zshrc points HISTFILE at $ZDOTDIR, which is this tracked dir.
-HISTFILE=$HOPX_T/tmp/zsh_history
+HISTFILE=$HOP_T/tmp/zsh_history
 autoload -Uz compinit && compinit -u -D
-eval "$(hopx init zsh)"
-cd "$HOPX_T/repo"
+eval "$(hop init zsh)"
+cd "$HOP_T/repo"

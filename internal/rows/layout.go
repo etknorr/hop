@@ -20,9 +20,9 @@ const (
 )
 
 // Fixed reports whether rows use hop 0.2's layout, each row padded to constant widths on its own.
-// - HOPX_LAYOUT=fixed selects it; anything else is hop 0.3's fitted layout, which the hop Eric runs uses.
+// - HOP_LAYOUT=fixed selects it; anything else is hop 0.3's fitted layout, which the hop Eric runs uses.
 // - The 0.2 layout stays because the worktree's hop.zsh, which the Go tests compare against, is 0.2.0.
-func Fixed() bool { return os.Getenv("HOPX_LAYOUT") == "fixed" }
+func Fixed() bool { return os.Getenv("HOP_LAYOUT") == "fixed" }
 
 // Widths are one list's five column widths: name, kind, scope, env, region. A 0 drops that column.
 type Widths [5]int

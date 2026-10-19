@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# e2e.sh [ROOT]: hopx against zsh hop end to end, through each one's shell function, over eval_real's query sets and two more.
-# - The reference is the hop Eric runs, $HOP_PARITY_HOME (default ~/.local/share/hop), with his config.zsh; hopx reads eric.toml.
+# e2e.sh [ROOT]: the Go hop against zsh hop end to end, through each one's shell function, over eval_real's query sets and two more.
+# - The reference is the hop Eric runs, $HOP_PARITY_HOME (default ~/.local/share/hop), with his config.zsh; the Go hop reads eric.toml.
 # - The sets are built by that hop from its own rows (sets.zsh), so they are what its eval_real would sweep.
 # - A verdict is jump (the function cd'd), pick (N matched), none (nothing matched) or rc<N>.
 # - The target is the landing dir for a jump and the "best matches" line for a pick; agree means verdict and target match.
@@ -12,25 +12,25 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-root=${1:-${HOPX_PARITY_REPO:-$HOME/strava/configuration}}
+root=${1:-${HOP_PARITY_REPO:-$HOME/strava/configuration}}
 hophome=${HOP_PARITY_HOME:-$HOME/.local/share/hop}
-# hop 0.3.0 fitted the columns to each list; against an older hop, hopx lays rows out the old way.
+# hop 0.3.0 fitted the columns to each list; against an older hop, the Go hop lays rows out the old way.
 case $(cat "$hophome/VERSION" 2>/dev/null) in
 	0.1.* | 0.2.*) layout=fixed ;;
 	*) layout=fit ;;
 esac
-hopcfg=${HOP_PARITY_CONFIG:-$HOME/.config/hop/config.zsh}
-hopxcfg=${HOPX_PARITY_CONFIG:-$repo/testdata/eric.toml}
+zshcfg=${HOP_PARITY_ZSHCONFIG:-$HOME/.config/hop/config.zsh}
+gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
 jumps=${PARITY_JUMPS:-auto unique never}
 workers=${PARITY_WORKERS:-8}
 sets="names pref3 scope+env name+env nonsense v03 away"
-bin=${HOPX_BIN:-}
-out=$(mktemp -d "${TMPDIR:-/tmp}/hopx-e2e.XXXXXX")
+bin=${HOP_BIN:-}
+out=$(mktemp -d "${TMPDIR:-/tmp}/hop-e2e.XXXXXX")
 trap 'rm -rf "$out"' EXIT
 
 if [ -z "$bin" ]; then
 	mkdir -p "$out/bin"
-	bin=$out/bin/hopx
+	bin=$out/bin/hop
 	(cd "$repo" && go build -o "$bin" .) || exit 99
 fi
 
@@ -44,7 +44,7 @@ detached() {
 
 now() { perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
 
-clean HOP_CONFIG="$hopcfg" zsh -f "$here/sets.zsh" "$hophome" "$root" "$out" || exit 98
+clean HOP_HISTFILE=/dev/null HOP_CONFIG="$zshcfg" zsh -f "$here/sets.zsh" "$hophome" "$root" "$out" || exit 98
 cp "$here/corpus/v03.q" "$here/corpus/away.q" "$out"/
 for set in $sets; do
 	from=
@@ -72,7 +72,7 @@ function target(v, land, err,   b) {
 
 bad=0
 : >"$out/diffs"
-printf '%-7s %-10s %7s %7s %6s %6s %6s %6s %9s %9s\n' jump set queries agree diff text hop-j hopx-j hop-ms hopx-ms
+printf '%-7s %-10s %7s %7s %6s %6s %6s %6s %9s %9s\n' jump set queries agree diff text zsh-j go-j zsh-ms go-ms
 for jump in $jumps; do
 	d=$out/$jump
 	mkdir -p "$d"
@@ -80,14 +80,14 @@ for jump in $jumps; do
 	for s in "$out"/shard.*; do
 		n=${s##*.}
 		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" \
-			HOP_CONFIG="$hopcfg" zsh -f "$here/e2e_run.zsh" hop "$hophome" "$root" "$s" "$d/hop.$n" &
+			HOP_CONFIG="$zshcfg" zsh -f "$here/e2e_run.zsh" zsh "$hophome" "$root" "$s" "$d/zsh.$n" &
 		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" \
-			HOPX_LAYOUT="$layout" HOPX_CONFIG="$hopxcfg" zsh -f "$here/e2e_run.zsh" hopx "$bin" "$root" "$s" "$d/hopx.$n" &
+			HOP_LAYOUT="$layout" HOP_CONFIG="$gocfg" zsh -f "$here/e2e_run.zsh" go "$bin" "$root" "$s" "$d/go.$n" &
 	done
 	wait
 	echo "($jump: $(echo "$(now) - $t0" | bc)s wall for $(wc -l <"$out/all.cases" | tr -d ' ') queries x 2, $workers shards each)" >&2
-	cat "$d"/hop.* >"$d/hop.tsv"
-	cat "$d"/hopx.* >"$d/hopx.tsv"
+	cat "$d"/zsh.* >"$d/zsh.tsv"
+	cat "$d"/go.* >"$d/go.tsv"
 	for set in $sets; do
 		awk -F'\t' -v OFS='\t' -v s="$set" -v j="$jump" -v diffs="$out/diffs" "$classify"'
 			function med(a, n,   i, k, t) {
@@ -113,15 +113,15 @@ for jump in $jumps; do
 			}
 			END {
 				printf "%-7s %-10s %7d %7d %6d %6d %6d %6d %9.1f %9.1f\n", j, s, n, agree, n - agree, text, jz, jx, med(hz, nz), med(hx, nx)
-			}' "$d/hop.tsv" "$d/hopx.tsv"
+			}' "$d/zsh.tsv" "$d/go.tsv"
 	done
 done | tee "$out/table"
 bad=$(awk '$1 == "auto" { s += $5 } END { print s + 0 }' "$out/table")
 
 if [ -s "$out/diffs" ]; then
 	echo
-	echo "disagreements (jump set query: hop verdict target | hopx verdict target):"
-	awk -F'\t' '{ printf "%s %s %s: hop %s %s | hopx %s %s\n", $1, $2, $3, $4, ($5 == "" ? "-" : $5), $6, ($7 == "" ? "-" : $7) }' "$out/diffs"
+	echo "disagreements (jump set query: zsh verdict target | go verdict target):"
+	awk -F'\t' '{ printf "%s %s %s: zsh %s %s | go %s %s\n", $1, $2, $3, $4, ($5 == "" ? "-" : $5), $6, ($7 == "" ? "-" : $7) }' "$out/diffs"
 fi
 if [ -n "${PARITY_KEEP:-}" ]; then
 	mkdir -p "$PARITY_KEEP" && cp -R "$out"/. "$PARITY_KEEP"/

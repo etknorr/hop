@@ -1,4 +1,4 @@
-# hopx config, imported from ~/.config/hop/config.zsh by `hopx config import`.
+# hop config, imported from ~/.config/hop/config.zsh by `hop config import`.
 version = 1
 presets = ['terragrunt', 'terraform-modules', 'helm', 'serverless', 'puppet', 'backstage', 'dir', 'file']
 

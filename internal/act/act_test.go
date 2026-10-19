@@ -14,14 +14,14 @@ func TestCD(t *testing.T) {
 	target := filepath.Join(d, "with space")
 	os.Mkdir(target, 0o755)
 
-	t.Setenv("HOPX_CMDFILE", "")
+	t.Setenv("HOP_CMDFILE", "")
 	var out, errb bytes.Buffer
 	if rc := CD(target, &out, &errb, hist, 300); rc != 0 || out.String() != target+"\n" {
 		t.Errorf("no cmdfile prints the dir: rc %d %q", rc, out.String())
 	}
 
 	cf := filepath.Join(d, "cmd")
-	t.Setenv("HOPX_CMDFILE", cf)
+	t.Setenv("HOP_CMDFILE", cf)
 	out.Reset()
 	if rc := CD(target, &out, &errb, hist, 300); rc != 0 || out.Len() != 0 {
 		t.Fatalf("cmdfile: rc %d, stdout %q", rc, out.String())

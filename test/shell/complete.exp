@@ -10,11 +10,11 @@ expect_before -re "\033\\\[6n" { send "\033\[1;1R"; exp_continue }
 expect -re {\]> }
 proc check {name typed want} {
 	expect -timeout 1 timeout {}
-	send "hopx $typed\t"
+	send "hop $typed\t"
 	expect -timeout 2 timeout {}
 	send "\001printf '<%s>' \r"
 	expect {
-		-re "<hopx>$want" { puts "PASS $name" }
+		-re "<hop>$want" { puts "PASS $name" }
 		timeout { puts "FAIL $name" }
 	}
 	expect -re {\]> }

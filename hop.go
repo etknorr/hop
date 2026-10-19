@@ -188,7 +188,7 @@ func underRows(rs []rows.Row, under string) []rows.Row {
 	return out
 }
 
-// session is the state one hopx call threads through the levels, as hop()'s dynamic-scope locals.
+// session is the state one hop call threads through the levels, as hop()'s dynamic-scope locals.
 type session struct {
 	cfg            *config.Config
 	stdout, stderr io.Writer
@@ -258,7 +258,7 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 	out, st, err := pick.Run(s.fzf.Bin, o, sess, input, s.stderr)
 	switch {
 	case err != nil:
-		fmt.Fprintln(s.stderr, "hopx: fzf:", err)
+		fmt.Fprintln(s.stderr, "hop: fzf:", err)
 		return 2
 	case st == 130:
 		return 130
@@ -346,12 +346,12 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		return rc
 	}
 	if o.mode == "-" {
-		fmt.Fprintln(stderr, "hopx: `hopx -` is the shell function's own cd -; run `eval \"$(hopx init zsh)\"` or your shell's equivalent")
+		fmt.Fprintln(stderr, "hop: `hop -` is the shell function's own cd -; run `eval \"$(hop init zsh)\"` or your shell's equivalent")
 		return 2
 	}
 	cfg, err := load(stderr)
 	if err != nil {
-		fmt.Fprintln(stderr, "hopx:", err)
+		fmt.Fprintln(stderr, "hop:", err)
 		return 1
 	}
 	set := cfg.Settings
@@ -423,7 +423,7 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if err := s.fzf.CheckVersion(); err != nil {
-		fmt.Fprintln(stderr, "hopx:", err)
+		fmt.Fprintln(stderr, "hop:", err)
 		return 1
 	}
 	query := strings.Join(o.words, " ")
@@ -468,7 +468,7 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 	r.Like = all[0]
 	res := r.Resolve(query, all)
 	if err := r.Err(); err != nil {
-		fmt.Fprintln(stderr, "hopx:", err)
+		fmt.Fprintln(stderr, "hop:", err)
 	}
 	if res.Verdict == "none" && xrepo {
 		if rc, done := s.elsewhere(query, root, pwd); done {
@@ -500,7 +500,7 @@ func realpath(p string) string {
 	return p
 }
 
-// cmdResolveDump is `hopx __resolve-dump`: one query per stdin line against one enumeration, never cd, never history.
+// cmdResolveDump is `hop __resolve-dump`: one query per stdin line against one enumeration, never cd, never history.
 // - The default line is query, verdict, tier, rule, rel(target) and n; --full prints testdata/resolve_runner.zsh's line.
 // - --stats adds one stderr line with the fzf fork count and the time per query, enumeration excluded.
 // - --ms ends each default line with that query's resolve time in ms, T0 included, for per-tier timing.
@@ -557,7 +557,7 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 	if stats {
 		defer func() {
 			el := time.Since(start)
-			fmt.Fprintf(stderr, "hopx: %d queries, %d fzf calls, %.1f ms per query, %.2f fzf calls per query\n",
+			fmt.Fprintf(stderr, "hop: %d queries, %d fzf calls, %.1f ms per query, %.2f fzf calls per query\n",
 				n, fzf.Calls, float64(el.Microseconds())/1000/float64(max(n, 1)), float64(fzf.Calls)/float64(max(n, 1)))
 		}()
 	}

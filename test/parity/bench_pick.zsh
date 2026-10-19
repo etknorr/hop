@@ -11,10 +11,11 @@ local root=${1:-$HOME/strava/configuration}
 local -i runs=${2:-15}
 local tmp
 tmp=$(mktemp -d) || return 1
-local bin="$tmp/hopx"
+local bin="$tmp/hop"
 (cd "$repo" && go build -o "$bin" .) || return 1
-export HOP_HISTFILE=/dev/null HOPX_HISTFILE="$tmp/hist" XDG_CACHE_HOME="$tmp/cache"
-export HOP_CONFIG="$HOME/.config/hop/config.zsh" HOPX_CONFIG="$repo/testdata/eric.toml"
+# The exports are zsh hop's; the Go binary runs through gohop, since HOP_CONFIG and HOP_HISTFILE name other files to it.
+export HOP_HISTFILE=/dev/null XDG_CACHE_HOME="$tmp/cache" HOP_CONFIG="$HOME/.config/hop/config.zsh"
+gohop() { HOP_CONFIG="$repo/testdata/eric.toml" HOP_HISTFILE="$tmp/hist" "$bin" "$@" }
 unset HOP_DEFAULT_KINDS HOP_JUMP FZF_DEFAULT_OPTS FZF_DEFAULT_OPTS_FILE
 builtin cd -q -- "$root" || return 1
 
@@ -38,16 +39,16 @@ time_cmd() {
 }
 
 local -a f
-f=("${(@ps:\t:)$("$bin" rows -k tg | sed -n 1p)}")
+f=("${(@ps:\t:)$(gohop rows -k tg | sed -n 1p)}")
 local dir=${f[2]} file=${f[3]}
 local -a kinds=(tg mod helm dir mesos)
 print -r -- "{\"root\":\"$root\",\"kinds\":[\"${(j:",":)kinds}\"]}" >"$tmp/session.json"
-export HOPX_SESSION=$tmp/session.json
+export HOP_SESSION=$tmp/session.json
 
-print -r -- "callback	hopx ms	hop ms	target"
-print -r -- "preview file	$(time_cmd "$bin" __preview "$dir" "$file")	$(time_cmd "$hopdir/bin/hop-preview" "$dir" "$file")	${file#$root/}"
-print -r -- "preview dir	$(time_cmd "$bin" __preview "$dir" "$dir")	$(time_cmd "$hopdir/bin/hop-preview" "$dir" "$dir")	${dir#$root/}/"
-print -r -- "rows (reload)	$(time_cmd "$bin" __rows)	$(time_cmd "$hopdir/bin/hop-kinds" rows "$root" "${kinds[@]}")	${(j:,:)kinds}, $("$bin" __rows | wc -l | tr -d ' ') rows"
+print -r -- "callback	go ms	zsh ms	target"
+print -r -- "preview file	$(time_cmd gohop __preview "$dir" "$file")	$(time_cmd "$hopdir/bin/hop-preview" "$dir" "$file")	${file#$root/}"
+print -r -- "preview dir	$(time_cmd gohop __preview "$dir" "$dir")	$(time_cmd "$hopdir/bin/hop-preview" "$dir" "$dir")	${dir#$root/}/"
+print -r -- "rows (reload)	$(time_cmd gohop __rows)	$(time_cmd "$hopdir/bin/hop-kinds" rows "$root" "${kinds[@]}")	${(j:,:)kinds}, $(gohop __rows | wc -l | tr -d ' ') rows"
 "$hopdir/bin/hop-kinds" menu "$root" >/dev/null 2>&1
 sleep 3
-print -r -- "menu	$(time_cmd "$bin" __menu)	$(time_cmd "$hopdir/bin/hop-kinds" menu "$root")	hop's counts cached"
+print -r -- "menu	$(time_cmd gohop __menu)	$(time_cmd "$hopdir/bin/hop-kinds" menu "$root")	hop's counts cached"

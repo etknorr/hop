@@ -40,7 +40,7 @@ func unclipGot(row string) string {
 }
 
 func TestUnclip(t *testing.T) {
-	t.Setenv("HOPX_LAYOUT", "")
+	t.Setenv("HOP_LAYOUT", "")
 	for _, c := range unclipRows() {
 		if got := unclipGot(c.row); got != c.want {
 			t.Errorf("unclip(%q) = %q, want %q", c.row, got, c.want)
@@ -49,7 +49,7 @@ func TestUnclip(t *testing.T) {
 }
 
 func TestUnclipLiveZsh03(t *testing.T) {
-	t.Setenv("HOPX_LAYOUT", "")
+	t.Setenv("HOP_LAYOUT", "")
 	home := testfix.RefHome(testfix.RefLayout)
 	if home == "" || !testfix.HaveZsh() {
 		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
@@ -77,7 +77,7 @@ done`, nil, args...)
 		}
 		got, _ := unclip(c.row)
 		if got != want {
-			t.Errorf("row %d %q\n hopx %q\n hop  %q", i, c.row, got, want)
+			t.Errorf("row %d %q\n go  %q\n zsh %q", i, c.row, got, want)
 		}
 	}
 }

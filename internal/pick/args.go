@@ -21,15 +21,15 @@ type Opts struct {
 }
 
 const (
-	Prompt = "hopx ▸ "
+	Prompt = "hop ▸ "
 	// Expect is _hop_pick's --expect list; ctrl-g rides alt-B's print() instead, since a stray BEL byte is ctrl-g.
 	Expect        = "ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y"
-	PreviewCmd    = "hopx __preview {2} {3}"
+	PreviewCmd    = "hop __preview {2} {3}"
 	PreviewWindow = "right,55%,border-left,wrap,<120(down,50%,border-top,wrap)"
 	MenuPrompt    = ": "
 	MenuHeader    = "KINDS  enter switch  esc back  type to filter"
 	// MenuOpen clears the query so the kind list isn't filtered by the target query typed so far.
-	MenuOpen = "change-prompt(" + MenuPrompt + ")+change-header(" + MenuHeader + ")+change-preview-label()+clear-query+reload(hopx __menu)"
+	MenuOpen = "change-prompt(" + MenuPrompt + ")+change-header(" + MenuHeader + ")+change-preview-label()+clear-query+reload(hop __menu)"
 )
 
 // Header is the note, when the resolver left one, above the legend.
@@ -40,19 +40,19 @@ func (o Opts) Header() string {
 	return o.Legend
 }
 
-// WithShell is --with-shell: fzf runs every callback as `<hopx> __sh <command>`, so no user shell parses a bind.
+// WithShell is --with-shell: fzf runs every callback as `<hop> __sh <command>`, so no user shell parses a bind.
 // - Windows fzf splits the value with strings.Fields, so a path holding a space has to be reached through PATH.
 func WithShell(self string) string {
 	if runtime.GOOS == "windows" {
 		if strings.ContainsAny(self, " \t") {
-			return "hopx __sh"
+			return "hop __sh"
 		}
 		return self + " __sh"
 	}
 	return "'" + strings.ReplaceAll(self, "'", `'\''`) + "' __sh"
 }
 
-// Args is _hop_pick's argv without the modal layer: every callback is a `hopx __verb`, and no bind string holds a path.
+// Args is _hop_pick's argv without the modal layer: every callback is a `hop __verb`, and no bind string holds a path.
 func Args(o Opts) []string {
 	a := append([]string{}, match.Flags...)
 	a = append(a,
@@ -77,9 +77,9 @@ func Args(o Opts) []string {
 	)
 	if o.Menu {
 		a = append(a,
-			"--bind=alt-enter:transform:hopx __key alt-enter",
-			"--bind=enter:transform:hopx __key enter {2}",
-			"--bind=esc:transform:hopx __key esc",
+			"--bind=alt-enter:transform:hop __key alt-enter",
+			"--bind=enter:transform:hop __key enter {2}",
+			"--bind=esc:transform:hop __key esc",
 			"--bind=alt-k:"+MenuOpen,
 		)
 	} else {
@@ -95,7 +95,7 @@ func Args(o Opts) []string {
 		a = append(a, "--query="+o.Query)
 	}
 	if len(o.Reload) > 0 {
-		a = append(a, "--bind=alt-a:reload(hopx __rows "+strings.Join(o.Reload, " ")+")")
+		a = append(a, "--bind=alt-a:reload(hop __rows "+strings.Join(o.Reload, " ")+")")
 	}
 	if o.Select1 {
 		a = append(a, "--select-1")

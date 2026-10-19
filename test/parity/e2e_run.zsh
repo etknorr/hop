@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
-# e2e_run.zsh <hop|hopx> <hop-dir|hopx-bin> <root> <cases> <out>: each query through the shell function, headless, from <root>.
-# - hop is the zsh function from <hop-dir>/hop.zsh, with _hop_tty_ok stubbed to fail as a script or cron job would see it.
-# - hopx is the function `hopx init zsh` prints, calling <hopx-bin>; the caller runs this with no controlling terminal.
+# e2e_run.zsh <zsh|go> <hop-dir|hop-bin> <root> <cases> <out>: each query through the shell function, headless, from <root>.
+# - zsh is the hop function from <hop-dir>/hop.zsh, with _hop_tty_ok stubbed to fail as a script or cron job would see it.
+# - go is the hop function `hop init zsh` prints, calling <hop-bin>; the caller runs this with no controlling terminal.
 # - A case is set<TAB>query, plus <TAB>dir to run it from somewhere other than <root>.
 # - Out is set, query, rc, landing dir, remembered dir, wall ms and stderr with newlines as \n.
 # - Dirs are root-relative, `./` for the root itself; the history file is emptied before every query, so one jump never ranks the next.
@@ -11,18 +11,18 @@ setopt extended_glob
 zmodload zsh/datetime
 local impl=$1 src=${2:A} root=${3:A} cases=${4:A} out=${5:A}
 local tmp
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/hopx-e2e.XXXXXX") || exit 1
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/hop-e2e.XXXXXX") || exit 1
 local hist=$tmp/hist err=$tmp/err res=$tmp/res
-export HOP_HISTFILE=$hist HOPX_HISTFILE=$hist XDG_CACHE_HOME=$tmp/cache
+export HOP_HISTFILE=$hist XDG_CACHE_HOME=$tmp/cache
 case $impl in
-	hop)
+	zsh)
 		source "$src/hop.zsh" || exit 3
 		_hop_tty_ok() { return 1 }
 		;;
-	hopx)
+	go)
 		path=("${src:h}" "${path[@]}")
-		[[ ${commands[hopx]} == "$src" ]] || { print -ru2 -- "e2e_run: $src is not the first hopx on PATH"; exit 3 }
-		eval "$(command hopx init zsh)" || exit 3
+		[[ ${commands[hop]} == "$src" ]] || { print -ru2 -- "e2e_run: $src is not the first hop on PATH"; exit 3 }
+		eval "$(command hop init zsh)" || exit 3
 		;;
 	*)
 		print -ru2 -- "e2e_run: unknown impl: $impl"
@@ -55,7 +55,7 @@ for line in "${(@f)$(<"$cases")}"; do
 	t0=$EPOCHREALTIME
 	(
 		[[ -n ${f[3]:-} ]] && builtin cd -q -- "${f[3]}"
-		$impl ${=q} >/dev/null 2>"$err" </dev/null
+		hop ${=q} >/dev/null 2>"$err" </dev/null
 		print -r -- "$?${tab}${PWD}"
 	) >"$res"
 	(( ms = (EPOCHREALTIME - t0) * 1000 ))

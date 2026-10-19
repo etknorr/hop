@@ -1,9 +1,9 @@
 #!/usr/bin/env zsh
-# hopx config import, the zsh half: let zsh parse config.zsh, and record every hop_kind and hop_preset call.
+# hop config import, the zsh half: let zsh parse config.zsh, and record every hop_kind and hop_preset call.
 # - zsh does the parsing because config.zsh is shell code: quoting, continuations, variables and conditionals.
 # - Records go to fd 3 as NUL-terminated tokens, so a config that prints to stdout cannot corrupt them.
 # - Record shapes: preset 1 NAME | kind N ARGV... | fn 2 NAME DEFINED | set 2 VAR VALUE | orphan 1 FUNC
-# - Option parsing is NOT done here: hopx ports dsl.zsh's parser, so both read argv identically.
+# - Option parsing is NOT done here: the Go side ports dsl.zsh's parser, so both read argv identically.
 emulate -L zsh
 local cfg=$1
 

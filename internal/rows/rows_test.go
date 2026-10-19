@@ -58,7 +58,7 @@ done`
 	return strings.ReplaceAll(out, os.Getenv("HOME"), "@HOME@")
 }
 
-func hopxRows() string {
+func goRows() string {
 	var b strings.Builder
 	for _, c := range cases {
 		b.WriteString(renderCase(expandHome(c), "/r") + "\n")
@@ -75,7 +75,7 @@ func TestRenderGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := hopxRows()
+	got := goRows()
 	gl, wl := strings.Split(got, "\n"), strings.Split(string(want), "\n")
 	for i := range max(len(gl), len(wl)) {
 		var g, w string
@@ -95,8 +95,8 @@ func TestRenderLiveZsh(t *testing.T) {
 	if !testfix.HaveZsh() {
 		t.Skip("zsh or hop.zsh not available")
 	}
-	if got, want := hopxRows(), zshRows(t); got != want {
-		t.Errorf("hopx and _hop_row differ\n got  %q\n want %q", got, want)
+	if got, want := goRows(), zshRows(t); got != want {
+		t.Errorf("go and _hop_row differ\n got  %q\n want %q", got, want)
 	}
 }
 

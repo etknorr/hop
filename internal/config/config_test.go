@@ -10,8 +10,8 @@ import (
 
 func clearEnv(t *testing.T) {
 	t.Helper()
-	for _, v := range []string{"HOP_ACTION", "HOP_JUMP", "HOP_CODE", "HOP_CLIPBOARD", "HOPX_HISTFILE", "HOP_FZF_HEIGHT",
-		"HOP_VIM", "HOP_HIST_MAX", "HOP_DEFAULT_KINDS", "HOP_WORKSPACES", "HOP_REPOS", "HOP_WORKSPACES_FILE", "HOPX_CONFIG"} {
+	for _, v := range []string{"HOP_ACTION", "HOP_JUMP", "HOP_CODE", "HOP_CLIPBOARD", "HOP_HISTFILE", "HOP_FZF_HEIGHT",
+		"HOP_VIM", "HOP_HIST_MAX", "HOP_DEFAULT_KINDS", "HOP_WORKSPACES", "HOP_REPOS", "HOP_WORKSPACES_FILE", "HOP_CONFIG"} {
 		t.Setenv(v, "")
 		os.Unsetenv(v)
 	}
@@ -50,7 +50,7 @@ func TestValidationErrors(t *testing.T) {
 		{"glob marker", "[[kind]]\nname = 'a'\nmarker = '*.hcl'\n", "marker must be a literal", 3},
 		{"bad preset", "presets = ['nope']\n", "no such preset: nope", 1},
 		{"syntax", "[[kind]\nname = 'a'\n", "expected end of table array name", -1},
-		{"version", "version = 2\n", "newer than this hopx", 1},
+		{"version", "version = 2\n", "newer than this hop", 1},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -176,8 +176,8 @@ func TestSettingsPrecedence(t *testing.T) {
 	if s.Action != "cd" || s.Jump != "auto" || *s.FzfHeight != "80%" || !*s.Vim || s.HistMax != 300 || s.Code != "code" {
 		t.Errorf("defaults: %+v", s)
 	}
-	if !strings.HasSuffix(s.HistFile, "/hopx/history") {
-		t.Errorf("hopx keeps its own history: %s", s.HistFile)
+	if !strings.HasSuffix(s.HistFile, "/.local/state/hop/history") {
+		t.Errorf("the history defaults to zsh hop's file: %s", s.HistFile)
 	}
 }
 
@@ -187,7 +187,7 @@ func TestPath(t *testing.T) {
 	if p := Path(); p != "/x/hop/config.toml" {
 		t.Errorf("Path = %s", p)
 	}
-	t.Setenv("HOPX_CONFIG", "/y.toml")
+	t.Setenv("HOP_CONFIG", "/y.toml")
 	if p := Path(); p != "/y.toml" {
 		t.Errorf("Path = %s", p)
 	}

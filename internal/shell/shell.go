@@ -1,4 +1,4 @@
-// Package shell holds the embedded `hopx init` scripts and the `hopx __complete` candidates.
+// Package shell holds the embedded `hop init` scripts and the `hop __complete` candidates.
 package shell
 
 import (
@@ -12,20 +12,20 @@ import (
 //go:embed init/*
 var scripts embed.FS
 
-// Shells maps each `hopx init` name to its script.
-var Shells = map[string]string{"zsh": "hopx.zsh", "bash": "hopx.bash", "fish": "hopx.fish", "pwsh": "hopx.ps1", "powershell": "hopx.ps1"}
+// Shells maps each `hop init` name to its script.
+var Shells = map[string]string{"zsh": "hop.zsh", "bash": "hop.bash", "fish": "hop.fish", "pwsh": "hop.ps1", "powershell": "hop.ps1"}
 
 var cmdName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
 
-// Init is `hopx init <shell> [--cmd NAME]`: the script with its function named, and pwsh's binary path baked in.
-// - The function is hopx unless --cmd renames it, zoxide-style; it never defaults to hop, which zsh hop owns.
+// Init is `hop init <shell> [--cmd NAME]`: the script with its function named, and pwsh's binary path baked in.
+// - The function is hop unless --cmd renames it, zoxide-style.
 func Init(sh, cmd, bin string) (string, error) {
 	name, ok := Shells[sh]
 	if !ok {
 		return "", fmt.Errorf("unsupported shell %q: one of zsh, bash, fish, pwsh", sh)
 	}
 	if cmd == "" {
-		cmd = "hopx"
+		cmd = "hop"
 	}
 	if !cmdName.MatchString(cmd) {
 		return "", fmt.Errorf("--cmd %q is not a plain function name", cmd)
@@ -60,7 +60,7 @@ var firstWords = [][2]string{
 	{"init", "print the shell integration"}, {"rows", "print the rows"}, {"kinds", "list the kinds"}, {"config", "import, check or locate the config"},
 }
 
-// Complete is `hopx __complete <words...>`: the words after the command name, the last one being the word under the cursor.
+// Complete is `hop __complete <words...>`: the words after the command name, the last one being the word under the cursor.
 // - Each candidate is `word<TAB>description`; zsh, fish and pwsh show the description, bash keeps the word.
 func Complete(words []string, kinds []Kind, actions []string) []string {
 	cur, prev := "", ""

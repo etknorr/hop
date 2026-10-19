@@ -1,4 +1,4 @@
-// Package tty finds the terminal when a caller hands hopx pipes, as a PSReadLine key handler does.
+// Package tty finds the terminal when a caller hands hop pipes, as a PSReadLine key handler does.
 package tty
 
 import (
@@ -26,7 +26,7 @@ func Open() *os.File {
 }
 
 // Available is _hop_tty_ok: a terminal is reachable, whatever stdin is.
-// - fzf reads keys from /dev/tty, so `hopx < /dev/null` and `hopx | cat` still pick.
+// - fzf reads keys from /dev/tty, so `hop < /dev/null` and `hop | cat` still pick.
 // - The failure is no controlling terminal at all (cron, CI), where fzf would block forever.
 func Available() bool {
 	f := Open()

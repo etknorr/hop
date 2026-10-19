@@ -32,10 +32,10 @@ func tricky(t *testing.T) (string, string) {
 		"three = ${WSD}/b\r",
 		"one = " + d + "/b",
 		" = " + d + "/a",
-		"four = ~/does-not-exist-hopx",
+		"four = ~/does-not-exist-hop",
 		"five = " + d + "/$-a",
 		"six = ${WSD",
-		"seven=$WSD/a$UNSETVAR_HOPX",
+		"seven=$WSD/a$UNSETVAR_HOP",
 		"nox = " + d + "/nox",
 		"crlf = " + d + "/a\r",
 	}
@@ -63,7 +63,7 @@ func TestParseMatchesZsh(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.TrimSpace(out) != strings.Join(got, "\n") {
-		t.Errorf("zsh _hop_ws_parse\n%s\nhopx\n%s", out, strings.Join(got, "\n"))
+		t.Errorf("zsh _hop_ws_parse\n%s\ngo\n%s", out, strings.Join(got, "\n"))
 	}
 }
 
@@ -101,7 +101,7 @@ func TestExpand(t *testing.T) {
 	t.Setenv("HOME", "/h")
 	t.Setenv("V", "v")
 	cases := map[string]string{
-		"~": "/h", "~/x": "/h/x", "a/~/b": "a/~/b", "$V/x": "v/x", "${V}x": "vx", "$-x": "-x", "${V": "v{V", "$NOPE_HOPX/x": "/x",
+		"~": "/h", "~/x": "/h/x", "a/~/b": "a/~/b", "$V/x": "v/x", "${V}x": "vx", "$-x": "-x", "${V": "v{V", "$NOPE_HOP/x": "/x",
 	}
 	for in, want := range cases {
 		if got := Expand(in); got != want {
@@ -117,7 +117,7 @@ func TestExpand(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := strings.TrimSuffix(out, "\n"); got != want {
-			t.Errorf("zsh _hop_ws_expand(%q) = %q, hopx expects %q", in, got, want)
+			t.Errorf("zsh _hop_ws_expand(%q) = %q, go expects %q", in, got, want)
 		}
 	}
 }

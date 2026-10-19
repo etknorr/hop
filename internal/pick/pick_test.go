@@ -16,7 +16,7 @@ import (
 
 var update = flag.Bool("update", false, "rewrite testdata/golden/argv.golden")
 
-const self = "/opt/hopx dir/bin/hopx"
+const self = "/opt/hop dir/bin/hop"
 
 func argvCases() []struct {
 	name string
@@ -97,15 +97,15 @@ func TestArgvParses(t *testing.T) {
 func TestArgvShape(t *testing.T) {
 	a := strings.Join(Args(argvCases()[0].o), "\n")
 	for _, want := range []string{"--expect=ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y", "--bind=alt-B:print(ctrl-g)+accept", "--bind=ctrl-/:toggle-preview",
-		"--bind=alt-p:toggle-preview", "--bind=alt-a:reload(hopx __rows tg mod helm dir file)", "--bind=alt-k:" + MenuOpen,
-		"--with-shell='/opt/hopx dir/bin/hopx' __sh", "--preview=hopx __preview {2} {3}", "--height=80%"} {
+		"--bind=alt-p:toggle-preview", "--bind=alt-a:reload(hop __rows tg mod helm dir file)", "--bind=alt-k:" + MenuOpen,
+		"--with-shell='/opt/hop dir/bin/hop' __sh", "--preview=hop __preview {2} {3}", "--height=80%"} {
 		if !strings.Contains(a, want) {
 			t.Errorf("argv lacks %q", want)
 		}
 	}
 	for _, c := range argvCases() {
 		for _, x := range Args(c.o) {
-			if strings.Contains(x, "/opt/hopx") && !strings.HasPrefix(x, "--with-shell=") {
+			if strings.Contains(x, "/opt/hop") && !strings.HasPrefix(x, "--with-shell=") {
 				t.Errorf("%s: only --with-shell may hold a path: %q", c.name, x)
 			}
 		}
@@ -114,7 +114,7 @@ func TestArgvShape(t *testing.T) {
 	if strings.Contains(fs, "--height") {
 		t.Error("HOP_FZF_HEIGHT set but empty is fullscreen, so no --height")
 	}
-	if WithShell("/a/it's/hopx") != `'/a/it'\''s/hopx' __sh` {
+	if WithShell("/a/it's/hop") != `'/a/it'\''s/hop' __sh` {
 		t.Error("a quote in the binary path must survive --with-shell")
 	}
 }
@@ -158,10 +158,10 @@ func TestParse(t *testing.T) {
 
 func TestSplitWords(t *testing.T) {
 	for in, want := range map[string][]string{
-		`hopx __preview '/a b/c' '/it'\''s'`: {"hopx", "__preview", "/a b/c", "/it's"},
-		`hopx __key enter 'helm'`:            {"hopx", "__key", "enter", "helm"},
-		`echo "a \"b\" \$c" x\ y`:            {"echo", `a "b" $c`, "x y"},
-		`hopx __preview '' ''`:               {"hopx", "__preview", "", ""},
+		`hop __preview '/a b/c' '/it'\''s'`: {"hop", "__preview", "/a b/c", "/it's"},
+		`hop __key enter 'helm'`:            {"hop", "__key", "enter", "helm"},
+		`echo "a \"b\" \$c" x\ y`:           {"echo", `a "b" $c`, "x y"},
+		`hop __preview '' ''`:               {"hop", "__preview", "", ""},
 	} {
 		got, err := SplitWords(in)
 		if err != nil || strings.Join(got, "|") != strings.Join(want, "|") {
@@ -177,8 +177,8 @@ func TestShim(t *testing.T) {
 	var got []string
 	disp := func(a []string) int { got = a; return 7 }
 	var out, errb bytes.Buffer
-	if rc := Shim(`hopx __preview '/a b' '/c'`, disp, &out, &errb); rc != 7 || strings.Join(got, "|") != "__preview|/a b|/c" {
-		t.Errorf("a hopx callback dispatches in process: rc %d %q", rc, got)
+	if rc := Shim(`hop __preview '/a b' '/c'`, disp, &out, &errb); rc != 7 || strings.Join(got, "|") != "__preview|/a b|/c" {
+		t.Errorf("a hop callback dispatches in process: rc %d %q", rc, got)
 	}
 	got = nil
 	t.Setenv("SHELL", "/bin/sh")
@@ -186,8 +186,8 @@ func TestShim(t *testing.T) {
 		t.Errorf("anything else runs in $SHELL: rc %d out %q", rc, out.String())
 	}
 	out.Reset()
-	if rc := Shim(`hopxy __preview x`, disp, &out, &errb); got != nil || rc == 7 {
-		t.Error("only the word hopx dispatches in process")
+	if rc := Shim(`hopy __preview x`, disp, &out, &errb); got != nil || rc == 7 {
+		t.Error("only the word hop dispatches in process")
 	}
 }
 
@@ -198,10 +198,10 @@ func TestKey(t *testing.T) {
 		t.Error("on the target list, enter accepts, esc aborts and alt-enter cds")
 	}
 	t.Setenv("FZF_PROMPT", MenuPrompt)
-	if got := Key(s, "enter", "helm"); got != "clear-query+reload(hopx __rows helm)+change-prompt("+Prompt+")+transform-header(hopx __header)+first" {
+	if got := Key(s, "enter", "helm"); got != "clear-query+reload(hop __rows helm)+change-prompt("+Prompt+")+transform-header(hop __header)+first" {
 		t.Errorf("menu enter: %q", got)
 	}
-	if got := Key(s, "esc", ""); !strings.HasPrefix(got, "clear-query+reload(hopx __rows tg mod)+") {
+	if got := Key(s, "esc", ""); !strings.HasPrefix(got, "clear-query+reload(hop __rows tg mod)+") {
 		t.Errorf("menu esc restores the opening kinds: %q", got)
 	}
 	if Key(s, "enter", "nope") != "ignore" || Key(s, "alt-enter", "") != "ignore" || Key(s, "bogus", "") != "ignore" {
@@ -219,12 +219,12 @@ func TestSession(t *testing.T) {
 	if st, _ := os.Stat(p); st.Mode().Perm() != 0o600 {
 		t.Errorf("session mode %v", st.Mode().Perm())
 	}
-	t.Setenv("HOPX_SESSION", p)
+	t.Setenv("HOP_SESSION", p)
 	got, err := Load()
 	if err != nil || got.Root != s.Root || got.Under != s.Under || got.Header != s.Header || len(got.All) != 2 {
 		t.Errorf("round trip: %+v %v", got, err)
 	}
-	t.Setenv("HOPX_SESSION", "")
+	t.Setenv("HOP_SESSION", "")
 	if _, err := Load(); err == nil {
 		t.Error("no session outside a picker")
 	}

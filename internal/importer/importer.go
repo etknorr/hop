@@ -1,4 +1,4 @@
-// Package importer is `hopx config import`: zsh replays config.zsh, and Go re-parses every hop_kind call.
+// Package importer is `hop config import`: zsh replays config.zsh, and Go re-parses every hop_kind call.
 package importer
 
 import (
@@ -29,7 +29,7 @@ type event struct {
 }
 
 func runDumper(cfg string) ([]event, error) {
-	tmp, err := os.CreateTemp("", "hopx-import-*.zsh")
+	tmp, err := os.CreateTemp("", "hop-import-*.zsh")
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func parseHopKind(argv []string, fns map[string]bool, cfg string) (map[string]an
 			if val == "_hop_entity_name" {
 				d["name_from"] = "yaml:metadata.name"
 			} else {
-				warn = append(warn, fmt.Sprintf("kind %s: --name-fn %s has no hopx equivalent and was dropped", name, val))
+				warn = append(warn, fmt.Sprintf("kind %s: --name-fn %s has no hop equivalent and was dropped", name, val))
 			}
 		case "--exclude":
 			d["exclude"] = splitNonEmpty(val, ",")
@@ -160,7 +160,7 @@ func parseHopKind(argv []string, fns map[string]bool, cfg string) (map[string]an
 			case !fns[val]:
 				return nil, nil, fmt.Errorf("hop_kind %s: --fn %s is not a defined function", name, val)
 			default:
-				setShape("exec", []string{"zsh", "-fc", `source "$HOPX_COMPAT" && source "$1" && "$2" "$HOP_ROOT"`, "hopx-compat", tildePath(cfg), val})
+				setShape("exec", []string{"zsh", "-fc", `source "$HOP_COMPAT" && source "$1" && "$2" "$HOP_ROOT"`, "hop-compat", tildePath(cfg), val})
 			}
 		default:
 			return nil, nil, fmt.Errorf("hop_kind %s: unknown option: %s", name, opt)
@@ -355,7 +355,7 @@ func Import(cfg string) (*Result, error) {
 			case "_hop_provider_helm", "_hop_provider_dir", "_hop_provider_repo", "_hop_provider_ws":
 			default:
 				if !referenced[f] {
-					res.Warnings = append(res.Warnings, fmt.Sprintf("%s is a bare provider function with no hop_kind; hop ran it as kind %s, hopx needs a [[kind]] with exec", f, strings.TrimPrefix(f, "_hop_provider_")))
+					res.Warnings = append(res.Warnings, fmt.Sprintf("%s is a bare provider function with no hop_kind; zsh hop ran it as kind %s, and hop needs a [[kind]] with exec", f, strings.TrimPrefix(f, "_hop_provider_")))
 				}
 			}
 		}
@@ -398,7 +398,7 @@ func Import(cfg string) (*Result, error) {
 		got.LoadAllPresets()
 	}
 	if a, b := replay.RegistryKey(), got.RegistryKey(); a != b {
-		return nil, fmt.Errorf("imported config differs from hop's registry; config.zsh probably declares a kind before the hop_preset that overrides it\nhop:   %s\nhopx:  %s", a, b)
+		return nil, fmt.Errorf("imported config differs from hop's registry; config.zsh probably declares a kind before the hop_preset that overrides it\nzsh hop: %s\nhop:     %s", a, b)
 	}
 	return res, nil
 }
@@ -465,7 +465,7 @@ var settingKey = map[string]string{
 
 func (r *Result) TOML(cfg string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# hopx config, imported from %s by `hopx config import`.\n", tildePath(cfg))
+	fmt.Fprintf(&b, "# hop config, imported from %s by `hop config import`.\n", tildePath(cfg))
 	b.WriteString("version = 1\n")
 	if r.Presets != nil {
 		fmt.Fprintf(&b, "presets = %s\n", tv(r.Presets))

@@ -87,7 +87,7 @@ func TestLiveZsh(t *testing.T) {
 	}
 	got := render(Generate(cfg, root, kinds, os.Stderr), root)
 	if got != want {
-		t.Errorf("hopx and zsh hop differ on the fixture\n--- hopx\n%s--- zsh\n%s", rows.StripANSI(got), rows.StripANSI(want))
+		t.Errorf("go and zsh hop differ on the fixture\n--- go\n%s--- zsh\n%s", rows.StripANSI(got), rows.StripANSI(want))
 	}
 }
 

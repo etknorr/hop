@@ -21,7 +21,7 @@ type Session struct {
 
 // Write puts the session in a fresh private directory and returns its path; the caller removes the directory.
 func (s *Session) Write() (dir, path string, err error) {
-	dir, err = os.MkdirTemp("", "hopx-pick-")
+	dir, err = os.MkdirTemp("", "hop-pick-")
 	if err != nil {
 		return "", "", err
 	}
@@ -34,11 +34,11 @@ func (s *Session) Write() (dir, path string, err error) {
 	return dir, path, nil
 }
 
-// Load reads $HOPX_SESSION, which only a picker's callbacks have.
+// Load reads $HOP_SESSION, which only a picker's callbacks have.
 func Load() (*Session, error) {
-	p := os.Getenv("HOPX_SESSION")
+	p := os.Getenv("HOP_SESSION")
 	if p == "" {
-		return nil, errors.New("HOPX_SESSION is not set; this is a picker callback")
+		return nil, errors.New("HOP_SESSION is not set; this is a picker callback")
 	}
 	b, err := os.ReadFile(p)
 	if err != nil {
@@ -52,10 +52,10 @@ func inMenu() bool { return strings.HasPrefix(os.Getenv("FZF_PROMPT"), MenuPromp
 
 // back leaves the menu for these kinds' rows, under the picker's own prompt and header; the query filtered kinds, so it goes.
 func back(kinds []string) string {
-	return "clear-query+reload(hopx __rows " + strings.Join(kinds, " ") + ")+change-prompt(" + Prompt + ")+transform-header(hopx __header)+first"
+	return "clear-query+reload(hop __rows " + strings.Join(kinds, " ") + ")+change-prompt(" + Prompt + ")+transform-header(hop __header)+first"
 }
 
-// Key is `hopx __key`, the one decision fzf can't make: whether the list on screen holds kinds or targets.
+// Key is `hop __key`, the one decision fzf can't make: whether the list on screen holds kinds or targets.
 // - It replaces hop's POSIX `case "$FZF_PROMPT"` transform bodies, which break under fish and pwsh.
 // - FZF_PROMPT is the state, as in hop, since fzf exports it to every callback.
 func Key(s *Session, key, arg string) string {

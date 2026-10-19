@@ -136,7 +136,7 @@ func (f *FZF) CheckVersion() error {
 	if v == "" || !Less(v, Floor) {
 		return nil
 	}
-	return fmt.Errorf("fzf %s is too old; hopx needs %s or newer", v, Floor)
+	return fmt.Errorf("fzf %s is too old; hop needs %s or newer", v, Floor)
 }
 
 // Less is _hop_ver_lt: three dotted fields, non-digits stripped, a missing field counting as 0.

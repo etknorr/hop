@@ -154,7 +154,7 @@ func HaveZsh() bool {
 	return err == nil
 }
 
-// RefLayout is the hop release whose fitted layout hopx ports; the worktree's own hop.zsh is 0.2.0, from before it.
+// RefLayout is the zsh hop release this module is held to.
 const RefLayout = "v0.3.1"
 
 // RefHome is hop at a release tag, unpacked once from the worktree's git objects into the temp dir.
@@ -164,11 +164,11 @@ func RefHome(tag string) string {
 	if err != nil {
 		return ""
 	}
-	dir := filepath.Join(os.TempDir(), "hopx-ref-"+tag+"-"+strings.TrimSpace(string(out))[:12])
+	dir := filepath.Join(os.TempDir(), "hop-ref-"+tag+"-"+strings.TrimSpace(string(out))[:12])
 	if _, err := os.Stat(filepath.Join(dir, "hop.zsh")); err == nil {
 		return dir
 	}
-	tmp, err := os.MkdirTemp(os.TempDir(), "hopx-ref-")
+	tmp, err := os.MkdirTemp(os.TempDir(), "hop-ref-")
 	if err != nil {
 		return ""
 	}

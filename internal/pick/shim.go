@@ -59,12 +59,12 @@ func SplitWords(s string) ([]string, error) {
 	return words, nil
 }
 
-// Shim is `hopx __sh <command>`, the program fzf runs every callback through.
-// - A `hopx __verb` command is dispatched in this process, so the user's $SHELL (fish, pwsh, cmd) never parses it.
+// Shim is `hop __sh <command>`, the program fzf runs every callback through.
+// - A `hop __verb` command is dispatched in this process, so the user's $SHELL (fish, pwsh, cmd) never parses it.
 // - Anything else is a bind from the user's FZF_DEFAULT_OPTS, written for their own shell, so it goes to that shell.
 func Shim(cmd string, dispatch func(args []string) int, stdout, stderr io.Writer) int {
 	words, err := SplitWords(cmd)
-	if err == nil && len(words) >= 2 && words[0] == "hopx" && strings.HasPrefix(words[1], "__") {
+	if err == nil && len(words) >= 2 && words[0] == "hop" && strings.HasPrefix(words[1], "__") {
 		return dispatch(words[1:])
 	}
 	var c *exec.Cmd
@@ -83,7 +83,7 @@ func Shim(cmd string, dispatch func(args []string) int, stdout, stderr io.Writer
 		if errors.As(err, &ee) {
 			return ee.ExitCode()
 		}
-		fmt.Fprintln(stderr, "hopx:", err)
+		fmt.Fprintln(stderr, "hop:", err)
 		return 127
 	}
 	return 0

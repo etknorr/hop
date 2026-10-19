@@ -24,7 +24,7 @@ func TestInitParses(t *testing.T) {
 			continue
 		}
 		for _, cmd := range []string{"", "j"} {
-			s, err := Init(c.shell, cmd, "/opt/it's/hopx")
+			s, err := Init(c.shell, cmd, "/opt/it's/hop")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -39,7 +39,7 @@ func TestInitParses(t *testing.T) {
 
 func TestInitText(t *testing.T) {
 	for sh := range Shells {
-		s, err := Init(sh, "jump", "/opt/it's/hopx")
+		s, err := Init(sh, "jump", "/opt/it's/hop")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -59,13 +59,13 @@ func TestInitText(t *testing.T) {
 			t.Errorf("%s: never builtin cd and never eval", sh)
 		}
 	}
-	ps, _ := Init("pwsh", "", "/opt/it's/hopx")
-	if !strings.Contains(ps, "$global:__HopxBin = '/opt/it''s/hopx'") {
+	ps, _ := Init("pwsh", "", "/opt/it's/hop")
+	if !strings.Contains(ps, "$global:__HopBin = '/opt/it''s/hop'") {
 		t.Error("pwsh bakes in the binary path, single quotes doubled")
 	}
 	zs, _ := Init("zsh", "", "/x")
-	if !strings.Contains(zs, "command hopx") || !strings.Contains(zs, "hopx() {") {
-		t.Error("zsh defines hopx and reaches the binary with command")
+	if !strings.Contains(zs, "command hop") || !strings.Contains(zs, "hop() {") {
+		t.Error("zsh defines hop and reaches the binary with command")
 	}
 	for _, bad := range []string{"hop x", "a;b", "", "-x"} {
 		if bad == "" {
