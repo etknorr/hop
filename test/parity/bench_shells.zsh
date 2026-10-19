@@ -2,9 +2,9 @@
 # bench_shells.zsh [RUNS]: what the shell function costs, per shell, against hop in zsh.
 # - jump: one `<fn> eks security` through the shell function, cd included, as (T(15 jumps) - T(0 jumps)) / 15 in one shell.
 # - init: `eval "$(hop init <shell>)"` (or `source hop.zsh`) over a bare `<shell> -c :`, median of RUNS.
-# - fish and pwsh run in the test/docker images with HOP_PARITY_REPO mounted read-only at /repo, so their numbers include
+# - fish runs in the test/docker image with HOP_PARITY_REPO mounted read-only at /repo, so their numbers include
 #   docker's bind-mount filesystem and are not comparable to the host rows.
-# - /repo and not the repo's own path: a ~/strava path mounted at itself shows up empty under Docker Desktop.
+# - /repo and not the repo's own path: a path under $HOME mounted at itself can show up empty under Docker Desktop.
 emulate -L zsh
 zmodload zsh/datetime
 local here=${0:A:h}
@@ -86,9 +86,5 @@ dock() {
 local fl='set i 0; while test $i -lt @N@; hop eks security; cd /repo; set i (math $i + 1); end'
 dock fish -e LABEL='go fish 3.7 (docker)' -e SH_BARE="fish -c :" -e SH_INIT="fish -c 'hop init fish | source'" \
 	-e SH_J0="fish -c 'hop init fish | source; ${fl//@N@/0}'" -e SH_JN="fish -c 'hop init fish | source; ${fl//@N@/$n}'"
-local pl='for ($i = 0; $i -lt @N@; $i++) { hop eks security; Set-Location /repo }'
-local pi='Invoke-Expression (& hop init pwsh | Out-String)'
-dock pwsh -e LABEL='go pwsh 7.5 (docker)' -e SH_BARE="pwsh -NoProfile -Command 0" -e SH_INIT="pwsh -NoProfile -Command '$pi'" \
-	-e SH_J0="pwsh -NoProfile -Command '$pi; ${pl//@N@/0}'" -e SH_JN="pwsh -NoProfile -Command '$pi; ${pl//@N@/$n}'"
 local zl='i=0; while [ $i -lt @N@ ]; do hop eks security >/dev/null; i=$((i+1)); done'
 dock fish -e LABEL='bare binary (docker)' -e SH_BARE=":" -e SH_INIT=":" -e SH_J0="${zl//@N@/0}" -e SH_JN="${zl//@N@/$n}"
