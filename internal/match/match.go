@@ -130,13 +130,20 @@ func (f *FZF) version() string {
 	return v
 }
 
-// CheckVersion is _hop_fzf_ok: an fzf below Floor is refused, and one it can't read is allowed.
-func (f *FZF) CheckVersion() error {
+// CheckVersion is _hop_fzf_ok: an fzf below min (HOP_FZF_MIN, "" for Floor) is refused, and one it can't read is allowed.
+// - The error is the four lines hop prints, version, cause and fix, so a bare `unknown option` never has to explain itself.
+func (f *FZF) CheckVersion(min string) error {
+	if min == "" {
+		min = Floor
+	}
 	v := f.Version()
-	if v == "" || !Less(v, Floor) {
+	if v == "" || !Less(v, min) {
 		return nil
 	}
-	return fmt.Errorf("fzf %s is too old; hop needs %s or newer", v, Floor)
+	return errors.New("hop: fzf " + v + " is too old; hop needs " + min + " or newer.\n" +
+		"hop: the picker passes --accept-nth with --select-1, which older fzf mishandles.\n" +
+		"hop: a distro package is the usual cause; Debian and Ubuntu ship fzf 0.44.x.\n" +
+		"hop: install an upstream release: https://github.com/junegunn/fzf/releases\n")
 }
 
 // Less is _hop_ver_lt: three dotted fields, non-digits stripped, a missing field counting as 0.

@@ -422,8 +422,8 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "hop: fzf is not installed")
 		return 1
 	}
-	if err := s.fzf.CheckVersion(); err != nil {
-		fmt.Fprintln(stderr, "hop:", err)
+	if err := s.fzf.CheckVersion(os.Getenv("HOP_FZF_MIN")); err != nil {
+		fmt.Fprint(stderr, err)
 		return 1
 	}
 	query := strings.Join(o.words, " ")

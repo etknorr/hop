@@ -80,7 +80,7 @@ func TestVersion(t *testing.T) {
 	if v := f.Version(); !regexp.MustCompile(`^\d+\.\d+(\.\d+)?$`).MatchString(v) {
 		t.Errorf("version %q", v)
 	}
-	if err := f.CheckVersion(); err != nil {
+	if err := f.CheckVersion(""); err != nil {
 		t.Errorf("installed fzf refused: %v", err)
 	}
 	for _, tc := range []struct {
@@ -102,7 +102,17 @@ func TestVersion(t *testing.T) {
 	stub := filepath.Join(t.TempDir(), "fzf")
 	os.WriteFile(stub, []byte("#!/bin/sh\necho '0.44.1 (debian)'\n"), 0o755)
 	old := &FZF{Bin: stub}
-	if err := old.CheckVersion(); err == nil || !strings.Contains(err.Error(), "0.44.1") {
-		t.Errorf("an old fzf must be refused by name: %v", err)
+	want := "hop: fzf 0.44.1 is too old; hop needs 0.60.3 or newer.\n" +
+		"hop: the picker passes --accept-nth with --select-1, which older fzf mishandles.\n" +
+		"hop: a distro package is the usual cause; Debian and Ubuntu ship fzf 0.44.x.\n" +
+		"hop: install an upstream release: https://github.com/junegunn/fzf/releases\n"
+	if err := old.CheckVersion(""); err == nil || err.Error() != want {
+		t.Errorf("an old fzf is refused in four lines naming version, cause and fix: %v", err)
+	}
+	if err := old.CheckVersion("0.44"); err != nil {
+		t.Errorf("HOP_FZF_MIN lowers the floor: %v", err)
+	}
+	if err := old.CheckVersion("0.50.0"); err == nil || !strings.Contains(err.Error(), "needs 0.50.0 or newer") {
+		t.Errorf("the message names HOP_FZF_MIN's floor: %v", err)
 	}
 }
