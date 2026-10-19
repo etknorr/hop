@@ -5,6 +5,7 @@
 # - The last three sets are stress sets for the approximate tiers; the go/no-go bar reads only the first five.
 # - core compares verdict, tier, rule and target rel; full compares the whole line: n, m, inj, every candidate, query, note, report.
 # - The Go hop's layout follows the oracle's VERSION.
+# - Each run is repeated with the modal layer on and off (PARITY_VIM, default "1 0"), since the T4 hint reads HOP_VIM.
 # - Exit status is the number of core diffs on names, scope+env and name+env under auto, plus nonsense jumps, capped at 99.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -23,6 +24,7 @@ case $(cat "$hopdir/VERSION" 2>/dev/null) in
 	*) layout=fit ;;
 esac
 jumps=${PARITY_JUMPS:-auto unique never}
+vims=${PARITY_VIM:-1 0}
 bin=${HOP_BIN:-}
 out=$(mktemp -d "${TMPDIR:-/tmp}/hop-resolve.XXXXXX")
 trap 'rm -rf "$out"' EXIT
@@ -43,35 +45,37 @@ gclean() { clean HOP_HISTFILE="$out/hist" HOP_CONFIG="$gocfg" HOP_LAYOUT="$layou
 now() { perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
 
 bad=0
-printf '%-7s %-10s %7s %7s %7s %7s %6s %8s %8s\n' jump set queries same core full jumps zsh-s go-s
+printf '%-3s %-7s %-10s %7s %7s %7s %7s %6s %8s %8s\n' vim jump set queries same core full jumps zsh-s go-s
+for vim in $vims; do
 for jump in $jumps; do
-	d=$out/$jump
+	d=$out/vim$vim/$jump
 	mkdir -p "$d"
 	t0=$(now)
-	# The Go picker has no modal layer yet, so the hop it is held to is HOP_VIM=0; only the T4 hint reads it.
-	zclean HOP_VIM=0 zsh -f "$here/resolve_dump.zsh" "$hopdir" "$root" "$d" "$jump" "$repo" || exit 98
-	# hop 0.2's hint names esc whatever HOP_VIM says; the Go hop words it as hop 0.3 does with no modal layer.
-	[ "$layout" = fixed ] && perl -pi -e 's/ \(esc clears\)\t/ (ctrl-u clears)\t/' "$d"/*.zsh
+	zclean HOP_VIM="$vim" zsh -f "$here/resolve_dump.zsh" "$hopdir" "$root" "$d" "$jump" "$repo" || exit 98
+	# hop 0.2's hint names esc whatever HOP_VIM says; the Go hop words it as hop 0.3 does.
+	[ "$layout" = fixed ] && [ "$vim" = 0 ] && perl -pi -e 's/ \(esc clears\)\t/ (ctrl-u clears)\t/' "$d"/*.zsh
+	[ "$layout" = fixed ] && [ "$vim" = 1 ] && perl -pi -e 's/ \(esc clears\)\t/ (esc twice clears)\t/' "$d"/*.zsh
 	tz=$(echo "$(now) - $t0" | bc)
 	for set in names pref3 scope+env name+env nonsense corpus typo relaxed; do
 		t1=$(now)
-		(cd "$root" && gclean "$bin" __resolve-dump --full --jump "$jump" <"$d/$set.q" >"$d/$set.go")
+		(cd "$root" && gclean HOP_VIM="$vim" "$bin" __resolve-dump --full --jump "$jump" <"$d/$set.q" >"$d/$set.go")
 		tx=$(echo "$(now) - $t1" | bc)
 		n=$(wc -l <"$d/$set.q" | tr -d ' ')
 		core=$(paste "$d/$set.zsh" "$d/$set.go" | awk -F'\t' -v n=18 '{ for (i = 6; i <= 11; i++) if (i != 9 && i != 10 && $i != $(i + n)) { c++; break } } END { print c + 0 }')
 		full=$(paste -d'\n' "$d/$set.zsh" "$d/$set.go" | awk 'NR % 2 { z = $0; next } $0 != z { c++ } END { print c + 0 }')
 		same=$((n - full))
 		js=$(awk -F'\t' '$6 == "jump" { c++ } END { print c + 0 }' "$d/$set.go")
-		printf '%-7s %-10s %7s %7s %7s %7s %6s %8.1f %8.1f\n' "$jump" "$set" "$n" "$same" "$core" "$full" "$js" "$tz" "$tx"
+		printf '%-3s %-7s %-10s %7s %7s %7s %7s %6s %8.1f %8.1f\n' "$vim" "$jump" "$set" "$n" "$same" "$core" "$full" "$js" "$tz" "$tx"
 		if [ "$jump" = auto ]; then
 			case $set in
 				names | scope+env | name+env) bad=$((bad + core)) ;;
 				nonsense) bad=$((bad + js)) ;;
 			esac
 		fi
-		paste -d'\n' "$d/$set.zsh" "$d/$set.go" | awk -v s="$jump/$set" 'NR % 2 { z = $0; next } $0 != z { print s "\n  zsh  " z "\n  go   " $0 }' >>"$out/diffs"
+		paste -d'\n' "$d/$set.zsh" "$d/$set.go" | awk -v s="vim$vim/$jump/$set" 'NR % 2 { z = $0; next } $0 != z { print s "\n  zsh  " z "\n  go   " $0 }' >>"$out/diffs"
 	done
 	tz=0
+done
 done
 if [ -s "$out/diffs" ]; then
 	echo

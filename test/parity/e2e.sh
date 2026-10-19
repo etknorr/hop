@@ -9,6 +9,7 @@
 # - Both run headless: hop's _hop_tty_ok is stubbed, and every shard runs in a new session, so neither can open /dev/tty.
 # - v03 and away are hand-written, for what hop 0.3.0 changed: v03 has kind words, paths and clipped names.
 # - away is paths into other repos, typed from ~.
+# - Each run is repeated with the modal layer on and off (PARITY_VIM, default "1 0"), which the T4 hint in a report reads.
 # - Exit status is the number of queries that disagree under auto, capped at 99.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -27,6 +28,7 @@ case $(cat "$hophome/VERSION" 2>/dev/null) in
 	*) layout=fit ;;
 esac
 jumps=${PARITY_JUMPS:-auto unique never}
+vims=${PARITY_VIM:-1 0}
 workers=${PARITY_WORKERS:-8}
 sets="names pref3 scope+env name+env nonsense v03 away"
 bin=${HOP_BIN:-}
@@ -77,24 +79,25 @@ function target(v, land, err,   b) {
 
 bad=0
 : >"$out/diffs"
-printf '%-7s %-10s %7s %7s %6s %6s %6s %6s %9s %9s\n' jump set queries agree diff text zsh-j go-j zsh-ms go-ms
+printf '%-3s %-7s %-10s %7s %7s %6s %6s %6s %6s %9s %9s\n' vim jump set queries agree diff text zsh-j go-j zsh-ms go-ms
+for vim in $vims; do
 for jump in $jumps; do
-	d=$out/$jump
+	d=$out/vim$vim/$jump
 	mkdir -p "$d"
 	t0=$(now)
 	for s in "$out"/shard.*; do
 		n=${s##*.}
-		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" \
+		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" HOP_VIM="$vim" \
 			HOP_CONFIG="$zshcfg" zsh -f "$here/e2e_run.zsh" zsh "$hophome" "$root" "$s" "$d/zsh.$n" &
-		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" \
+		detached env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-en_US.UTF-8}" TMPDIR="${TMPDIR:-/tmp}" HOP_JUMP="$jump" HOP_VIM="$vim" \
 			HOP_LAYOUT="$layout" HOP_CONFIG="$gocfg" zsh -f "$here/e2e_run.zsh" go "$bin" "$root" "$s" "$d/go.$n" &
 	done
 	wait
-	echo "($jump: $(echo "$(now) - $t0" | bc)s wall for $(wc -l <"$out/all.cases" | tr -d ' ') queries x 2, $workers shards each)" >&2
+	echo "(vim $vim, $jump: $(echo "$(now) - $t0" | bc)s wall for $(wc -l <"$out/all.cases" | tr -d ' ') queries x 2, $workers shards each)" >&2
 	cat "$d"/zsh.* >"$d/zsh.tsv"
 	cat "$d"/go.* >"$d/go.tsv"
 	for set in $sets; do
-		awk -F'\t' -v OFS='\t' -v s="$set" -v j="$jump" -v diffs="$out/diffs" "$classify"'
+		awk -F'\t' -v OFS='\t' -v s="$set" -v j="$jump" -v vim="$vim" -v diffs="$out/diffs" "$classify"'
 			function med(a, n,   i, k, t) {
 				for (i = 2; i <= n; i++) { t = a[i]; for (k = i - 1; k >= 1 && a[k] > t; k--) a[k + 1] = a[k]; a[k + 1] = t }
 				return n ? a[int((n + 1) / 2)] : 0
@@ -113,15 +116,16 @@ for jump in $jumps; do
 					agree++
 					if (rc[$2] != $3 || mem[$2] != $5 || err[$2] != $7) text++
 				} else {
-					print j, s, $2, vz, tz, vx, tx, err[$2], $7 >> diffs
+					print "vim" vim " " j, s, $2, vz, tz, vx, tx, err[$2], $7 >> diffs
 				}
 			}
 			END {
-				printf "%-7s %-10s %7d %7d %6d %6d %6d %6d %9.1f %9.1f\n", j, s, n, agree, n - agree, text, jz, jx, med(hz, nz), med(hx, nx)
+				printf "%-3s %-7s %-10s %7d %7d %6d %6d %6d %6d %9.1f %9.1f\n", vim, j, s, n, agree, n - agree, text, jz, jx, med(hz, nz), med(hx, nx)
 			}' "$d/zsh.tsv" "$d/go.tsv"
 	done
+done
 done | tee "$out/table"
-bad=$(awk '$1 == "auto" { s += $5 } END { print s + 0 }' "$out/table")
+bad=$(awk '$2 == "auto" { s += $6 } END { print s + 0 }' "$out/table")
 
 if [ -s "$out/diffs" ]; then
 	echo
