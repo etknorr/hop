@@ -91,11 +91,17 @@ func TestRenderGolden(t *testing.T) {
 	}
 }
 
+// TestRenderLiveZsh holds each row, laid out on its own, to the reference hop's _hop_row, which fits a lone row to itself.
 func TestRenderLiveZsh(t *testing.T) {
 	if !testfix.HaveZsh() {
-		t.Skip("zsh or hop.zsh not available")
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
 	}
-	if got, want := goRows(), zshRows(t); got != want {
+	var b strings.Builder
+	for _, c := range cases {
+		c = expandHome(c)
+		b.WriteString(List([]Row{New(c[0], c[1], c[2], c[3], c[4], c[5], c[6], len(c) > 7)}, "/r", nil)[0] + "\n")
+	}
+	if got, want := strings.ReplaceAll(b.String(), os.Getenv("HOME"), "@HOME@"), zshRows(t); got != want {
 		t.Errorf("go and _hop_row differ\n got  %q\n want %q", got, want)
 	}
 }

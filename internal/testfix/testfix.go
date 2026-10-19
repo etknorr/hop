@@ -136,36 +136,47 @@ func Build(dir string) error {
 	return git("update-index", "--add", "--cacheinfo", "160000,1111111111111111111111111111111111111111,svc/gitlink")
 }
 
-// ModuleRoot is the repo root, found from this source file, so tests can reach testdata and hop.zsh.
+// ModuleRoot is the repo root, found from this source file, so tests can reach testdata.
 func ModuleRoot() string {
 	_, f, _, _ := runtime.Caller(0)
 	return filepath.Clean(filepath.Join(filepath.Dir(f), "..", ".."))
 }
 
-// HopHome is the worktree holding hop.zsh, which is the module root.
+// HopHome is the checkout whose git objects hold the release tags, for `git -C` only; RefHome holds zsh hop itself.
 func HopHome() string { return ModuleRoot() }
 
-// HaveZsh reports whether zsh and the worktree's hop.zsh are both available for live comparisons.
+// HaveZsh reports whether zsh and the reference hop are both available for live comparisons.
+// - It checks the unpacked release, not the worktree's hop.zsh, so live tests still run once the zsh files are gone.
 func HaveZsh() bool {
 	if _, err := exec.LookPath("zsh"); err != nil {
 		return false
 	}
-	_, err := os.Stat(filepath.Join(HopHome(), "hop.zsh"))
-	return err == nil
+	return RefHome(RefLayout) != ""
 }
 
-// RefLayout is the zsh hop release this module is held to.
+// RefLayout is the zsh hop release every live-zsh test is held to.
 const RefLayout = "v0.3.1"
+
+const refDone = ".hop-ref-complete"
 
 // RefHome is hop at a release tag, unpacked once from the worktree's git objects into the temp dir.
 // - It is "" when git or the tag is unavailable, so a test can skip rather than fail.
+// - tar -m gives the files fresh mtimes, since macOS purges old files from the temp dir and leaves the directories.
 func RefHome(tag string) string {
 	out, err := exec.Command("git", "-C", HopHome(), "rev-parse", "--verify", "-q", tag+"^{commit}").Output()
 	if err != nil {
 		return ""
 	}
 	dir := filepath.Join(os.TempDir(), "hop-ref-"+tag+"-"+strings.TrimSpace(string(out))[:12])
-	if _, err := os.Stat(filepath.Join(dir, "hop.zsh")); err == nil {
+	complete := func() bool {
+		for _, f := range []string{refDone, "hop.zsh"} {
+			if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+				return false
+			}
+		}
+		return true
+	}
+	if complete() {
 		return dir
 	}
 	tmp, err := os.MkdirTemp(os.TempDir(), "hop-ref-")
@@ -174,7 +185,7 @@ func RefHome(tag string) string {
 	}
 	defer os.RemoveAll(tmp)
 	archive := exec.Command("git", "-C", HopHome(), "archive", "--format=tar", tag)
-	untar := exec.Command("tar", "-x", "-C", tmp)
+	untar := exec.Command("tar", "-x", "-m", "-C", tmp)
 	if untar.Stdin, err = archive.StdoutPipe(); err != nil {
 		return ""
 	}
@@ -187,19 +198,28 @@ func RefHome(tag string) string {
 	if err := untar.Wait(); err != nil {
 		return ""
 	}
-	// Another test process may have unpacked it first; either copy is the same tree.
-	if err := os.Rename(tmp, dir); err != nil {
-		if _, serr := os.Stat(filepath.Join(dir, "hop.zsh")); serr != nil {
-			return ""
-		}
+	if err := os.WriteFile(filepath.Join(tmp, refDone), nil, 0o644); err != nil {
+		return ""
 	}
-	return dir
+	if os.Rename(tmp, dir) == nil || complete() {
+		return dir
+	}
+	// Neither this process nor another left a whole copy, so what is there is a purged one.
+	os.RemoveAll(dir)
+	if os.Rename(tmp, dir) == nil || complete() {
+		return dir
+	}
+	return ""
 }
 
-// Zsh sources the worktree's hop.zsh with config cfg and runs script, passing args as $1.. after hop's own.
+// Zsh sources the reference hop's hop.zsh with config cfg and runs script, passing args as $1.. after hop's own.
 // - zsh -f and a scrubbed environment keep Eric's shell setup and real history out of every comparison.
 func Zsh(cfg, script string, env []string, args ...string) (string, error) {
-	return ZshAt(HopHome(), cfg, script, env, args...)
+	home := RefHome(RefLayout)
+	if home == "" {
+		return "", fmt.Errorf("zsh hop %s is not available", RefLayout)
+	}
+	return ZshAt(home, cfg, script, env, args...)
 }
 
 // ZshAt is Zsh against the hop.zsh in home, such as a RefHome.

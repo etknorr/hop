@@ -28,10 +28,13 @@ const (
 
 func testdata(p string) string { return filepath.Join(testfix.ModuleRoot(), "testdata", p) }
 
+// fix is the match fixture: all is rendered in hop 0.2's per-row layout, which resolve.tsv was captured from,
+// and fit in 0.3's fitted one, which the live comparison needs since fzf breaks score ties by row length.
 type fix struct {
 	root string
 	cfg  *config.Config
 	all  []string
+	fit  []string
 	fzf  *match.FZF
 }
 
@@ -77,14 +80,15 @@ func matchFix(t *testing.T) *fix {
 		}
 		var stderr bytes.Buffer
 		var all []string
-		for _, r := range kinds.Generate(cfg, root, cfg.DefaultKinds(), &stderr) {
+		rs := kinds.Generate(cfg, root, cfg.DefaultKinds(), &stderr)
+		for _, r := range rs {
 			all = append(all, rows.Render(r, root))
 		}
 		if stderr.Len() > 0 {
 			fixErr = &os.PathError{Op: "generate", Path: root, Err: os.ErrInvalid}
 			return
 		}
-		fixVal = &fix{root, cfg, all, fzf}
+		fixVal = &fix{root, cfg, all, rows.List(rs, root, nil), fzf}
 	})
 	if fixErr != nil {
 		t.Skip("match fixture unavailable: ", fixErr)
@@ -116,7 +120,7 @@ func c(q string, rest ...string) kase {
 }
 
 func nonsense(t *testing.T) []string {
-	b, err := os.ReadFile(filepath.Join(testfix.HopHome(), "tests", "fixtures", "nonsense.txt"))
+	b, err := os.ReadFile(filepath.Join(testfix.RefHome(testfix.RefLayout), "tests", "fixtures", "nonsense.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,15 +218,18 @@ func (f *fix) zshTable(t *testing.T, ks []kase) map[string]string {
 		b.WriteString(k.key() + "\n")
 	}
 	os.WriteFile(cf, []byte(b.String()), 0o644)
-	got, err := testfix.Zsh(testdata("match.zsh"), `source "$1" && hx_runner "$2" "$3"`, nil, testdata("resolve_runner.zsh"), f.root, cf)
+	got, err := testfix.Zsh(testdata("match.zsh"), `source "$1" && hx_runner "$2" "$3"`, noVim, testdata("resolve_runner.zsh"), f.root, cf)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return byKey(got)
 }
 
-// byKey indexes a table by its case. The worktree's hop is 0.2.0, whose T4 hint names its modal layer's esc.
-// - The binary words it as hop 0.3 does with no modal layer, so that one hint is read in that wording.
+// noVim is how resolve comparisons run zsh hop: the Go picker has no modal layer yet, and only the T4 hint reads it.
+var noVim = []string{"HOP_VIM=0"}
+
+// byKey indexes a table by its case. resolve.tsv was captured from hop 0.2.0, whose T4 hint names its modal layer's esc.
+// - The binary words it as hop 0.3 does with HOP_VIM=0, so that one hint is read in that wording.
 func byKey(text string) map[string]string {
 	text = strings.ReplaceAll(text, " (esc clears)\t", " (ctrl-u clears)\t")
 	m := map[string]string{}
@@ -235,10 +242,10 @@ func byKey(text string) map[string]string {
 	return m
 }
 
-func (f *fix) goTable(ks []kase) map[string]string {
+func (f *fix) goTable(ks []kase, all []string) map[string]string {
 	m := map[string]string{}
 	for _, k := range ks {
-		m[k.key()] = f.run(k, f.all).line(k)
+		m[k.key()] = f.run(k, all).line(k)
 	}
 	return m
 }
@@ -284,17 +291,17 @@ func TestGoldenTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	compareTables(t, ks, byKey(strings.ReplaceAll(string(text), "@ROOT@", f.root)), f.goTable(ks), golden)
+	compareTables(t, ks, byKey(strings.ReplaceAll(string(text), "@ROOT@", f.root)), f.goTable(ks, f.all), golden)
 }
 
 // TestLiveZsh reruns the table through zsh hop, so a golden gone stale against hop cannot hide a regression.
 func TestLiveZsh(t *testing.T) {
 	if !testfix.HaveZsh() {
-		t.Skip("zsh or hop.zsh not available")
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
 	}
 	f := matchFix(t)
 	ks := cases(t)
-	compareTables(t, ks, f.zshTable(t, ks), f.goTable(ks), "live zsh")
+	compareTables(t, ks, f.zshTable(t, ks), f.goTable(ks, f.fit), "live zsh")
 }
 
 func (f *fix) get(t *testing.T, k kase) out {

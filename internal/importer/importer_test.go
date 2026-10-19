@@ -42,7 +42,7 @@ func zshKinds(t *testing.T, cfg string) string {
 
 func TestImportExample(t *testing.T) {
 	needZsh(t)
-	cfg := filepath.Join(testfix.HopHome(), "config.example.zsh")
+	cfg := filepath.Join(testfix.RefHome(testfix.RefLayout), "config.example.zsh")
 	res, err := Import(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func TestPresetsMatchHop(t *testing.T) {
 	needZsh(t)
 	for _, name := range config.PresetOrder {
 		t.Run(name, func(t *testing.T) {
-			src := filepath.Join(testfix.HopHome(), "presets", name+".zsh")
+			src := filepath.Join(testfix.RefHome(testfix.RefLayout), "presets", name+".zsh")
 			res, err := Import(src)
 			if err != nil {
 				t.Fatal(err)

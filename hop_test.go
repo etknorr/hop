@@ -17,7 +17,7 @@ import (
 type e2e struct {
 	bin, root, home, ws, tmp string
 	seed                     []byte
-	// hophome is the hop whose hop() is the reference: the worktree's 0.2.0 unless a test names a release.
+	// hophome is the zsh hop whose hop() is the reference.
 	hophome string
 }
 
@@ -34,7 +34,7 @@ func newE2E(t *testing.T) *e2e {
 		t.Skip("fzf not installed")
 	}
 	tmp := testfix.Resolved(t.TempDir())
-	e := &e2e{bin: filepath.Join(tmp, "hop"), root: filepath.Join(tmp, "repo"), home: filepath.Join(tmp, "home"), tmp: tmp, hophome: testfix.HopHome()}
+	e := &e2e{bin: filepath.Join(tmp, "hop"), root: filepath.Join(tmp, "repo"), home: filepath.Join(tmp, "home"), tmp: tmp, hophome: testfix.RefHome(testfix.RefLayout)}
 	if out, err := exec.Command("go", "build", "-o", e.bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -121,7 +121,7 @@ type headlessCase struct {
 // - The same stderr, byte for byte, the same status, and the same final directory.
 func TestHeadlessAgainstHop(t *testing.T) {
 	if !testfix.HaveZsh() {
-		t.Skip("zsh or hop.zsh not available")
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
 	}
 	e := newE2E(t)
 	e.compare(t, e.headlessCases())

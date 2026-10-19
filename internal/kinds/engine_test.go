@@ -37,10 +37,21 @@ func fixture(t *testing.T) (string, *config.Config) {
 	return root, cfg
 }
 
+// render is hop 0.2's per-row layout, which the goldens were captured from.
 func render(rs []rows.Row, root string) string {
 	var b strings.Builder
 	for _, r := range rs {
 		b.WriteString(rows.Render(r, root))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// renderFit is hop 0.3's layout, fitted to the whole list, as the reference hop's _hop_generate prints it.
+func renderFit(rs []rows.Row, root string) string {
+	var b strings.Builder
+	for _, l := range rows.List(rs, root, nil) {
+		b.WriteString(l)
 		b.WriteByte('\n')
 	}
 	return b.String()
@@ -77,7 +88,7 @@ func TestGoldenRows(t *testing.T) {
 // TestLiveZsh re-runs zsh hop on a fresh fixture, which catches a golden that went stale against hop.
 func TestLiveZsh(t *testing.T) {
 	if !testfix.HaveZsh() {
-		t.Skip("zsh or hop.zsh not available")
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
 	}
 	root, cfg := fixture(t)
 	kinds := cfg.AllKinds()
@@ -85,7 +96,7 @@ func TestLiveZsh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := render(Generate(cfg, root, kinds, os.Stderr), root)
+	got := renderFit(Generate(cfg, root, kinds, os.Stderr), root)
 	if got != want {
 		t.Errorf("go and zsh hop differ on the fixture\n--- go\n%s--- zsh\n%s", rows.StripANSI(got), rows.StripANSI(want))
 	}

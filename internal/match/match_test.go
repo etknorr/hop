@@ -11,7 +11,7 @@ import (
 	"github.com/etknorr/hop/internal/testfix"
 )
 
-// TestFlagsMatchHop reads _HOP_MATCHER_FLAGS out of the worktree's lib/ui.zsh, so a change there fails here.
+// TestFlagsMatchHop reads _HOP_MATCHER_FLAGS out of the reference hop's lib/ui.zsh, so a drift from it fails here.
 func TestFlagsMatchHop(t *testing.T) {
 	if !testfix.HaveZsh() {
 		t.Skip("zsh not available")

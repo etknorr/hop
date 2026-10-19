@@ -29,13 +29,13 @@ func wsTree(t *testing.T) (home, file string) {
 func TestWorkspaceAndRepoRowsMatchZsh(t *testing.T) {
 	_, file := wsTree(t)
 	wss := workspace.Parse(nil, file)
-	ws := render(WorkspaceRows(wss), "")
-	repo := render(RepoRows(workspace.RepoList(nil, wss)), "")
+	ws := renderFit(WorkspaceRows(wss), "")
+	repo := renderFit(RepoRows(workspace.RepoList(nil, wss)), "")
 	if !strings.Contains(rowsStripped(ws), "~/src") || strings.Count(repo, "\n") != 5 {
 		t.Fatalf("unexpected rows\n%s\n%s", rowsStripped(ws), rowsStripped(repo))
 	}
 	if !testfix.HaveZsh() {
-		t.Skip("zsh or hop.zsh not available")
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
 	}
 	env := []string{"HOP_WORKSPACES_FILE=" + file}
 	zws, err := testfix.Zsh("/dev/null", `_hop_provider_ws`, env)
