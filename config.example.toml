@@ -1,0 +1,81 @@
+# Example hop config: copy it to ~/.config/hop/config.toml, or point $HOP_CONFIG at it.
+# - With no config at all, hop loads the dir, project and file recipes.
+# - Once a config names recipes or declares a kind, it gets exactly what it names.
+# - A kind that matches nothing in a repo has no rows there and hides from the `:` menu.
+# - README.md documents every key under "Configuring kinds".
+version = 1
+
+# Recipes load in this order, and their kinds keep it in the `:` menu.
+recipes = ["dir", "project", "file", "terragrunt", "helm"]
+
+# Each setting below is at its default, and its HOP_* variable, where there is one, beats it.
+[settings]
+# What Enter does: cd, open, reveal, cd+open or cd+reveal.
+action = "cd"
+# When a clear match skips the picker: auto, unique or never.
+jump = "auto"
+# A VS Code-compatible CLI that accepts -r and -n.
+code = "code"
+# Env words that get a colour in the env column; any other env shows magenta.
+env_colors = { prod = ["prod"], staging = ["staging"], dev = ["dev"] }
+
+# Redeclaring a recipe's kind replaces it in place, and extend = true keeps every key you don't set.
+[[kind]]
+name = "tg"
+extend = true
+under = "live"
+layout = ["env,region,name...", "name..."]
+
+# dirs: every child dir of a base is a target, and depth = 2 walks <group>/<name>.
+[[kind]]
+name = "svc"
+desc = "application services"
+default = true
+dirs = ["services", "platform/services"]
+preview = ["service.yaml", "docs/runbook.md", "README.md"]
+
+# files: every tracked file matching a pathspec, with its dir as the cd target.
+# - strip_ext runs before the layout, so <env>.conf fills the env column as <env>.
+# - A `-` in a layout drops that path segment.
+[[kind]]
+name = "envconf"
+desc = "per-role config files"
+files = ["services/*/config/*/*.conf"]
+under = "services"
+strip_ext = true
+layout = ["scope,-,name,env"]
+
+# marker: a dir holding any of these files is one target, and a path matching no layout isn't one.
+[[kind]]
+name = "stack"
+desc = "pulumi stacks"
+marker = ["Pulumi.yaml", "Pulumi.yml"]
+under = "infra"
+layout = ["scope,env,name...", "scope,name..."]
+trim = { scope = "team-" }
+preview = ["Pulumi.yaml", "README.md"]
+
+# Sources build one kind from several shapes, emitted source by source.
+[[kind]]
+name = "deploy"
+desc = "charts and app manifests"
+
+  [[kind.source]]
+  marker = "Chart.yaml"
+  under = "deploy/charts"
+  layout = ["name..."]
+  scope = "charts"
+
+  [[kind.source]]
+  files = ["deploy/apps/**/*.yaml"]
+  under = "deploy/apps"
+  exclude = ["*/tests/*"]
+  strip_ext = true
+  layout = ["name..."]
+  scope = "apps"
+
+# exec: a command run in the repo root, printing name TAB path [TAB preview [TAB scope [TAB env [TAB region]]]] per line.
+[[kind]]
+name = "notes"
+desc = "markdown notes"
+exec = "git ls-files -- 'notes/*.md' | while IFS= read -r f; do b=${f##*/}; printf '%s\\t%s\\n' \"${b%.md}\" \"$f\"; done"

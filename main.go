@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/etknorr/hop/internal/config"
-	"github.com/etknorr/hop/internal/importer"
 	"github.com/etknorr/hop/internal/kinds"
 	"github.com/etknorr/hop/internal/pick"
 	"github.com/etknorr/hop/internal/rows"
@@ -33,7 +32,7 @@ const usage = `usage: hop [-a | -k KINDS] [-c] [-p] [--cd] [-o | -e | --action=M
   hop rows -w                             workspace rows
   hop rows -R                             repo rows
   hop kinds                               the kind registry, * marking a default
-  hop config import [CONFIG.zsh] [-o OUT] convert zsh hop's config.zsh to TOML
+  hop import [CONFIG.zsh] [-o OUT] [--force]  convert zsh hop's config.zsh to TOML
   hop config check                        load the config and report problems
   hop config path                         print the config path hop reads
   hop -V, -v                              version
@@ -87,7 +86,7 @@ func argAt(a []string, i int) string {
 // subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hop -- rows`.
 var subcommands = map[string]bool{
 	"-h": true, "--help": true, "help": true, "-V": true, "-v": true, "--version": true, "init": true,
-	"rows": true, "kinds": true, "config": true, "__rows": true, "__resolve-dump": true,
+	"rows": true, "kinds": true, "config": true, "import": true, "__rows": true, "__resolve-dump": true,
 	"__sh": true, "__preview": true, "__menu": true, "__key": true, "__header": true, "__complete": true,
 }
 
@@ -140,6 +139,8 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 		return cmdKinds(stdout, stderr)
 	case "config":
 		return cmdConfig(args[1:], stdout, stderr)
+	case "import":
+		return cmdImport(args[1:], stdout, stderr)
 	}
 	return errUsage
 }
@@ -150,7 +151,7 @@ func load(stderr io.Writer) (*config.Config, error) {
 		return nil, err
 	}
 	for _, w := range cfg.Warnings {
-		fmt.Fprintln(stderr, "hop: warning:", w)
+		fmt.Fprintln(stderr, w)
 	}
 	return cfg, nil
 }
@@ -288,47 +289,4 @@ func cmdConfig(args []string, stdout, stderr io.Writer) error {
 		return cmdImport(args[1:], stdout, stderr)
 	}
 	return errUsage
-}
-
-// cmdImport writes stdout unless -o names a file, so it never overwrites a config.toml by surprise.
-func cmdImport(args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("config import", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	out := fs.String("o", "", "write the TOML here instead of stdout")
-	var src string
-	for len(args) > 0 {
-		if err := fs.Parse(args); err != nil {
-			return errUsage
-		}
-		args = fs.Args()
-		if len(args) > 0 {
-			if src != "" {
-				return errUsage
-			}
-			src, args = args[0], args[1:]
-		}
-	}
-	if src == "" {
-		src = os.Getenv("HOP_CONFIG")
-	}
-	if src == "" {
-		base := os.Getenv("XDG_CONFIG_HOME")
-		if base == "" {
-			base = os.Getenv("HOME") + "/.config"
-		}
-		src = base + "/hop/config.zsh"
-	}
-	res, err := importer.Import(src)
-	if err != nil {
-		return err
-	}
-	for _, w := range res.Warnings {
-		fmt.Fprintln(stderr, "hop: warning:", w)
-	}
-	text := res.TOML(src)
-	if *out == "" {
-		_, err := io.WriteString(stdout, text)
-		return err
-	}
-	return os.WriteFile(*out, []byte(text), 0o644)
 }

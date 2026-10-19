@@ -1,7 +1,0 @@
-# The filename and the entity name often disagree, so the name is read from metadata.name.
-[[kind]]
-name = "backstage"
-desc = "catalog entities"
-files = ["backstage/*.yaml"]
-scope = "backstage"
-name_from = "yaml:metadata.name"

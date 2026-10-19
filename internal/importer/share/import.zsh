@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# hop config import, the zsh half: let zsh parse config.zsh, and record every hop_kind and hop_preset call.
+# hop import, the zsh half: let zsh parse config.zsh, and record every hop_kind and hop_preset call.
 # - zsh does the parsing because config.zsh is shell code: quoting, continuations, variables and conditionals.
 # - Records go to fd 3 as NUL-terminated tokens, so a config that prints to stdout cannot corrupt them.
 # - Record shapes: preset 1 NAME | kind N ARGV... | fn 2 NAME DEFINED | set 2 VAR VALUE | orphan 1 FUNC
@@ -27,7 +27,8 @@ hop_kind() {
 	return 0
 }
 
-local -a vars=(HOP_ACTION HOP_JUMP HOP_CODE HOP_CLIPBOARD HOP_VIM HOP_FZF_HEIGHT HOP_HIST_MAX HOP_DEFAULT_KINDS HOP_WORKSPACES HOP_REPOS)
+local -a vars=(HOP_ACTION HOP_JUMP HOP_CODE HOP_CLIPBOARD HOP_VIM HOP_FZF_HEIGHT HOP_HIST_MAX HOP_DEFAULT_KINDS HOP_WORKSPACES HOP_REPOS
+	HOP_HISTFILE HOP_WORKSPACES_FILE HOP_DEBUG HOP_DEBUG_LOG HOP_GUARD_WINDOW HOP_FZF_MIN HOP_HOPRC)
 local v
 for v in "${vars[@]}"; do
 	unset "$v"

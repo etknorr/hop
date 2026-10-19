@@ -1,0 +1,6 @@
+# Serverless Framework and AWS SAM apps.
+[[kind]]
+name = "serverless"
+desc = "serverless apps"
+marker = ["serverless.yml", "serverless.yaml", "template.yaml", "samconfig.toml"]
+preview = ["serverless.yml", "serverless.yaml", "template.yaml", "samconfig.toml", "README.md"]

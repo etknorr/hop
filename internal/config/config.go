@@ -1,4 +1,4 @@
-// Package config is hop's TOML kind registry: presets, ordered [[kind]] tables, extend, and [settings].
+// Package config is hop's TOML kind registry: recipes, ordered [[kind]] tables, extend, and [settings].
 package config
 
 import (
@@ -8,29 +8,38 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 )
 
-//go:embed presets/*.toml
-var presetFS embed.FS
+//go:embed recipes/*.toml
+var recipeFS embed.FS
 
-// PresetOrder is the order hop.zsh:37 loads presets in when a config declares no kind.
-var PresetOrder = []string{"terragrunt", "terraform-modules", "helm", "serverless", "puppet", "backstage", "dir", "file"}
+var recipeOrder = []string{"dir", "project", "file", "terragrunt", "terraform-modules", "helm", "serverless", "puppet", "backstage"}
+
+// DefaultRecipes is what a config naming no recipe and declaring no kind gets.
+var DefaultRecipes = []string{"dir", "project", "file"}
+
+// Recipes is every recipe a config can name, in the order hop lists them.
+func Recipes() []string { return slices.Clone(recipeOrder) }
 
 type TrimSpec struct{ Col, Prefix string }
 
 type Kind struct {
 	Name, Desc   string
 	Default      bool
-	Shape        string // dirs | files | marker | builtin | exec
+	Shape        string // dirs | files | marker | builtin | exec | sources
 	Dirs, Files  []string
-	Marker       string
+	Marker       []string
 	Builtin      string
 	Exec         []string
+	Sources      []*Kind
 	Depth        int
+	MinDepth     int
+	Nested       bool
 	Under        string
 	Layouts      []string
 	NameTemplate string
@@ -39,6 +48,7 @@ type Kind struct {
 	Exclude      []string
 	Preview      []string
 	PreviewSkip  []string
+	Skip         []string
 	Scope        string
 	Trim         []TrimSpec
 	Origin       string
@@ -49,7 +59,10 @@ type Config struct {
 	Kinds    []*Kind
 	byName   map[string]*Kind
 	Settings Settings
+	// Warnings are whole lines, printed as they are and only by the top-level call.
 	Warnings []string
+	// Loaded is the recipes this config loaded, in order.
+	Loaded []string
 }
 
 // Error is a config problem with the file and line it came from.
@@ -68,15 +81,18 @@ func (e *Error) Error() string {
 
 var shapeKeys = []string{"dirs", "files", "marker", "builtin", "exec"}
 
-var knownKindKeys = map[string]bool{
-	"name": true, "extend": true, "desc": true, "default": true, "dirs": true, "files": true,
-	"marker": true, "builtin": true, "exec": true, "depth": true, "under": true, "layout": true,
-	"name_template": true, "name_from": true, "strip_ext": true, "exclude": true, "preview": true,
-	"preview_skip": true, "scope": true, "trim": true,
+var sourceShapes = []string{"dirs", "files", "marker"}
+
+var kindOnlyKeys = map[string]bool{"name": true, "extend": true, "desc": true, "default": true, "source": true}
+
+var optionKeys = map[string]bool{
+	"depth": true, "min_depth": true, "nested": true, "under": true, "layout": true, "name_template": true,
+	"name_from": true, "strip_ext": true, "exclude": true, "preview": true, "preview_skip": true, "skip": true,
+	"scope": true, "trim": true,
 }
 
-// Builtins are the kinds too irregular to declare, implemented in Go (lib/providers.zsh:257, :308).
-var Builtins = map[string]bool{"dir": true, "helm": true}
+// Builtins are the kinds too irregular to declare, implemented in Go (lib/providers.zsh:417).
+var Builtins = map[string]bool{"dir": true}
 
 var Columns = []string{"scope", "env", "region", "name"}
 
@@ -88,6 +104,10 @@ func Path() string {
 	if p := os.Getenv("HOP_CONFIG"); p != "" && !strings.HasSuffix(p, ".zsh") {
 		return p
 	}
+	return filepath.Join(configDir(), "config.toml")
+}
+
+func configDir() string {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		if runtime.GOOS == "windows" {
@@ -96,7 +116,7 @@ func Path() string {
 			base = filepath.Join(os.Getenv("HOME"), ".config")
 		}
 	}
-	return filepath.Join(base, "hop", "config.toml")
+	return filepath.Join(base, "hop")
 }
 
 func (c *Config) Lookup(name string) (*Kind, bool) {
@@ -114,32 +134,29 @@ func (c *Config) declare(k *Kind) {
 	c.Kinds = append(c.Kinds, k)
 }
 
-func PresetSource(name string) (string, error) {
-	b, err := presetFS.ReadFile("presets/" + name + ".toml")
+func RecipeSource(name string) (string, error) {
+	b, err := recipeFS.ReadFile("recipes/" + name + ".toml")
 	if err != nil {
-		return "", fmt.Errorf("no such preset: %s", name)
+		return "", fmt.Errorf("no such recipe: %s (recipes: %s)", name, strings.Join(recipeOrder, ", "))
 	}
 	return string(b), nil
 }
 
-func (c *Config) LoadPreset(name string) error {
-	src, err := PresetSource(name)
+func (c *Config) LoadRecipe(name string) error {
+	src, err := RecipeSource(name)
 	if err != nil {
 		return err
 	}
-	return c.Apply(src, "preset:"+name, false)
-}
-
-func (c *Config) LoadAllPresets() error {
-	for _, p := range PresetOrder {
-		if err := c.LoadPreset(p); err != nil {
-			return err
-		}
+	if err := c.Apply(src, "recipe:"+name, false); err != nil {
+		return err
+	}
+	if !slices.Contains(c.Loaded, name) {
+		c.Loaded = append(c.Loaded, name)
 	}
 	return nil
 }
 
-// Load reads path; a missing file behaves like hop with no config.zsh, which loads every preset.
+// Load reads path; a missing file, or one naming no recipes and declaring no kind, gets DefaultRecipes.
 func Load(path string) (*Config, error) {
 	c := New()
 	c.Path = path
@@ -147,73 +164,101 @@ func Load(path string) (*Config, error) {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
+	named := false
 	if err == nil {
-		if err := c.Apply(string(b), path, true); err != nil {
+		if named, err = c.apply(string(b), path, true); err != nil {
 			return nil, err
 		}
+	} else {
+		c.zshHint()
 	}
-	// hop.zsh:36 tests the registry, not the file: a config declaring no kind still gets every preset.
-	if len(c.Kinds) == 0 {
-		if err := c.LoadAllPresets(); err != nil {
-			return nil, err
+	if !named && len(c.Kinds) == 0 {
+		for _, r := range DefaultRecipes {
+			if err := c.LoadRecipe(r); err != nil {
+				return nil, err
+			}
 		}
 	}
 	c.applyEnv()
 	return c, nil
 }
 
+// zshHint points a zsh hop user at hop import when only their config.zsh exists.
+// - HOP_SESSION marks an fzf callback, whose stderr fzf would paint over the picker.
+func (c *Config) zshHint() {
+	if os.Getenv("HOP_SESSION") != "" {
+		return
+	}
+	if p := os.Getenv("HOP_CONFIG"); p != "" && !strings.HasSuffix(p, ".zsh") {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(configDir(), "config.zsh")); err == nil {
+		c.Warnings = append(c.Warnings, "hop: found config.zsh; run 'hop import -o ~/.config/hop/config.toml' to use it")
+	}
+}
+
 type rawFile struct {
 	Version  int              `toml:"version"`
-	Presets  *[]string        `toml:"presets"`
+	Recipes  *[]string        `toml:"recipes"`
 	Settings map[string]any   `toml:"settings"`
 	Kind     []map[string]any `toml:"kind"`
 }
 
-// Apply layers one TOML document onto the registry; only a top-level file may name presets or settings.
+// Apply layers one TOML document onto the registry; only a top-level file may name recipes or settings.
 func (c *Config) Apply(src, origin string, top bool) error {
+	_, err := c.apply(src, origin, top)
+	return err
+}
+
+// apply reports whether the document set recipes, which opts it out of the zero-config defaults.
+func (c *Config) apply(src, origin string, top bool) (bool, error) {
 	var rf rawFile
 	md, err := toml.Decode(src, &rf)
 	if err != nil {
 		var pe toml.ParseError
 		if errors.As(err, &pe) {
-			return &Error{origin, pe.Position.Line, pe.Message}
+			return false, &Error{origin, pe.Position.Line, pe.Message}
 		}
-		return &Error{origin, 0, err.Error()}
+		return false, &Error{origin, 0, err.Error()}
 	}
 	li := indexLines(src)
 	for _, k := range md.Undecoded() {
 		if len(k) > 0 && (k[0] == "kind" || k[0] == "settings") {
 			continue
 		}
-		return &Error{origin, li.line("", k[len(k)-1]), fmt.Sprintf("unknown key %q", k.String())}
+		msg := fmt.Sprintf("unknown key %q", k.String())
+		if k.String() == "presets" {
+			msg = `unknown key "presets": presets are now recipes, as in recipes = ["dir", "project"]`
+		}
+		return false, &Error{origin, li.line("", k[len(k)-1]), msg}
 	}
 	if rf.Version > 1 {
-		return &Error{origin, li.line("", "version"), fmt.Sprintf("version %d is newer than this hop understands", rf.Version)}
+		return false, &Error{origin, li.line("", "version"), fmt.Sprintf("version %d is newer than this hop understands", rf.Version)}
 	}
-	if rf.Presets != nil {
+	if rf.Recipes != nil {
 		if !top {
-			return &Error{origin, li.line("", "presets"), "a preset cannot load presets"}
+			return false, &Error{origin, li.line("", "recipes"), "a recipe cannot load recipes"}
 		}
-		for _, p := range *rf.Presets {
-			if err := c.LoadPreset(p); err != nil {
-				return &Error{origin, li.line("", "presets"), err.Error()}
+		for _, r := range *rf.Recipes {
+			if err := c.LoadRecipe(r); err != nil {
+				return false, &Error{origin, li.line("", "recipes"), err.Error()}
 			}
 		}
 	}
 	for i, raw := range rf.Kind {
 		if err := c.applyKind(raw, i, li, origin); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if rf.Settings != nil {
 		if !top {
-			return &Error{origin, li.line("", "settings"), "a preset cannot hold [settings]"}
+			return false, &Error{origin, li.line("", "settings"), "a recipe cannot hold [settings]"}
 		}
 		if err := c.applySettings(rf.Settings, li, origin); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return rf.Recipes != nil, nil
 }
 
 func asString(v any, key string) (string, error) {
@@ -253,75 +298,190 @@ func asList(v any, key string) ([]string, error) {
 	return nil, fmt.Errorf("%s must be a string or a list of strings", key)
 }
 
+func asInt(v any, key string, floor int64) (int, error) {
+	n, ok := v.(int64)
+	if !ok || n < floor {
+		if floor == 0 {
+			return 0, fmt.Errorf("%s must be a non-negative integer", key)
+		}
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return int(n), nil
+}
+
+func asTables(v any) ([]map[string]any, bool) {
+	switch t := v.(type) {
+	case []map[string]any:
+		return t, true
+	case []any:
+		out := make([]map[string]any, 0, len(t))
+		for _, e := range t {
+			m, ok := e.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, m)
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func present(raw map[string]any, keys []string) []string {
+	var out []string
+	for _, s := range keys {
+		if _, ok := raw[s]; ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // ApplyKind declares one kind from a decoded [[kind]] table, as the importer replays hop_kind calls.
 func (c *Config) ApplyKind(raw map[string]any, origin string) error {
 	return c.applyKind(raw, -1, nil, origin)
 }
 
 func (c *Config) applyKind(raw map[string]any, idx int, li *lineIndex, origin string) error {
-	fail := func(key, format string, a ...any) error {
+	nameV, hasName := raw["name"]
+	fail := func(src int, key, format string, a ...any) error {
 		msg := fmt.Sprintf(format, a...)
-		if n, ok := raw["name"].(string); ok {
+		if n, ok := nameV.(string); ok {
 			msg = fmt.Sprintf("kind %q: %s", n, msg)
 		}
-		return &Error{origin, li.kindLine(idx, key), msg}
+		return &Error{origin, li.kindLine(idx, src, key), msg}
 	}
-	nameV, ok := raw["name"]
-	if !ok {
-		return fail("", "a [[kind]] needs a name")
+	warn := func(src int, key, msg string) {
+		c.Warnings = append(c.Warnings, "hop: warning: "+(&Error{origin, li.kindLine(idx, src, key), msg}).Error())
+	}
+	if !hasName {
+		return fail(-1, "", "a [[kind]] needs a name")
 	}
 	name, err := asString(nameV, "name")
 	if err != nil {
-		return fail("name", "%v", err)
+		return fail(-1, "name", "%v", err)
 	}
 	// dsl.zsh:37 rejects a leading '-'; comma and space are rejected too, since -k and HOP_DEFAULT_KINDS split on them.
 	if name == "" || strings.HasPrefix(name, "-") || strings.ContainsAny(name, ", \t\n") {
-		return fail("name", "kind name %q must be non-empty, not start with '-', and hold no comma or space", name)
+		return fail(-1, "name", "kind name %q must be non-empty, not start with '-', and hold no comma or space", name)
 	}
 	extend := false
 	if v, ok := raw["extend"]; ok {
 		if extend, err = asBool(v, "extend"); err != nil {
-			return fail("extend", "%v", err)
+			return fail(-1, "extend", "%v", err)
 		}
 	}
-	k := &Kind{Name: name, Depth: 1, Origin: origin}
+	k := &Kind{Name: name, Depth: 1, Nested: true, Origin: origin}
 	if extend {
 		old, ok := c.byName[name]
 		if !ok {
-			return fail("extend", "extend = true, but no earlier kind %q exists", name)
+			return fail(-1, "extend", "extend = true, but no earlier kind %q exists", name)
 		}
 		cp := *old
 		k = &cp
 		k.Origin = origin
 	}
-	keys := make([]string, 0, len(raw))
-	for key := range raw {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	var shapes []string
-	for _, s := range shapeKeys {
-		if _, ok := raw[s]; ok {
-			shapes = append(shapes, s)
+	if v, ok := raw["desc"]; ok {
+		if k.Desc, err = asString(v, "desc"); err != nil {
+			return fail(-1, "desc", "%v", err)
 		}
 	}
+	if v, ok := raw["default"]; ok {
+		if k.Default, err = asBool(v, "default"); err != nil {
+			return fail(-1, "default", "%v", err)
+		}
+	}
+	shapes := present(raw, shapeKeys)
+	if srcV, ok := raw["source"]; ok {
+		if len(shapes) > 0 {
+			return fail(-1, shapes[0], "a kind with [[kind.source]] tables cannot also set %s; move it into a source", shapes[0])
+		}
+		for _, key := range sortedKeys(raw) {
+			switch {
+			case optionKeys[key]:
+				return fail(-1, key, "%s belongs on each [[kind.source]] when a kind has sources", key)
+			case !kindOnlyKeys[key]:
+				return fail(-1, key, "unknown key %q", key)
+			}
+		}
+		tables, ok := asTables(srcV)
+		if !ok || len(tables) == 0 {
+			return fail(-1, "source", "source must be one or more [[kind.source]] tables")
+		}
+		srcs := make([]*Kind, 0, len(tables))
+		for si, t := range tables {
+			sfail := func(key, format string, a ...any) error {
+				return fail(si, key, "source %d: %s", si+1, fmt.Sprintf(format, a...))
+			}
+			for _, key := range sortedKeys(t) {
+				if kindOnlyKeys[key] {
+					return sfail(key, "%s belongs on the [[kind]], not on a source", key)
+				}
+			}
+			if b := present(t, []string{"builtin", "exec"}); len(b) > 0 {
+				return sfail(b[0], "a source is dirs, files or marker, not %s", b[0])
+			}
+			if ss := present(t, sourceShapes); len(ss) != 1 {
+				key := ""
+				if len(ss) > 1 {
+					key = ss[1]
+				}
+				return sfail(key, "set exactly one of dirs, files or marker")
+			}
+			s := &Kind{Name: name, Depth: 1, Nested: true, Origin: origin}
+			if err := applyShape(s, t, sfail); err != nil {
+				return err
+			}
+			for _, w := range inapplicable(s, t) {
+				warn(si, w, fmt.Sprintf("kind %q: source %d: %s has no effect on a %s source", name, si+1, w, s.Shape))
+			}
+			srcs = append(srcs, s)
+		}
+		k.Shape, k.Sources = "sources", srcs
+		k.Dirs, k.Files, k.Marker, k.Builtin, k.Exec = nil, nil, nil, "", nil
+		c.declare(k)
+		return nil
+	}
 	if len(shapes) > 1 {
-		return fail(shapes[1], "set exactly one of dirs, files, marker, builtin or exec, not %s", strings.Join(shapes, " and "))
+		return fail(-1, shapes[1], "set exactly one of dirs, files, marker, builtin or exec, not %s", strings.Join(shapes, " and "))
 	}
 	if len(shapes) == 1 {
-		k.Dirs, k.Files, k.Marker, k.Builtin, k.Exec = nil, nil, "", "", nil
+		k.Dirs, k.Files, k.Marker, k.Builtin, k.Exec, k.Sources = nil, nil, nil, "", nil, nil
 	}
-	for _, key := range keys {
+	if err := applyShape(k, raw, func(key, format string, a ...any) error { return fail(-1, key, format, a...) }); err != nil {
+		return err
+	}
+	if k.Shape == "" {
+		return fail(-1, "name", "needs one of dirs, files, marker, builtin or exec, or [[kind.source]] tables")
+	}
+	for _, w := range inapplicable(k, raw) {
+		warn(-1, w, fmt.Sprintf("kind %q: %s has no effect on a %s kind", name, w, k.Shape))
+	}
+	c.declare(k)
+	return nil
+}
+
+// applyShape reads the shape and per-shape options of a [[kind]] or a [[kind.source]] into k.
+func applyShape(k *Kind, raw map[string]any, fail func(key, format string, a ...any) error) error {
+	var err error
+	for _, key := range sortedKeys(raw) {
 		v := raw[key]
-		if !knownKindKeys[key] {
+		if kindOnlyKeys[key] {
+			continue
+		}
+		if !optionKeys[key] && !slices.Contains(shapeKeys, key) {
 			return fail(key, "unknown key %q", key)
 		}
 		switch key {
-		case "name", "extend":
-		case "desc":
-			k.Desc, err = asString(v, key)
-		case "default":
-			k.Default, err = asBool(v, key)
 		case "dirs":
 			k.Dirs, err = asList(v, key)
 			k.Shape = "dirs"
@@ -329,16 +489,20 @@ func (c *Config) applyKind(raw map[string]any, idx int, li *lineIndex, origin st
 			k.Files, err = asList(v, key)
 			k.Shape = "files"
 		case "marker":
-			k.Marker, err = asString(v, key)
+			k.Marker, err = asList(v, key)
 			k.Shape = "marker"
-			if err == nil && (k.Marker == "" || strings.ContainsAny(k.Marker, "*?[")) {
-				err = errors.New("marker must be a literal file name")
+			if err == nil {
+				err = checkMarkers(k.Marker)
 			}
 		case "builtin":
 			k.Builtin, err = asString(v, key)
 			k.Shape = "builtin"
-			if err == nil && !Builtins[k.Builtin] {
-				err = fmt.Errorf("unknown builtin %q (dir or helm)", k.Builtin)
+			switch {
+			case err != nil:
+			case k.Builtin == "helm":
+				err = errors.New(`builtin "helm" is gone: use recipes = ["helm"], or run hop import on the config.zsh that declared it to get its exact sources`)
+			case !Builtins[k.Builtin]:
+				err = fmt.Errorf("unknown builtin %q (the only builtin is dir)", k.Builtin)
 			}
 		case "exec":
 			switch t := v.(type) {
@@ -357,11 +521,11 @@ func (c *Config) applyKind(raw map[string]any, idx int, li *lineIndex, origin st
 			}
 			k.Shape = "exec"
 		case "depth":
-			n, ok := v.(int64)
-			if !ok || n < 1 {
-				err = errors.New("depth must be a positive integer")
-			}
-			k.Depth = int(n)
+			k.Depth, err = asInt(v, key, 1)
+		case "min_depth":
+			k.MinDepth, err = asInt(v, key, 0)
+		case "nested":
+			k.Nested, err = asBool(v, key)
 		case "under":
 			k.Under, err = asString(v, key)
 			k.Under = strings.TrimSuffix(k.Under, "/")
@@ -385,6 +549,8 @@ func (c *Config) applyKind(raw map[string]any, idx int, li *lineIndex, origin st
 			k.Preview, err = asList(v, key)
 		case "preview_skip":
 			k.PreviewSkip, err = asList(v, key)
+		case "skip":
+			k.Skip, err = asList(v, key)
 		case "scope":
 			k.Scope, err = asString(v, key)
 		case "trim":
@@ -394,13 +560,26 @@ func (c *Config) applyKind(raw map[string]any, idx int, li *lineIndex, origin st
 			return fail(key, "%v", err)
 		}
 	}
-	if k.Shape == "" {
-		return fail("name", "needs one of dirs, files, marker, builtin or exec")
+	if k.Shape != "marker" && k.Shape != "" {
+		if p := present(raw, []string{"min_depth", "nested"}); len(p) > 0 {
+			return fail(p[0], "%s applies only to a marker shape, not to %s", p[0], k.Shape)
+		}
 	}
-	for _, w := range inapplicable(k, raw) {
-		c.Warnings = append(c.Warnings, (&Error{origin, li.kindLine(idx, w), fmt.Sprintf("kind %q: %s has no effect on a %s kind", name, w, k.Shape)}).Error())
+	return nil
+}
+
+// checkMarkers allows basename globs and relative paths, never one that names the root or climbs out of a dir.
+func checkMarkers(ms []string) error {
+	if len(ms) == 0 {
+		return errors.New("marker needs at least one file name")
 	}
-	c.declare(k)
+	for _, m := range ms {
+		for _, s := range strings.Split(m, "/") {
+			if s == "" || s == "." || s == ".." || s == "**" {
+				return fmt.Errorf("marker %q must be a relative path with no empty, '.', '..' or '**' segment", m)
+			}
+		}
+	}
 	return nil
 }
 
@@ -425,11 +604,11 @@ func checkLayouts(lays []string) error {
 	return nil
 }
 
-// parseTrim takes { scope = "acct-", env = ["env-", "e-"] }; a list applies its prefixes in order.
+// parseTrim takes { scope = "team-", env = ["env-", "e-"] }; a list applies its prefixes in order.
 func parseTrim(v any) ([]TrimSpec, error) {
 	m, ok := v.(map[string]any)
 	if !ok {
-		return nil, errors.New(`trim must be a table like { scope = "acct-" }`)
+		return nil, errors.New(`trim must be a table like { scope = "team-" }`)
 	}
 	cols := make([]string, 0, len(m))
 	for col := range m {
@@ -465,11 +644,14 @@ func inapplicable(k *Kind, raw map[string]any) []string {
 	use := map[string][]string{
 		"dirs":    {"depth", "preview", "preview_skip", "scope"},
 		"files":   {"under", "layout", "name_template", "name_from", "strip_ext", "exclude", "scope", "trim"},
-		"marker":  {"under", "layout", "name_template", "exclude", "preview", "preview_skip", "scope", "trim"},
-		"builtin": {},
+		"marker":  {"under", "layout", "name_template", "exclude", "preview", "preview_skip", "scope", "trim", "min_depth", "nested"},
+		"builtin": {"skip", "preview"},
 		"exec":    {"preview", "preview_skip"},
 	}[k.Shape]
-	ok := map[string]bool{"name": true, "extend": true, "desc": true, "default": true}
+	ok := map[string]bool{}
+	for key := range kindOnlyKeys {
+		ok[key] = true
+	}
 	for _, s := range shapeKeys {
 		ok[s] = true
 	}
@@ -503,9 +685,19 @@ func SplitNonEmpty(s, sep string) []string { return splitNonEmpty(s, sep) }
 func (c *Config) RegistryKey() string {
 	var b strings.Builder
 	for _, k := range c.Kinds {
-		cp := *k
-		cp.Origin = ""
-		fmt.Fprintf(&b, "%+v;", cp)
+		b.WriteString(kindKey(k))
+		b.WriteByte(';')
 	}
 	return b.String()
+}
+
+func kindKey(k *Kind) string {
+	cp := *k
+	cp.Origin = ""
+	srcs := make([]string, len(cp.Sources))
+	for i, s := range cp.Sources {
+		srcs[i] = kindKey(s)
+	}
+	cp.Sources = nil
+	return fmt.Sprintf("%+v sources=[%s]", cp, strings.Join(srcs, " | "))
 }

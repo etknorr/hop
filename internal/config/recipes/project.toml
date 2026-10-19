@@ -1,0 +1,17 @@
+# A dir holding a build manifest is a project: a package, a service, a module.
+# - min_depth = 1 leaves the repo root to dir's <root> row.
+# - nested = false keeps a project's own examples and subpackages from becoming projects of their own.
+# - exclude is a zsh pattern on the marker's path, where * crosses /, so (*/|) also matches at the root.
+[[kind]]
+name = "project"
+desc = "dirs holding a build manifest"
+default = true
+marker = ["package.json", "go.mod", "Cargo.toml", "pyproject.toml", "setup.py", "Gemfile",
+          "pom.xml", "build.gradle", "build.gradle.kts", "composer.json", "mix.exs",
+          "Package.swift", "CMakeLists.txt", "*.csproj", "*.sln", "Dockerfile", "Makefile"]
+min_depth = 1
+nested = false
+exclude = ["(*/|).*/*", "(*/|)node_modules/*", "(*/|)vendor/*", "(*/|)third_party/*",
+           "(*/|)testdata/*", "(*/|)fixtures/*"]
+preview = ["README.md", "README", "package.json", "go.mod", "Cargo.toml", "pyproject.toml",
+           "setup.py", "Gemfile", "pom.xml", "build.gradle", "build.gradle.kts", "Makefile", "Dockerfile"]

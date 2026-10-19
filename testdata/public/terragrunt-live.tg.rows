@@ -1,0 +1,6 @@
+mysql                tg   non-prod/us-east-1/qa 	@ROOT@/non-prod/us-east-1/qa/mysql	@ROOT@/non-prod/us-east-1/qa/mysql/terragrunt.hcl	non-prod/us-east-1/qa/mysql/
+webserver-cluster    tg   non-prod/us-east-1/qa 	@ROOT@/non-prod/us-east-1/qa/webserver-cluster	@ROOT@/non-prod/us-east-1/qa/webserver-cluster/terragrunt.hcl	non-prod/us-east-1/qa/webserver-cluster/
+mysql                tg   …-prod/us-east-1/stage	@ROOT@/non-prod/us-east-1/stage/mysql	@ROOT@/non-prod/us-east-1/stage/mysql/terragrunt.hcl	non-prod/us-east-1/stage/mysql/
+webserver-cluster    tg   …-prod/us-east-1/stage	@ROOT@/non-prod/us-east-1/stage/webserver-cluster	@ROOT@/non-prod/us-east-1/stage/webserver-cluster/terragrunt.hcl	non-prod/us-east-1/stage/webserver-cluster/
+mysql                tg   prod/us-east-1/prod   	@ROOT@/prod/us-east-1/prod/mysql	@ROOT@/prod/us-east-1/prod/mysql/terragrunt.hcl	prod/us-east-1/prod/mysql/
+webserver-cluster    tg   prod/us-east-1/prod   	@ROOT@/prod/us-east-1/prod/webserver-cluster	@ROOT@/prod/us-east-1/prod/webserver-cluster/terragrunt.hcl	prod/us-east-1/prod/webserver-cluster/

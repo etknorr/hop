@@ -1,0 +1,6 @@
+# Backstage catalog entities, named by metadata.name, since the file is almost always catalog-info.yaml.
+[[kind]]
+name = "backstage"
+desc = "catalog entities"
+files = ["**/catalog-info.yaml"]
+name_from = "yaml:metadata.name"
