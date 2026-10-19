@@ -1,10 +1,10 @@
-# Your own kind declarations; config.example.zsh is the tracked template.
-config.zsh
+# Your own config; config.example.toml is the tracked template.
+config.toml
 # Personal machine paths; workspaces.example is the tracked template.
 workspaces
 # Frecency history is per-machine state, not configuration.
 history
-# Go build output: scripts/build.sh writes dist/, and a local `go build -o bin/hop .` writes bin/hop.
+# Go build output: scripts/build.sh writes dist/, and a local `go build -o bin/hop .` writes bin/.
 dist/
-bin/hop
+/bin/
 testdata/repos/
