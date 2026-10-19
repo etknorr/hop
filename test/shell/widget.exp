@@ -12,7 +12,7 @@ expect {
 	-re {\[repo\]> } {}
 	timeout { fail "first-prompt" }
 }
-# Waits are expect-with-timeout, not sleep, so the cursor-report answer above keeps running; pwsh blocks on it.
+# Waits are expect-with-timeout, not sleep, so the cursor-report answer above keeps running.
 expect -timeout 1 timeout {}
 send "echo half-typed"
 expect -timeout 1 timeout {}
