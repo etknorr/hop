@@ -322,10 +322,13 @@ func TestPickerVerbs(t *testing.T) {
 // TestPickerGuard is suite_pty_escape's reported case: a terminal reply that fzf can't parse must reach no verb.
 // - The negative pins a 300 s window, as zsh hop's suite does, so a loaded machine can't make the guard look leaky.
 // - The guard-off run shows the payload really does reach browse, on an fzf that still leaks it.
+// - fzf 0.74.5 parses the reply whole, so it leaves no alt-] to mark, and a b typed after it is an ordinary key.
 func TestPickerGuard(t *testing.T) {
 	p := newPicker(t)
 	first := p.list[0]
 	osc := "\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\"
+	v := (&match.FZF{Bin: mustLook(t, "fzf")}).Version()
+	leaks := v != "" && match.Less(v, "0.74.5")
 	for name, burst := range map[string]string{
 		"a bare BEL":                 "\a",
 		"an OSC 11 reply, then b":    osc + "b",
@@ -336,6 +339,9 @@ func TestPickerGuard(t *testing.T) {
 		"a DCS version reply":        "\x1bP>|fzf-test(1.2.3)\x1b\\",
 		"a 64-letter APC payload":    "\x1b_G" + strings.Repeat("obey", 16) + "\x1b\\",
 	} {
+		if name == "an OSC 11 reply, then b" && !leaks {
+			continue
+		}
 		o := p.run(t, spec{env: []string{"HOP_GUARD_WINDOW=300"}}, normal, steps(waitFor(p.rel(first)), burst, time.Second, "\x03"))
 		if o.rc != 0 || o.gh != "" || o.cd != "" || o.clip != "" || o.ed != "" || o.code != "" {
 			t.Errorf("%s reached a verb: rc %d gh %q cd %q clip %q ed %q code %q", name, o.rc, o.gh, o.cd, o.clip, o.ed, o.code)
@@ -344,11 +350,11 @@ func TestPickerGuard(t *testing.T) {
 	if o := p.run(t, spec{}, normal, steps(waitFor(p.rel(first)), "y")); o.rc != 0 || o.clip != p.dir(first) {
 		t.Errorf("a real y still copies, so the negatives aren't vacuous: rc %d clip %q", o.rc, o.clip)
 	}
-	f := &match.FZF{Bin: mustLook(t, "fzf")}
-	if v := f.Version(); v != "" && match.Less(v, "0.74.5") {
-		if o := p.run(t, spec{env: []string{"HOP_GUARD_WINDOW=0"}}, normal, steps(waitFor(p.rel(first)), osc, 2*time.Second, "\x03")); o.gh == "" {
-			t.Errorf("with the guard off, fzf %s leaks the reply into browse, or the negative proves nothing: rc %d", v, o.rc)
-		}
+	switch o := p.run(t, spec{env: []string{"HOP_GUARD_WINDOW=0"}}, normal, steps(waitFor(p.rel(first)), osc, 2*time.Second, "\x03")); {
+	case leaks && o.gh == "":
+		t.Errorf("with the guard off, fzf %s leaks the reply into browse, or the negative proves nothing: rc %d", v, o.rc)
+	case !leaks && o.gh != "":
+		t.Errorf("fzf %s parses the reply, so even unguarded it reaches no verb: gh %q", v, o.gh)
 	}
 	third := strings.TrimSuffix(strings.TrimPrefix(p.dir(p.list[2]), p.root+"/"), "/")
 	if o := p.run(t, spec{}, normal, steps(waitFor(p.rel(first)), "j", 60*time.Millisecond, "j", 60*time.Millisecond, "b")); o.rc != 0 ||
