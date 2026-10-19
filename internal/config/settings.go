@@ -2,11 +2,14 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/etknorr/hop/internal/rows"
 )
 
 var (
@@ -14,16 +17,28 @@ var (
 	Jumps   = []string{"auto", "unique", "never"}
 )
 
+// EnvClasses are the env colour classes; an env word in none of them is magenta.
+var EnvClasses = []string{"prod", "staging", "dev"}
+
 // Settings resolve flag > env > file > default; flags are applied by the caller after Load.
+//   - Action and Jump are always valid; ActionRaw and JumpRaw are the env or file value as given, "" when unset,
+//     so the caller can word zsh hop's warning at the point hop() reads it.
+//   - A bad action or jump in [settings] is a load error, but a bad HOP_ACTION or HOP_JUMP only falls back.
 type Settings struct {
 	Action, Jump, Code, Clipboard, HistFile string
+	ActionRaw, JumpRaw                      string
 	FzfHeight                               *string
 	Vim                                     *bool
+	Debug                                   bool
+	DebugLog                                string
+	FzfMin                                  string
+	GuardWindow                             string
 	HistMax                                 int
 	DefaultKinds                            []string
 	Workspaces                              []string
 	Repos                                   []string
 	WorkspacesFile                          string
+	EnvColors                               map[string][]string
 }
 
 func (c *Config) applySettings(m map[string]any, li *lineIndex, origin string) error {
@@ -39,8 +54,14 @@ func (c *Config) applySettings(m map[string]any, li *lineIndex, origin string) e
 		switch key {
 		case "action":
 			s.Action, err = asString(v, key)
+			if err == nil && !slices.Contains(Actions, s.Action) {
+				err = fmt.Errorf("action %q is not one of %s", s.Action, strings.Join(Actions, ", "))
+			}
 		case "jump":
 			s.Jump, err = asString(v, key)
+			if err == nil && !slices.Contains(Jumps, s.Jump) {
+				err = fmt.Errorf("jump %q is not one of %s", s.Jump, strings.Join(Jumps, ", "))
+			}
 		case "code":
 			s.Code, err = asString(v, key)
 		case "clipboard":
@@ -55,6 +76,16 @@ func (c *Config) applySettings(m map[string]any, li *lineIndex, origin string) e
 			var b bool
 			b, err = asBool(v, key)
 			s.Vim = &b
+		case "debug":
+			s.Debug, err = asBool(v, key)
+		case "debug_log":
+			s.DebugLog, err = asString(v, key)
+		case "fzf_min":
+			s.FzfMin, err = asString(v, key)
+		case "guard_window":
+			s.GuardWindow, err = asNumber(v, key)
+		case "env_colors":
+			s.EnvColors, err = parseEnvColors(v)
 		case "hist_max":
 			n, ok := v.(int64)
 			if !ok || n < 1 {
@@ -79,6 +110,40 @@ func (c *Config) applySettings(m map[string]any, li *lineIndex, origin string) e
 	return nil
 }
 
+func asNumber(v any, key string) (string, error) {
+	switch t := v.(type) {
+	case int64:
+		return strconv.FormatInt(t, 10), nil
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64), nil
+	case string:
+		return t, nil
+	}
+	return "", fmt.Errorf("%s must be a number of seconds", key)
+}
+
+// parseEnvColors takes { prod = ["prod", "live"], dev = ["dev", "sandbox"] }; a class left out keeps its default.
+func parseEnvColors(v any) (map[string][]string, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf(`env_colors must be a table like { prod = ["prod"], dev = ["dev", "sandbox"] }`)
+	}
+	for _, cls := range slices.Sorted(maps.Keys(m)) {
+		if !slices.Contains(EnvClasses, cls) {
+			return nil, fmt.Errorf("env_colors: unknown class %q (%s)", cls, strings.Join(EnvClasses, ", "))
+		}
+	}
+	out := map[string][]string{}
+	for cls, v := range m {
+		words, err := asList(v, "env_colors."+cls)
+		if err != nil {
+			return nil, err
+		}
+		out[cls] = words
+	}
+	return out, nil
+}
+
 // applyEnv layers HOP_* over the file.
 // - This inverts zsh hop, where a `typeset -g HOP_ACTION=` in config.zsh beat the environment.
 // - Set-but-empty is honoured where hop honours it: HOP_FZF_HEIGHT= means fullscreen (ui.zsh:476).
@@ -91,6 +156,7 @@ func (c *Config) applyEnv() {
 	}
 	str("HOP_ACTION", &s.Action)
 	str("HOP_JUMP", &s.Jump)
+	s.ActionRaw, s.JumpRaw = s.Action, s.Jump
 	str("HOP_CODE", &s.Code)
 	str("HOP_CLIPBOARD", &s.Clipboard)
 	str("HOP_HISTFILE", &s.HistFile)
@@ -101,6 +167,13 @@ func (c *Config) applyEnv() {
 	if v, ok := os.LookupEnv("HOP_VIM"); ok {
 		on := v != "0"
 		s.Vim = &on
+	}
+	str("HOP_DEBUG_LOG", &s.DebugLog)
+	str("HOP_FZF_MIN", &s.FzfMin)
+	str("HOP_GUARD_WINDOW", &s.GuardWindow)
+	// lib/doctor.zsh:15 logs whenever HOP_DEBUG is non-empty, 0 included.
+	if v, ok := os.LookupEnv("HOP_DEBUG"); ok {
+		s.Debug = v != ""
 	}
 	if v := os.Getenv("HOP_HIST_MAX"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -120,16 +193,23 @@ func (c *Config) applyEnv() {
 		s.Action = "cd"
 	}
 	if !slices.Contains(Actions, s.Action) {
-		c.Warnings = append(c.Warnings, fmt.Sprintf("action %q is not one of %s; using cd", s.Action, strings.Join(Actions, ", ")))
 		s.Action = "cd"
 	}
 	if s.Jump == "" {
 		s.Jump = "auto"
 	}
 	if !slices.Contains(Jumps, s.Jump) {
-		c.Warnings = append(c.Warnings, fmt.Sprintf("jump %q is not one of auto, unique, never; using auto", s.Jump))
 		s.Jump = "auto"
 	}
+	if s.GuardWindow == "" {
+		s.GuardWindow = "0.15"
+	}
+	colors := map[string][]string{"prod": {"prod"}, "staging": {"staging"}, "dev": {"dev"}}
+	for cls, words := range s.EnvColors {
+		colors[cls] = words
+	}
+	s.EnvColors = colors
+	rows.SetEnvColors(colors)
 	if s.Code == "" {
 		s.Code = "code"
 	}
@@ -150,6 +230,13 @@ func (c *Config) applyEnv() {
 			base = filepath.Join(os.Getenv("HOME"), ".local", "state")
 		}
 		s.HistFile = filepath.Join(base, "hop", "history")
+	}
+	if s.DebugLog == "" {
+		base := os.Getenv("XDG_STATE_HOME")
+		if base == "" {
+			base = filepath.Join(os.Getenv("HOME"), ".local", "state")
+		}
+		s.DebugLog = filepath.Join(base, "hop", "debug.log")
 	}
 	if s.WorkspacesFile == "" {
 		base := os.Getenv("XDG_CONFIG_HOME")

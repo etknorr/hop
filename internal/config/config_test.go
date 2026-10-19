@@ -11,7 +11,8 @@ import (
 func clearEnv(t *testing.T) {
 	t.Helper()
 	for _, v := range []string{"HOP_ACTION", "HOP_JUMP", "HOP_CODE", "HOP_CLIPBOARD", "HOP_HISTFILE", "HOP_FZF_HEIGHT",
-		"HOP_VIM", "HOP_HIST_MAX", "HOP_DEFAULT_KINDS", "HOP_WORKSPACES", "HOP_REPOS", "HOP_WORKSPACES_FILE", "HOP_CONFIG"} {
+		"HOP_VIM", "HOP_HIST_MAX", "HOP_DEFAULT_KINDS", "HOP_WORKSPACES", "HOP_REPOS", "HOP_WORKSPACES_FILE", "HOP_CONFIG",
+		"HOP_DEBUG", "HOP_DEBUG_LOG", "HOP_FZF_MIN", "HOP_GUARD_WINDOW", "HOP_HOPRC", "HOP_SESSION"} {
 		t.Setenv(v, "")
 		os.Unsetenv(v)
 	}
@@ -51,6 +52,9 @@ func TestValidationErrors(t *testing.T) {
 		{"bad preset", "presets = ['nope']\n", "no such preset: nope", 1},
 		{"syntax", "[[kind]\nname = 'a'\n", "expected end of table array name", -1},
 		{"version", "version = 2\n", "newer than this hop", 1},
+		{"file jump", "[settings]\njump = 'sideways'\n", `jump "sideways" is not one of auto, unique, never`, 2},
+		{"file action", "[settings]\n\naction = 'fly'\n", `action "fly" is not one of cd, open`, 3},
+		{"env colour class", "[settings]\nenv_colors = { live = ['prod'] }\n", `unknown class "live"`, 2},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -167,14 +171,30 @@ func TestSettingsPrecedence(t *testing.T) {
 	if s.Action != "reveal" || *s.FzfHeight != "" || strings.Join(c.DefaultKinds(), ",") != "tg,mod" {
 		t.Errorf("env must beat the file, and an empty HOP_FZF_HEIGHT means fullscreen: %+v", s)
 	}
-	if s.Jump != "auto" || len(c.Warnings) != 1 {
-		t.Errorf("a bad jump falls back to auto with a warning: %q %q", s.Jump, c.Warnings)
+	if s.Jump != "auto" || s.JumpRaw != "sideways" || s.ActionRaw != "reveal" || len(c.Warnings) != 0 {
+		t.Errorf("a bad HOP_JUMP falls back to auto, kept raw for the caller to warn about: %q %q %q", s.Jump, s.JumpRaw, c.Warnings)
 	}
 	clearEnv(t)
 	c, _ = Load(write(t, ""))
 	s = c.Settings
-	if s.Action != "cd" || s.Jump != "auto" || *s.FzfHeight != "80%" || !*s.Vim || s.HistMax != 300 || s.Code != "code" {
+	if s.Action != "cd" || s.Jump != "auto" || *s.FzfHeight != "80%" || !*s.Vim || s.HistMax != 300 || s.Code != "code" ||
+		s.ActionRaw != "" || s.JumpRaw != "" || s.Debug || s.GuardWindow != "0.15" || s.FzfMin != "" {
 		t.Errorf("defaults: %+v", s)
+	}
+	if !strings.HasSuffix(s.DebugLog, "/.local/state/hop/debug.log") {
+		t.Errorf("the debug log defaults to zsh hop's file: %s", s.DebugLog)
+	}
+	c, err = Load(write(t, "[settings]\ndebug = true\nguard_window = 0.3\nfzf_min = '0.55.0'\ndebug_log = '/x/log'\n"))
+	if s := c.Settings; err != nil || !s.Debug || s.GuardWindow != "0.3" || s.FzfMin != "0.55.0" || s.DebugLog != "/x/log" {
+		t.Errorf("file settings: %v %+v", err, c.Settings)
+	}
+	t.Setenv("HOP_DEBUG", "1")
+	t.Setenv("HOP_GUARD_WINDOW", "0")
+	t.Setenv("HOP_FZF_MIN", "0.50.0")
+	t.Setenv("HOP_DEBUG_LOG", "/y/log")
+	c, _ = Load(write(t, "[settings]\nguard_window = 0.3\n"))
+	if s := c.Settings; !s.Debug || s.GuardWindow != "0" || s.FzfMin != "0.50.0" || s.DebugLog != "/y/log" {
+		t.Errorf("env settings: %+v", s)
 	}
 	if !strings.HasSuffix(s.HistFile, "/.local/state/hop/history") {
 		t.Errorf("the history defaults to zsh hop's file: %s", s.HistFile)
@@ -211,5 +231,36 @@ func TestEricConfigLoads(t *testing.T) {
 	}
 	if len(c.Warnings) > 0 {
 		t.Errorf("warnings: %q", c.Warnings)
+	}
+}
+
+func TestEnvColors(t *testing.T) {
+	clearEnv(t)
+	c, err := Load(write(t, "[settings]\nenv_colors = { dev = ['dev', 'sandbox'] }\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := c.Settings.EnvColors
+	if strings.Join(got["dev"], ",") != "dev,sandbox" || strings.Join(got["prod"], ",") != "prod" || strings.Join(got["staging"], ",") != "staging" {
+		t.Errorf("a class left out keeps its default: %v", got)
+	}
+}
+
+func TestWorkspaceSettings(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	c, _ := Load(write(t, ""))
+	if c.Settings.WorkspacesFile != "/xdg/hop/workspaces" {
+		t.Errorf("the workspaces file follows XDG_CONFIG_HOME: %s", c.Settings.WorkspacesFile)
+	}
+	os.Unsetenv("XDG_CONFIG_HOME")
+	c, _ = Load(write(t, ""))
+	if c.Settings.WorkspacesFile != filepath.Join(os.Getenv("HOME"), ".config", "hop", "workspaces") {
+		t.Errorf("else ~/.config: %s", c.Settings.WorkspacesFile)
+	}
+	t.Setenv("HOP_WORKSPACES", "/a::/b c:/d")
+	c, _ = Load(write(t, "[settings]\nworkspaces = ['/file']\n"))
+	if strings.Join(c.Settings.Workspaces, "|") != "/a|/b c|/d" {
+		t.Errorf("HOP_WORKSPACES splits on colons and beats the file: %q", c.Settings.Workspaces)
 	}
 }

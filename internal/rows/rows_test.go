@@ -162,3 +162,16 @@ func TestSplitAndStrip(t *testing.T) {
 		t.Errorf("StripANSI = %q", got)
 	}
 }
+
+func TestSetEnvColors(t *testing.T) {
+	t.Cleanup(func() { SetEnvColors(map[string][]string{"prod": {"prod"}, "staging": {"staging"}, "dev": {"dev"}}) })
+	if envColour("playground") != "\x1b[35m" || envColour("dev") != "\x1b[34m" || envColour("-") != CDim {
+		t.Error("by default only prod, staging and dev have a colour of their own")
+	}
+	SetEnvColors(map[string][]string{"prod": {"prod", "live"}, "dev": {"dev", "playground"}})
+	for env, want := range map[string]string{"live": "\x1b[31m", "playground": "\x1b[34m", "staging": "\x1b[35m", "qa": "\x1b[35m"} {
+		if got := envColour(env); got != want {
+			t.Errorf("%s = %q, want %q", env, got, want)
+		}
+	}
+}

@@ -4,6 +4,7 @@ package rows
 import (
 	"os"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 )
 
@@ -93,16 +94,31 @@ func Rel(r Row, root string) string {
 	return Tilde(p) + tail
 }
 
+var classColour = map[string]string{"prod": "\x1b[31m", "staging": "\x1b[33m", "dev": "\x1b[34m"}
+
+var envColours atomic.Pointer[map[string]string]
+
+func init() {
+	SetEnvColors(map[string][]string{"prod": {"prod"}, "staging": {"staging"}, "dev": {"dev"}})
+}
+
+// SetEnvColors maps each env word to its class's colour (prod red, staging yellow, dev blue); the last class naming a word wins.
+func SetEnvColors(classes map[string][]string) {
+	m := map[string]string{}
+	for _, cls := range []string{"prod", "staging", "dev"} {
+		for _, w := range classes[cls] {
+			m[w] = classColour[cls]
+		}
+	}
+	envColours.Store(&m)
+}
+
 func envColour(env string) string {
-	switch env {
-	case "prod":
-		return "\x1b[31m"
-	case "staging":
-		return "\x1b[33m"
-	case "dev", "playground":
-		return "\x1b[34m"
-	case "-":
+	if env == "-" {
 		return CDim
+	}
+	if c, ok := (*envColours.Load())[env]; ok {
+		return c
 	}
 	return "\x1b[35m"
 }
