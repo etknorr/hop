@@ -2,34 +2,44 @@
 package pick
 
 import (
+	"regexp"
 	"runtime"
 	"strings"
 
+	"github.com/etknorr/hop/internal/keymap"
 	"github.com/etknorr/hop/internal/match"
 )
 
 // Opts is one picker: _hop_pick's arguments plus the _hop_pick_* fields _hop_res_pick sets by dynamic scope.
 // - Height "" is fullscreen, which is HOP_FZF_HEIGHT set but empty.
 // - Reload is alt-a's kind list; nil binds nothing, as on the workspace and repo levels.
-// - Menu is a root to enumerate, so alt-k opens the kind menu and enter, esc and alt-enter ask `__key` first.
+// - Menu is a root to enumerate kinds from, Drill and Up the level moves ctrl-l and ctrl-h make.
+// - Vim is the modal layer; without it the picker is plain fzf search under the legend.
+// - ShellQuotes is an fzf that parses quotes in --with-shell, 0.71.0 on.
+// - Enter names what Enter does, for the modal headers, and Cols is the terminal width they're fitted to.
 type Opts struct {
 	Self, Label, Legend, Note, Query string
-	Height                           string
+	Height, Enter                    string
 	Reload                           []string
-	Menu, FreezeLeft                 bool
+	Menu, Drill, Up, FreezeLeft      bool
+	ShellQuotes                      bool
 	Select1, Ordered                 bool
+	Vim                              bool
+	Cols                             int
+}
+
+// Keys is the modal keymap; the session carries it, so every `hop __key` builds the same strings the argv did.
+// - The guard exists only with the modal layer, and r only where `:` can enumerate kinds.
+func (o Opts) Keys() keymap.Map {
+	return keymap.Map{Enter: o.Enter, Menu: o.Menu, Restore: o.Menu, Reload: len(o.Reload) > 0, Drill: o.Drill, Up: o.Up, Guard: o.Vim, Cols: o.Cols}
 }
 
 const (
 	Prompt = "hop ▸ "
 	// Expect is _hop_pick's --expect list; ctrl-g rides alt-B's print() instead, since a stray BEL byte is ctrl-g.
 	Expect        = "ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y"
-	PreviewCmd    = "hop __preview {2} {3}"
+	PreviewCmd    = keymap.PreviewCmd
 	PreviewWindow = "right,55%,border-left,wrap,<120(down,50%,border-top,wrap)"
-	MenuPrompt    = ": "
-	MenuHeader    = "KINDS  enter switch  esc back  type to filter"
-	// MenuOpen clears the query so the kind list isn't filtered by the target query typed so far.
-	MenuOpen = "change-prompt(" + MenuPrompt + ")+change-header(" + MenuHeader + ")+change-preview-label()+clear-query+reload(hop __menu)"
 )
 
 // Header is the note, when the resolver left one, above the legend.
@@ -40,23 +50,45 @@ func (o Opts) Header() string {
 	return o.Legend
 }
 
+var plainPath = regexp.MustCompile(`^[A-Za-z0-9_./+@%:,=-]+$`)
+
 // WithShell is --with-shell: fzf runs every callback as `<hop> __sh <command>`, so no user shell parses a bind.
-// - Windows fzf splits the value with strings.Fields, so a path holding a space has to be reached through PATH.
-func WithShell(self string) string {
-	if runtime.GOOS == "windows" {
-		if strings.ContainsAny(self, " \t") {
-			return "hop __sh"
-		}
+//   - fzf before 0.71.0 splits the value on whitespace and keeps quotes (#4709), so only a plain path goes in as it is.
+//   - A path that needs quoting is quoted for fzf that parses quotes, and otherwise reached through PATH, as on Windows,
+//     whose fzf splits with strings.Fields too.
+func WithShell(self string, quotes bool) string {
+	switch {
+	case plainPath.MatchString(self):
 		return self + " __sh"
+	case runtime.GOOS == "windows" && !strings.ContainsAny(self, " \t"):
+		return self + " __sh"
+	case quotes && runtime.GOOS != "windows":
+		return "'" + strings.ReplaceAll(self, "'", `'\''`) + "' __sh"
 	}
-	return "'" + strings.ReplaceAll(self, "'", `'\''`) + "' __sh"
+	return "hop __sh"
 }
 
-// Args is _hop_pick's argv without the modal layer: every callback is a `hop __verb`, and no bind string holds a path.
+// Features is what fzf v can take: --freeze-left from 0.67.0 (0.60.3 exits 2 on it), quotes in --with-shell from 0.71.0.
+// - An unreadable version gets neither, as hop gives it no --freeze-left.
+func Features(v string) (freezeLeft, shellQuotes bool) {
+	if v == "" {
+		return false, false
+	}
+	return !match.Less(v, "0.67.0"), !match.Less(v, "0.71.0")
+}
+
+// Args is _hop_pick's argv: every callback is a `hop __verb`, and no bind string holds a path.
 func Args(o Opts) []string {
+	expect := Expect
+	if o.Drill {
+		expect += ",ctrl-l"
+	}
+	if o.Up {
+		expect += ",ctrl-h"
+	}
 	a := append([]string{}, match.Flags...)
 	a = append(a,
-		"--with-shell="+WithShell(o.Self),
+		"--with-shell="+WithShell(o.Self, o.ShellQuotes),
 		"--accept-nth=2,3,4",
 		"--no-multi",
 		"--layout=reverse",
@@ -66,7 +98,7 @@ func Args(o Opts) []string {
 		"--header-first",
 		"--header-border=bottom",
 		"--pointer=▸",
-		"--expect="+Expect,
+		"--expect="+expect,
 		"--preview="+PreviewCmd,
 		"--preview-window="+PreviewWindow,
 		"--bind=ctrl-/:toggle-preview",
@@ -75,13 +107,9 @@ func Args(o Opts) []string {
 		"--bind=ctrl-g:ignore",
 		"--bind=alt-B:print(ctrl-g)+accept",
 	)
-	if o.Menu {
-		a = append(a,
-			"--bind=alt-enter:transform:hop __key alt-enter",
-			"--bind=enter:transform:hop __key enter {2}",
-			"--bind=esc:transform:hop __key esc",
-			"--bind=alt-k:"+MenuOpen,
-		)
+	// alt-enter always cds, but a menu row names a kind, not a dir, so with a menu it asks whether one is on screen.
+	if o.Vim && o.Menu {
+		a = append(a, "--bind=alt-enter:transform:hop __key alt-enter")
 	} else {
 		a = append(a, "--bind=alt-enter:print(alt-enter)+accept")
 	}
@@ -104,29 +132,35 @@ func Args(o Opts) []string {
 	if o.Ordered {
 		a = append(a, "--no-sort", "--bind=change:toggle-sort+unbind(change)")
 	}
-	return append(a, "--prompt="+Prompt, "--header="+o.Header())
+	if !o.Vim {
+		return append(a, "--prompt="+Prompt, "--header="+o.Header())
+	}
+	binds, prompt, header := o.Keys().Binds(o.Query, o.Note)
+	a = append(a, binds...)
+	return append(a, "--prompt="+prompt, "--header="+header)
 }
 
-// Legend is _hop_header: the keys, each line short enough for a 36-column list pane.
+// Legend is _hop_header, the non-modal legend: the keys, each line short enough for a 36-column list pane.
 // - mode is what Enter does; on workspace and repo rows reveal is named open, since both run `code -n` there.
-func Legend(mode string, folder, reload, menu bool) string {
-	if folder {
-		mode = strings.Replace(mode, "reveal", "open", 1)
-	}
+// - hop 0.3.1 names alt-a `M-a +conf`, after one user's kind; 1.0 says what it does.
+func Legend(mode string, folder, reload bool) string {
+	mode = EnterName(mode, folder)
 	lines := []string{"enter cd · ^O file · ^T folder", "^Y copy · M-y copy file · M-o edit"}
 	if mode != "cd" {
 		lines = []string{"enter " + mode + " · M-enter cd", "^O file · ^T folder · ^Y copy", "M-y copy file · M-o edit"}
 	}
-	last := "M-B github · M-p preview"
-	switch {
-	case reload && menu:
-		lines = append(lines, last, "M-a all kinds · M-k kind menu")
-	case reload:
-		lines = append(lines, last+" · M-a all")
-	case menu:
-		lines = append(lines, last+" · M-k kinds")
-	default:
-		lines = append(lines, last)
+	if reload {
+		lines = append(lines, "M-B github · M-a all · M-p preview")
+	} else {
+		lines = append(lines, "M-B github · M-p preview")
 	}
 	return strings.Join(lines, "\n")
+}
+
+// EnterName is _hop_enter_mode's naming: on folder rows reveal runs `code -n` too, so it is called open.
+func EnterName(mode string, folder bool) string {
+	if folder {
+		return strings.Replace(mode, "reveal", "open", 1)
+	}
+	return mode
 }

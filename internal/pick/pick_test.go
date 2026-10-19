@@ -10,7 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/etknorr/hop/internal/keymap"
+	"github.com/etknorr/hop/internal/match"
 	"github.com/etknorr/hop/internal/testfix"
 )
 
@@ -22,18 +25,33 @@ func argvCases() []struct {
 	name string
 	o    Opts
 } {
-	legend := Legend("cd", false, true, true)
+	legend := Legend("cd", false, true)
 	all := []string{"tg", "mod", "helm", "dir", "file"}
+	targets := Opts{Self: self, Label: "repo  12 targets  tg,mod", Legend: legend, Height: "80%", Reload: all, Menu: true, Up: true,
+		FreezeLeft: true, ShellQuotes: true, Select1: true, Vim: true, Enter: "cd", Cols: 80}
+	with := func(o Opts, f func(*Opts)) Opts { f(&o); return o }
 	return []struct {
 		name string
 		o    Opts
 	}{
-		{"default", Opts{Self: self, Label: "repo  12 targets  tg,mod", Legend: legend, Height: "80%", Reload: all, Menu: true, FreezeLeft: true, Select1: true}},
-		{"-c", Opts{Self: self, Label: "repo  3 targets  tg,mod", Legend: legend, Height: "80%", Reload: all, Menu: true, FreezeLeft: true, Select1: true}},
-		{"-k helm", Opts{Self: self, Label: "repo  4 targets  helm", Legend: legend, Height: "80%", Reload: all, Menu: true, FreezeLeft: true, Query: "web", Ordered: true}},
-		{"--action=open", Opts{Self: self, Label: "repo  12 targets  tg,mod", Legend: Legend("open", false, true, true), Height: "80%", Reload: all, Menu: true, Note: "ignored: zzqx", Query: "vpc", Ordered: true}},
-		{"HOP_FZF_HEIGHT=", Opts{Self: self, Label: "repo  12 targets  tg,mod", Legend: legend, Reload: all, Menu: true, Select1: true}},
-		{"-w", Opts{Self: self, Label: "workspaces  4", Legend: Legend("reveal", true, false, false), Height: "80%"}},
+		{"NORMAL start", targets},
+		{"-c", with(targets, func(o *Opts) { o.Label = "repo  3 targets  tg,mod" })},
+		{"SEARCH start", with(targets, func(o *Opts) {
+			o.Label, o.Query, o.Ordered, o.Select1, o.FreezeLeft = "repo  4 targets  helm", "web", true, false, false
+		})},
+		{"--action=open with a note", with(targets, func(o *Opts) {
+			o.Legend, o.Enter, o.Note, o.Query, o.Ordered, o.Select1 = Legend("open", false, true), "open", "ignored: zzqx", "vpc", true, false
+		})},
+		{"wide", with(targets, func(o *Opts) { o.Cols = 200 })},
+		{"HOP_FZF_HEIGHT=", with(targets, func(o *Opts) { o.Height = "" })},
+		{"HOP_VIM=0", with(targets, func(o *Opts) { o.Vim = false })},
+		{"HOP_VIM=0 SEARCH", with(targets, func(o *Opts) { o.Vim, o.Query, o.Note = false, "web", "nothing close to: web (ctrl-u clears)" })},
+		{"workspace level", Opts{Self: self, Label: "workspaces  4", Legend: Legend("reveal", true, false), Height: "80%", Drill: true, ShellQuotes: true,
+			Select1: true, Vim: true, Enter: EnterName("reveal", true), Cols: 80}},
+		{"repo level", Opts{Self: self, Label: "repos  9 found", Legend: Legend("cd", true, false), Height: "80%", Drill: true, Up: true, ShellQuotes: true,
+			Select1: true, Vim: true, Enter: "cd", Cols: 80}},
+		{"repo level HOP_VIM=0", Opts{Self: self, Label: "repos  9 found", Legend: Legend("cd", true, false), Height: "80%", Drill: true, Up: true, ShellQuotes: true,
+			Select1: true, Enter: "cd", Cols: 80}},
 	}
 }
 
@@ -83,54 +101,117 @@ func TestArgvParses(t *testing.T) {
 		}
 		return 0, errb.String()
 	}
+	// hop passes --freeze-left only from fzf 0.67.0, as the fzf under test would see it.
+	old := (&match.FZF{Bin: fzf}).Version()
+	frozen, quotes := Features(old)
 	for _, c := range argvCases() {
+		c.o.FreezeLeft = c.o.FreezeLeft && frozen
+		c.o.ShellQuotes = c.o.ShellQuotes && quotes
 		if rc, msg := run(Args(c.o)); rc != 0 || msg != "" {
-			t.Errorf("%s: fzf rc %d: %s", c.name, rc, msg)
+			t.Errorf("%s: fzf %s rc %d: %s", c.name, old, rc, msg)
 		}
 	}
-	bad := append(Args(argvCases()[0].o), "--bind=alt-z:no-such-action")
+	first := argvCases()[0].o
+	first.FreezeLeft = frozen
+	bad := append(Args(first), "--bind=alt-z:no-such-action")
 	if rc, msg := run(bad); rc != 2 || !strings.Contains(msg, "unknown action") {
 		t.Errorf("control: a bogus action must fail the parse, got rc %d %q", rc, msg)
 	}
 }
 
 func TestArgvShape(t *testing.T) {
-	a := strings.Join(Args(argvCases()[0].o), "\n")
-	for _, want := range []string{"--expect=ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y", "--bind=alt-B:print(ctrl-g)+accept", "--bind=ctrl-/:toggle-preview",
-		"--bind=alt-p:toggle-preview", "--bind=alt-a:reload(hop __rows tg mod helm dir file)", "--bind=alt-k:" + MenuOpen,
-		"--with-shell='/opt/hop dir/bin/hop' __sh", "--preview=hop __preview {2} {3}", "--height=80%"} {
-		if !strings.Contains(a, want) {
+	cases := argvCases()
+	a := strings.Join(Args(cases[0].o), "\n")
+	for _, want := range []string{"--expect=ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y,ctrl-h", "--bind=alt-B:print(ctrl-g)+accept", "--bind=ctrl-/:toggle-preview",
+		"--bind=alt-p:toggle-preview", "--bind=alt-a:reload(hop __rows tg mod helm dir file)", "--bind=alt-enter:transform:hop __key alt-enter",
+		"--with-shell='/opt/hop dir/bin/hop' __sh", "--preview=hop __preview {2} {3}", "--height=80%", "--disabled", "--prompt=> ",
+		"--bind=esc:transform:hop __key esc", "--bind=enter:transform:hop __key enter {2}", "--bind=o:transform:hop __guard check o",
+		"--bind=alt-]:execute-silent(hop __guard mark)", "--bind=j:down+" + keymap.Restore, "--bind=r:reload(hop __rows)",
+		"--bind=l:ignore", "--bind=h:transform:hop __guard check h", "--bind=(:ignore", "--bind=):ignore"} {
+		if !strings.Contains(a, want+"\n") {
 			t.Errorf("argv lacks %q", want)
 		}
 	}
-	for _, c := range argvCases() {
+	for _, unwanted := range []string{"--bind=alt-k:change", "--bind=alt-a:execute-silent", "--bind=alt-o:execute-silent", "--bind=alt-B:execute-silent"} {
+		if strings.Contains(a, unwanted) {
+			t.Errorf("argv holds %q", unwanted)
+		}
+	}
+	for _, c := range cases {
 		for _, x := range Args(c.o) {
 			if strings.Contains(x, "/opt/hop") && !strings.HasPrefix(x, "--with-shell=") {
 				t.Errorf("%s: only --with-shell may hold a path: %q", c.name, x)
 			}
 		}
 	}
-	fs := strings.Join(Args(argvCases()[4].o), "\n")
+	plain := strings.Join(Args(cases[6].o), "\n")
+	for _, x := range []string{"--disabled", "__key", "__guard", "--bind=j:"} {
+		if strings.Contains(plain, x) {
+			t.Errorf("HOP_VIM=0 is plain fzf, but its argv holds %q", x)
+		}
+	}
+	if !strings.Contains(plain, "--prompt="+Prompt) || !strings.Contains(plain, "--bind=alt-enter:print(alt-enter)+accept") {
+		t.Error("HOP_VIM=0 keeps the hop prompt and a plain alt-enter")
+	}
+	if s := strings.Join(Args(cases[2].o), "\n"); !strings.Contains(s, "--prompt=/ ") || strings.Contains(s, "--disabled") ||
+		!strings.Contains(s, "--bind=start:"+keymap.UnbindAll+"+enable-search") {
+		t.Error("a CLI query starts in SEARCH, filtering")
+	}
+	if s := Args(cases[3].o); !strings.HasPrefix(s[len(s)-1], "--header=ignored: zzqx\nSEARCH") {
+		t.Errorf("a resolver note stays above the SEARCH header: %q", s[len(s)-1])
+	}
+	ws := strings.Join(Args(cases[8].o), "\n")
+	for _, want := range []string{"--expect=ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y,ctrl-l\n", "--bind=l:transform:hop __guard check l\n", "--bind=h:ignore\n",
+		"--bind=r:ignore\n", "--bind=::ignore\n", "--bind=alt-enter:print(alt-enter)+accept\n", "enter open  c cd  q quit"} {
+		if !strings.Contains(ws, want) {
+			t.Errorf("workspace level lacks %q", want)
+		}
+	}
+	if strings.Contains(ws, "--bind=enter:") || strings.Contains(ws, ": view") {
+		t.Error("the workspace level has no menu, so enter is fzf's and the header names no view")
+	}
+	if s := strings.Join(Args(cases[10].o), "\n"); !strings.Contains(s, "--expect=ctrl-o,ctrl-t,ctrl-y,alt-o,alt-y,ctrl-l,ctrl-h\n") {
+		t.Error("ctrl-l and ctrl-h are --expect keys with the modal layer off too")
+	}
+	fs := strings.Join(Args(cases[5].o), "\n")
 	if strings.Contains(fs, "--height") {
 		t.Error("HOP_FZF_HEIGHT set but empty is fullscreen, so no --height")
 	}
-	if WithShell("/a/it's/hop") != `'/a/it'\''s/hop' __sh` {
-		t.Error("a quote in the binary path must survive --with-shell")
+	for _, c := range []struct {
+		self   string
+		quotes bool
+		want   string
+	}{
+		{"/usr/local/bin/hop", false, "/usr/local/bin/hop __sh"},
+		{"/home/a.b/go/bin/hop", true, "/home/a.b/go/bin/hop __sh"},
+		{"/a/it's/hop", true, `'/a/it'\''s/hop' __sh`},
+		{"/opt/hop dir/bin/hop", true, `'/opt/hop dir/bin/hop' __sh`},
+		{"/opt/hop dir/bin/hop", false, "hop __sh"},
+	} {
+		if got := WithShell(c.self, c.quotes); got != c.want {
+			t.Errorf("WithShell(%q, %v) = %q, want %q", c.self, c.quotes, got, c.want)
+		}
 	}
 }
 
 func TestLegend(t *testing.T) {
 	for _, c := range []struct {
-		mode                 string
-		folder, reload, menu bool
-		want                 string
+		mode           string
+		folder, reload bool
+		want           string
 	}{
-		{"cd", false, false, false, "enter cd · ^O file · ^T folder\n^Y copy · M-y copy file · M-o edit\nM-B github · M-p preview"},
-		{"cd+open", false, true, true, "enter cd+open · M-enter cd\n^O file · ^T folder · ^Y copy\nM-y copy file · M-o edit\nM-B github · M-p preview\nM-a all kinds · M-k kind menu"},
-		{"reveal", true, false, false, "enter open · M-enter cd\n^O file · ^T folder · ^Y copy\nM-y copy file · M-o edit\nM-B github · M-p preview"},
+		{"cd", false, false, "enter cd · ^O file · ^T folder\n^Y copy · M-y copy file · M-o edit\nM-B github · M-p preview"},
+		{"cd", false, true, "enter cd · ^O file · ^T folder\n^Y copy · M-y copy file · M-o edit\nM-B github · M-a all · M-p preview"},
+		{"cd+open", false, true, "enter cd+open · M-enter cd\n^O file · ^T folder · ^Y copy\nM-y copy file · M-o edit\nM-B github · M-a all · M-p preview"},
+		{"reveal", true, false, "enter open · M-enter cd\n^O file · ^T folder · ^Y copy\nM-y copy file · M-o edit\nM-B github · M-p preview"},
 	} {
-		if got := Legend(c.mode, c.folder, c.reload, c.menu); got != c.want {
+		if got := Legend(c.mode, c.folder, c.reload); got != c.want {
 			t.Errorf("Legend(%s): %q", c.mode, got)
+		}
+		for _, l := range strings.Split(Legend(c.mode, c.folder, c.reload), "\n") {
+			if n := len([]rune(l)); n > 35 {
+				t.Errorf("legend line %q is %d columns, over 35", l, n)
+			}
 		}
 	}
 }
@@ -191,26 +272,8 @@ func TestShim(t *testing.T) {
 	}
 }
 
-func TestKey(t *testing.T) {
-	s := &Session{Kinds: []string{"tg", "mod"}, All: []string{"tg", "mod", "helm"}}
-	t.Setenv("FZF_PROMPT", Prompt)
-	if Key(s, "enter", "/r/a") != "accept" || Key(s, "esc", "") != "abort" || Key(s, "alt-enter", "") != "print(alt-enter)+accept" {
-		t.Error("on the target list, enter accepts, esc aborts and alt-enter cds")
-	}
-	t.Setenv("FZF_PROMPT", MenuPrompt)
-	if got := Key(s, "enter", "helm"); got != "clear-query+reload(hop __rows helm)+change-prompt("+Prompt+")+transform-header(hop __header)+first" {
-		t.Errorf("menu enter: %q", got)
-	}
-	if got := Key(s, "esc", ""); !strings.HasPrefix(got, "clear-query+reload(hop __rows tg mod)+") {
-		t.Errorf("menu esc restores the opening kinds: %q", got)
-	}
-	if Key(s, "enter", "nope") != "ignore" || Key(s, "alt-enter", "") != "ignore" || Key(s, "bogus", "") != "ignore" {
-		t.Error("an unknown kind, alt-enter in the menu and an unknown key are ignored")
-	}
-}
-
 func TestSession(t *testing.T) {
-	s := &Session{Root: "/r)x", Under: "/r)x/a", Kinds: []string{"tg"}, All: []string{"tg", "mod"}, Header: "note\nlegend"}
+	s := &Session{Root: "/r)x", Under: "/r)x/a", Kinds: []string{"tg"}, All: []string{"tg", "mod"}, Keys: keymap.Map{Enter: "open", Menu: true, Cols: 99}}
 	dir, p, err := s.Write()
 	if err != nil {
 		t.Fatal(err)
@@ -221,8 +284,28 @@ func TestSession(t *testing.T) {
 	}
 	t.Setenv("HOP_SESSION", p)
 	got, err := Load()
-	if err != nil || got.Root != s.Root || got.Under != s.Under || got.Header != s.Header || len(got.All) != 2 {
+	if err != nil || got.Root != s.Root || got.Under != s.Under || got.Keys != s.Keys || len(got.All) != 2 {
 		t.Errorf("round trip: %+v %v", got, err)
+	}
+	if got.Current()[0] != "tg" {
+		t.Error("with no view switched, the current view is the opening kinds")
+	}
+	got.View = []string{"mod"}
+	if err := got.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := Load(); again.Current()[0] != "mod" || again.Root != s.Root {
+		t.Errorf("a saved view survives the next callback's load: %+v", again)
+	}
+	stale := filepath.Join(filepath.Dir(dir), "hop-pick-stale")
+	os.Mkdir(stale, 0o700)
+	old := time.Now().Add(-25 * time.Hour)
+	os.Chtimes(stale, old, old)
+	fresh, _, _ := s.Write()
+	defer os.RemoveAll(fresh)
+	if _, err := os.Stat(stale); err == nil {
+		os.RemoveAll(stale)
+		t.Error("a day-old picker directory, as SIGKILL leaves, is reaped by the next picker")
 	}
 	t.Setenv("HOP_SESSION", "")
 	if _, err := Load(); err == nil {
@@ -268,5 +351,16 @@ func TestPreview(t *testing.T) {
 	}
 	if got := pv("", ""); !strings.Contains(got, "nothing to preview") {
 		t.Errorf("no arguments: %q", got)
+	}
+}
+
+func TestFeatures(t *testing.T) {
+	for v, want := range map[string][2]bool{
+		"": {false, false}, "0.60.3": {false, false}, "0.66.9": {false, false}, "0.67.0": {true, false},
+		"0.70.0": {true, false}, "0.71.0": {true, true}, "0.73.1": {true, true}, "1.0": {true, true},
+	} {
+		if f, q := Features(v); f != want[0] || q != want[1] {
+			t.Errorf("Features(%q) = %v %v, want %v", v, f, q, want)
+		}
 	}
 }

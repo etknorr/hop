@@ -18,10 +18,10 @@ send "echo half-typed"
 expect -timeout 1 timeout {}
 send "\007"
 expect {
-	"hop ▸" { pass "opens-picker" }
+	"NORMAL" { pass "opens-picker" }
 	timeout { fail "opens-picker" }
 }
-send "gamma"
+send "/gamma"
 expect -timeout 2 timeout {}
 send "\r"
 expect {

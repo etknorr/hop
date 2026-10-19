@@ -46,17 +46,19 @@ func TestRealRepoPicker(t *testing.T) {
 	}
 	settle := func(tm *ptytest.Term) { tm.WaitFor(`\d+/\d+`, 3*time.Second); time.Sleep(400 * time.Millisecond) }
 	for _, s := range []step{
-		{"", nil, nil, []string{"eks staging", "\r"}, ""},
+		{"", nil, nil, []string{"/eks staging", "\r"}, ""},
 		{"", []string{"eks", "staging"}, nil, []string{"\r"}, ""},
 		{"", []string{"-p", "vpc", "prod"}, nil, []string{"\x1b[B", "\r"}, ""},
 		{"", []string{"thanos"}, nil, []string{"\x19"}, ""},
-		{"", nil, nil, []string{"\x1bk", "rules", "\r", "heatmaps prime", "\r"}, ""},
-		{"", nil, nil, []string{"\x1ba", "playbook", "\r"}, ""},
-		{"terraform/acct-security-tooling-prod", []string{"-c"}, nil, []string{"vpc", "\r"}, ""},
+		{"", nil, nil, []string{":", "/rules", "\r", "/heatmaps prime", "\r"}, ""},
+		{"", nil, nil, []string{"\x1ba", "/playbook", "\r"}, ""},
+		{"terraform/acct-security-tooling-prod", []string{"-c"}, nil, []string{"/vpc", "\r"}, ""},
 		{"", []string{"--action=open", "eks", "staging"}, nil, []string{"\r"}, ""},
 		{"", []string{"-k", "file", "-p", "atlantis.yaml"}, nil, []string{"\x0f"}, ""},
 		{"", []string{"-p", "routemaster"}, []string{"VISUAL=" + filepath.Join(stub, "ed-stub")}, []string{"\x1bo"}, ""},
 		{"", []string{"-w"}, nil, []string{"\x1b"}, ""},
+		{"", nil, nil, []string{"h", "h", "\x1b"}, ""},
+		{"", []string{"-R"}, nil, []string{"/configuration", "\x1b", "l", "/vpc prod", "\r"}, ""},
 	} {
 		os.Remove(log)
 		cf := filepath.Join(tmp, "cmd")
@@ -71,7 +73,7 @@ func TestRealRepoPicker(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		drawn := term.WaitFor(`hop ▸`, 10*time.Second)
+		drawn := term.WaitFor(`NORMAL|SEARCH|hop ▸`, 10*time.Second)
 		first := time.Since(start)
 		for _, k := range s.keys {
 			if !drawn {
@@ -83,7 +85,7 @@ func TestRealRepoPicker(t *testing.T) {
 		rc := term.Wait(10 * time.Second)
 		cd, _ := os.ReadFile(cf)
 		got, _ := os.ReadFile(log)
-		keys := strings.NewReplacer("\r", "Enter", "\x1b[B", "Down ", "\x19", "ctrl-y", "\x1bk", "alt-k ", "\x1ba", "alt-a ", "\x0f", "ctrl-o", "\x1bo", "alt-o", "\x1b", "esc").Replace(strings.Join(s.keys, " "))
+		keys := strings.NewReplacer("\r", "Enter", "\x1b[B", "Down ", "\x19", "ctrl-y", "\x1ba", "alt-a ", "\x0f", "ctrl-o", "\x1bo", "alt-o", "\x1b", "esc").Replace(strings.Join(s.keys, " "))
 		out := strings.TrimSpace(strings.ReplaceAll(string(got), tmp, "$TMP"))
 		if len(cd) > 0 {
 			out = strings.TrimSpace("cd " + strings.TrimPrefix(string(cd), repo+"/") + "; " + out)

@@ -9,7 +9,7 @@ check() {
 	fi
 }
 cd "$R"; FZF_DEFAULT_OPTS='--bind=load:abort' hop -p alpha; rc=$?
-if [ "$rc" = 130 ] && [ "$PWD" = "$R" ]; then echo "PASS cancel-130"; else echo "FAIL cancel-130 rc=$rc PWD=$PWD"; fi
+if [ "$rc" = 0 ] && [ "$PWD" = "$R" ]; then echo "PASS cancel-0"; else echo "FAIL cancel-0 rc=$rc PWD=$PWD"; fi
 cd "$R"; FZF_DEFAULT_OPTS='--bind=load:accept' hop -p gamma; check picker-enter "$R/beta/gamma"
 cd "$R"; FZF_DEFAULT_OPTS='--bind=load:accept' hop -p with space; check picker-space "$R/with space"
 cd "$R"; FZF_DEFAULT_OPTS='--bind=load:accept' hop -p brack; check picker-bracket "$R/brack[1]"

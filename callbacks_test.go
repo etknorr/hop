@@ -95,29 +95,6 @@ func itoa(n int) string {
 	}
 }
 
-func TestKeyHeaderAndShim(t *testing.T) {
-	setup(t)
-	withSession(t, &pick.Session{Kinds: []string{"tg"}, All: []string{"tg", "helm"}, Header: "note\nlegend"})
-	if o, _, rc := runHop(t, "__header"); rc != 0 || o != "note\nlegend" {
-		t.Errorf("__header: %q", o)
-	}
-	t.Setenv("FZF_PROMPT", pick.MenuPrompt)
-	if o, _, _ := runHop(t, "__key", "enter", "helm"); !strings.Contains(o, "reload(hop __rows helm)") {
-		t.Errorf("__key enter in the menu: %q", o)
-	}
-	if o, _, rc := runHop(t, "__sh", `hop __key enter 'helm'`); rc != 0 || !strings.Contains(o, "reload(hop __rows helm)") {
-		t.Errorf("__sh dispatches hop callbacks in process: rc %d %q", rc, o)
-	}
-	t.Setenv("SHELL", "/bin/sh")
-	if _, _, rc := runHop(t, "__sh", "exit 5"); rc != 5 {
-		t.Errorf("__sh passes a foreign command's status through: rc %d", rc)
-	}
-	t.Setenv("HOP_SESSION", "")
-	if _, e, rc := runHop(t, "__key", "esc"); rc != 1 || !strings.Contains(e, "HOP_SESSION") {
-		t.Errorf("__key outside a picker: rc %d %q", rc, e)
-	}
-}
-
 func TestInitAndComplete(t *testing.T) {
 	setup(t)
 	if o, _, rc := runHop(t, "init", "bash", "--cmd", "j"); rc != 0 || !strings.Contains(o, "j() {") || !strings.Contains(o, "complete -F _j_complete j") {

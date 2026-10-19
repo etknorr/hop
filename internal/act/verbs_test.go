@@ -2,6 +2,8 @@ package act
 
 import (
 	"bytes"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,5 +169,147 @@ func TestKeys(t *testing.T) {
 	}
 	if rc := r.a.Dispatch("ctrl-q", r.unit, main, ""); rc != 1 || !strings.Contains(r.err.String(), "unhandled key: ctrl-q") {
 		t.Errorf("unknown key: rc %d", rc)
+	}
+}
+
+// TestCodeUsable is _hop_code_usable's cases: the launcher, a live IPC socket, SSH, and a Linux display or WSL.
+func TestCodeUsable(t *testing.T) {
+	r := newRig(t)
+	for _, k := range []string{"VSCODE_IPC_HOOK_CLI", "SSH_CONNECTION", "SSH_TTY", "DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME", "WSL_INTEROP", "HOP_CODE"} {
+		t.Setenv(k, "")
+	}
+	usable := func() (bool, string) { return CodeUsable() }
+	if ok, why := usable(); !ok {
+		t.Errorf("the stub on PATH is usable: %s", why)
+	}
+	t.Setenv("HOP_CODE", "nocode-here -x")
+	if ok, why := usable(); ok || why != "nocode-here is not installed, cannot open VS Code" {
+		t.Errorf("a launcher not installed is unusable with need's reason: %q", why)
+	}
+	t.Setenv("HOP_CODE", "/no/such/code")
+	if ok, why := usable(); ok || why != "/no/such/code does not exist, cannot open VS Code" {
+		t.Errorf("a launcher path that doesn't exist: %q", why)
+	}
+	t.Setenv("HOP_CODE", "")
+	sock := filepath.Join(t.TempDir(), "s")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", sock)
+	if ok, why := usable(); ok || why != "VSCODE_IPC_HOOK_CLI names no live VS Code socket: "+sock {
+		t.Errorf("a stale IPC hook is unusable: %q", why)
+	}
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skip("no unix sockets here:", err)
+	}
+	defer l.Close()
+	defer func(g string) { goos = g }(goos)
+	goos = "linux"
+	t.Setenv("SSH_CONNECTION", "1 2 3 4")
+	if ok, why := usable(); !ok {
+		t.Errorf("a live socket is usable even over SSH on Linux with no DISPLAY: %s", why)
+	}
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	if ok, why := usable(); ok || why != "this is an SSH session with no VS Code window attached" {
+		t.Errorf("SSH_CONNECTION with no hook: %q", why)
+	}
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("SSH_TTY", "/dev/ttys001")
+	if ok, _ := usable(); ok {
+		t.Error("SSH_TTY with no hook is unusable too")
+	}
+	t.Setenv("SSH_TTY", "")
+	if ok, why := usable(); ok || why != "there is no DISPLAY or WAYLAND_DISPLAY for VS Code to open on" {
+		t.Errorf("Linux with no display: %q", why)
+	}
+	for _, k := range []string{"DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME", "WSL_INTEROP"} {
+		t.Setenv(k, "x")
+		if ok, why := usable(); !ok {
+			t.Errorf("%s alone is enough: %s", k, why)
+		}
+		t.Setenv(k, "")
+	}
+	r.a.Mode = "open"
+	if rc := r.a.Dispatch("ctrl-o", r.unit, r.file, ""); rc != 0 || r.codeLog() != "" || strings.Join(r.execd, " ") != "vi -n "+r.file ||
+		!strings.Contains(r.err.String(), "hop: there is no DISPLAY or WAYLAND_DISPLAY for VS Code to open on; using the terminal editor instead") {
+		t.Errorf("ctrl-o with VS Code unreachable says why and falls back to the editor: rc %d exec %q %q", rc, r.execd, r.err)
+	}
+}
+
+func TestBrowseNamesTheDrill(t *testing.T) {
+	r := newRig(t)
+	os.WriteFile(filepath.Join(filepath.Dir(r.log), "bin", "gh"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	real, _ := filepath.EvalSymlinks(r.unit)
+	if rc := r.a.Dispatch("ctrl-g", r.unit, r.unit, ""); rc != 1 ||
+		!strings.Contains(r.err.String(), "hop: not in a git repository: "+real+"\nhop: to go INTO a repo from a workspace, press l (NORMAL) or ctrl-l (SEARCH)\n") {
+		t.Errorf("browse outside a repo names the drill key: rc %d %q", rc, r.err)
+	}
+}
+
+// TestClipboardProbe is suite_clipboard: the probe order, HOP_CLIPBOARD's word-split override, and the text on stdin, never argv.
+func TestClipboardProbe(t *testing.T) {
+	r := newRig(t)
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	t.Setenv("PATH", bin)
+	tools := []string{"pbcopy", "wl-copy", "xclip", "xsel", "clip.exe"}
+	want := []string{"pbcopy", "wl-copy", "xclip -selection clipboard", "xsel --clipboard --input", "clip.exe"}
+	for _, n := range tools {
+		os.WriteFile(filepath.Join(bin, n), []byte("#!/bin/sh\nprintf '%s %s|' \""+n+"\" \"$*\" >>\""+log+"\"\n/bin/cat >>\""+log+"\"\n"), 0o755)
+	}
+	text := "/a/b c/it's here.hcl"
+	for i := range tools {
+		os.Remove(log)
+		if rc := r.a.Dispatch("alt-y", r.unit, text, ""); rc != 0 {
+			t.Fatalf("copy with %s: rc %d %s", tools[i], rc, r.err)
+		}
+		b, _ := os.ReadFile(log)
+		args := strings.TrimPrefix(strings.TrimPrefix(want[i], tools[i]), " ")
+		if string(b) != tools[i]+" "+args+"|"+text {
+			t.Errorf("%s is chosen once the tools before it are gone, with the text on stdin: %q", want[i], b)
+		}
+		os.Remove(filepath.Join(bin, tools[i]))
+	}
+	os.Remove(log)
+	r.err.Reset()
+	if rc := r.a.Dispatch("ctrl-y", r.unit, text, ""); rc != 1 || r.err.String() != "hop: no clipboard tool found, install pbcopy, wl-copy, xclip, xsel, or clip.exe (WSL)\n" {
+		t.Errorf("no tool: one stderr line naming the install options: rc %d %q", rc, r.err)
+	}
+	os.WriteFile(filepath.Join(bin, "xclip"), []byte("#!/bin/sh\nprintf '%s|' \"$*\" >>\""+log+"\"\n/bin/cat >>\""+log+"\"\n"), 0o755)
+	r.a.Clipboard = "xclip -sel c"
+	if rc := r.a.Dispatch("ctrl-y", r.unit, text, ""); rc != 0 {
+		t.Fatalf("HOP_CLIPBOARD: rc %d", rc)
+	}
+	if b, _ := os.ReadFile(log); string(b) != "-sel c|"+r.unit {
+		t.Errorf("HOP_CLIPBOARD word-splits, so its arguments reach the tool: %q", b)
+	}
+}
+
+// TestNeed is suite_editor_path's _hop_need: a bare name on PATH, a path with a slash checked where it is, with hop's wording.
+func TestNeed(t *testing.T) {
+	d := t.TempDir()
+	exe, plain := filepath.Join(d, "ed"), filepath.Join(d, "plain")
+	os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(plain, []byte("x"), 0o644)
+	t.Setenv("PATH", d)
+	for _, c := range []struct{ cmd, want string }{
+		{"ed", ""},
+		{"nope", "nope is not installed, cannot edit a file"},
+		{exe, ""},
+		{filepath.Join(d, "missing"), filepath.Join(d, "missing") + " does not exist, cannot edit a file"},
+		{plain, plain + " is not executable, cannot edit a file"},
+		{d, d + " is not executable, cannot edit a file"},
+	} {
+		err := need(c.cmd, "edit a file")
+		if got := fmt.Sprint(err); (c.want == "" && err != nil) || (c.want != "" && got != c.want) {
+			t.Errorf("need(%s) = %v, want %q", c.cmd, err, c.want)
+		}
+	}
+	t.Chdir(d)
+	if err := need("./ed", "edit a file"); err != nil {
+		t.Errorf("a relative path with a slash is checked against the cwd: %v", err)
+	}
+	r := newRig(t)
+	t.Setenv("EDITOR", filepath.Join(d, "missing"))
+	if rc := r.a.Dispatch("alt-o", r.unit, r.file, ""); rc != 1 || r.execd != nil || !strings.Contains(r.err.String(), "does not exist, cannot edit a file") {
+		t.Errorf("an absolute $EDITOR that doesn't exist fails and is never run: rc %d %q", rc, r.err)
 	}
 }

@@ -279,3 +279,69 @@ func TestHeadlessRemembersAndPrints(t *testing.T) {
 		t.Errorf("an existing cmdfile is never overwritten: rc %d %q", rc, errs)
 	}
 }
+
+// TestHeadlessSettingsAgainstHop holds what workstream A added to hop()'s flow to zsh hop 0.3.1, byte for byte:
+// the T4 hint under HOP_VIM, --vim and --no-vim, the HOP_JUMP and HOP_ACTION warnings at hop()'s own points,
+// the unreadable-repos message, and the fzf floor with HOP_FZF_MIN.
+func TestHeadlessSettingsAgainstHop(t *testing.T) {
+	if !testfix.HaveZsh() {
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
+	}
+	e := newE2E(t)
+	real, _ := exec.LookPath("fzf")
+	old := filepath.Join(e.tmp, "oldfzf")
+	os.Mkdir(old, 0o755)
+	os.WriteFile(filepath.Join(old, "fzf"), []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then echo '0.44.1 (debian)'; exit 0; fi\nexec '"+real+"' \"$@\"\n"), 0o755)
+	oldPath := "PATH=" + old + ":" + os.Getenv("PATH")
+	ws := "HOP_WORKSPACES=" + e.ws
+	e.compare(t, []headlessCase{
+		{e.root, []string{"HOP_VIM=0"}, []string{"zzqx"}},
+		{e.root, []string{"HOP_VIM=1"}, []string{"zzqx"}},
+		{e.root, nil, []string{"--no-vim", "zzqx"}},
+		{e.root, []string{"HOP_VIM=0"}, []string{"--vim", "zzqx"}},
+		{e.root, nil, []string{"--no-vim", "--vim", "zzqx"}},
+		{e.root, []string{"HOP_JUMP=bogus"}, []string{"vpc"}},
+		{e.root, []string{"HOP_JUMP=bogus"}, []string{"-p", "vpc"}},
+		{e.root, []string{"HOP_JUMP=bogus"}, []string{"security-tooling-prod"}},
+		{e.root, []string{"HOP_ACTION=bogus"}, []string{"vpc"}},
+		{e.root, []string{"HOP_ACTION=bogus"}, []string{"--cd", "vpc"}},
+		{e.root, []string{"HOP_ACTION=bogus", "HOP_JUMP=bogus"}, []string{"zzqx"}},
+		{e.root, []string{"HOP_ACTION=bogus", "HOP_JUMP=bogus"}, []string{"/"}},
+		{e.home, []string{ws, "HOP_REPOS=" + e.tmp + "/no-such-repo"}, []string{"-R", "x"}},
+		{e.home, []string{ws, "HOP_REPOS=" + e.tmp + "/no-such-repo"}, []string{"-w"}},
+		{e.root, []string{oldPath}, []string{"vpc"}},
+		{e.root, []string{oldPath, "HOP_FZF_MIN=0.50"}, []string{"vpc"}},
+		{e.root, []string{oldPath, "HOP_FZF_MIN=0.44"}, []string{"vpc"}},
+		{e.root, []string{oldPath, "HOP_FZF_MIN=garbage"}, []string{"vpc"}},
+	})
+}
+
+// TestFlagsAgainstHop is suite_actions' flag cases against zsh hop 0.3.1: the exit-2 messages, which flag beats HOP_ACTION,
+// and / staying a plain cd whatever the mode.
+func TestFlagsAgainstHop(t *testing.T) {
+	if !testfix.HaveZsh() {
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
+	}
+	e := newE2E(t)
+	open := []string{"HOP_ACTION=open", "HOP_CODE=" + e.tmp + "/no-code"}
+	var cases []headlessCase
+	for _, args := range [][]string{
+		{"-o", "-e", "vpc"}, {"-e", "-o", "vpc"}, {"--action=cd", "-o", "vpc"}, {"--cd", "--action=open", "vpc"}, {"--action=bogus", "vpc"},
+		{"--action", "vpc"}, {"--action=", "vpc"}, {"-k"}, {"--bogus", "vpc"}, {"/", "x"}, {"-o", "/"}, {"-", "x"}, {"vpc", "/"},
+		{"--no-vim", "--bogus"}, {"--vim=1", "vpc"},
+	} {
+		cases = append(cases, headlessCase{e.root, nil, args})
+	}
+	for _, args := range [][]string{{"vpc"}, {"--cd", "eks", "security"}, {"/"}, {"-o", "/"}} {
+		cases = append(cases, headlessCase{e.root + "/terraform", open, args})
+	}
+	// -c compares the physical PWD with git's physical root, so a subtree entered through a symlink still narrows.
+	link := filepath.Join(e.tmp, "tf-link")
+	if err := os.Symlink(e.root+"/terraform", link); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"-c", "vpc"}, {"-c", "zzqx"}, {"-c"}} {
+		cases = append(cases, headlessCase{link, nil, args}, headlessCase{link + "/acct-infrastructure", nil, args})
+	}
+	e.compare(t, cases)
+}

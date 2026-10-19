@@ -5,22 +5,35 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
+	"time"
+
+	"github.com/etknorr/hop/internal/keymap"
 )
 
 // Session is what every callback reads, written once per picker, so no bind string carries a root or a query.
 // - hop's reload strings embed the root, so a root holding `)` ended reload(...) early; here it never enters a bind.
+// - View is the kinds on screen after the menu switched them, which r and esc out of the menu reload; empty is Kinds.
 type Session struct {
-	Root   string   `json:"root"`
-	Under  string   `json:"under,omitempty"`
-	Kinds  []string `json:"kinds"`
-	All    []string `json:"all"`
-	Header string   `json:"header"`
+	Root  string     `json:"root"`
+	Under string     `json:"under,omitempty"`
+	Kinds []string   `json:"kinds"`
+	All   []string   `json:"all"`
+	View  []string   `json:"view,omitempty"`
+	Keys  keymap.Map `json:"keys"`
+}
+
+// Current is the view r reloads.
+func (s *Session) Current() []string {
+	if len(s.View) > 0 {
+		return s.View
+	}
+	return s.Kinds
 }
 
 // Write puts the session in a fresh private directory and returns its path; the caller removes the directory.
+// - SIGKILL leaves a directory behind, so ones a day old are reaped first; a day, because a picker can sit open over lunch.
 func (s *Session) Write() (dir, path string, err error) {
+	reap(os.TempDir(), 24*time.Hour)
 	dir, err = os.MkdirTemp("", "hop-pick-")
 	if err != nil {
 		return "", "", err
@@ -48,36 +61,25 @@ func Load() (*Session, error) {
 	return s, json.Unmarshal(b, s)
 }
 
-func inMenu() bool { return strings.HasPrefix(os.Getenv("FZF_PROMPT"), MenuPrompt) }
+// Path is the session file a callback reads; the guard's mark sits beside it, in the picker's private directory.
+func Path() string { return os.Getenv("HOP_SESSION") }
 
-// back leaves the menu for these kinds' rows, under the picker's own prompt and header; the query filtered kinds, so it goes.
-func back(kinds []string) string {
-	return "clear-query+reload(hop __rows " + strings.Join(kinds, " ") + ")+change-prompt(" + Prompt + ")+transform-header(hop __header)+first"
+// Save rewrites the session for the callbacks after this one, by rename so a reader never sees half a file.
+func (s *Session) Save() error {
+	p := Path()
+	b, _ := json.Marshal(s)
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
 }
 
-// Key is `hop __key`, the one decision fzf can't make: whether the list on screen holds kinds or targets.
-// - It replaces hop's POSIX `case "$FZF_PROMPT"` transform bodies, which break under fish and pwsh.
-// - FZF_PROMPT is the state, as in hop, since fzf exports it to every callback.
-func Key(s *Session, key, arg string) string {
-	switch key {
-	case "enter":
-		if !inMenu() {
-			return "accept"
+func reap(root string, age time.Duration) {
+	old, _ := filepath.Glob(filepath.Join(root, "hop-pick-*"))
+	for _, d := range old {
+		if st, err := os.Lstat(d); err == nil && st.IsDir() && time.Since(st.ModTime()) > age {
+			os.RemoveAll(d)
 		}
-		if !slices.Contains(s.All, arg) {
-			return "ignore"
-		}
-		return back([]string{arg})
-	case "esc":
-		if inMenu() {
-			return back(s.Kinds)
-		}
-		return "abort"
-	case "alt-enter":
-		if inMenu() {
-			return "ignore"
-		}
-		return "print(alt-enter)+accept"
 	}
-	return "ignore"
 }
