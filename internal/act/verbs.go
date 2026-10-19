@@ -118,13 +118,9 @@ func (a *Actor) codeArgv() []string {
 
 func (a *Actor) codeUsable() error { return codeUsable(a.codeArgv()[0]) }
 
-// CodeUsable is the check every code verb runs, for --doctor: HOP_CODE's launcher, else code.
-func CodeUsable() (bool, string) {
-	argv := strings.Fields(os.Getenv("HOP_CODE"))
-	if len(argv) == 0 {
-		argv = []string{"code"}
-	}
-	if err := codeUsable(argv[0]); err != nil {
+// CodeUsable is the check every code verb runs, for --doctor: code is the HOP_CODE setting, "" meaning code.
+func CodeUsable(code string) (bool, string) {
+	if err := codeUsable((&Actor{Code: code}).codeArgv()[0]); err != nil {
 		return false, err.Error()
 	}
 	return true, ""

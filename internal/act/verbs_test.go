@@ -178,7 +178,7 @@ func TestCodeUsable(t *testing.T) {
 	for _, k := range []string{"VSCODE_IPC_HOOK_CLI", "SSH_CONNECTION", "SSH_TTY", "DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME", "WSL_INTEROP", "HOP_CODE"} {
 		t.Setenv(k, "")
 	}
-	usable := func() (bool, string) { return CodeUsable() }
+	usable := func() (bool, string) { return CodeUsable(os.Getenv("HOP_CODE")) }
 	if ok, why := usable(); !ok {
 		t.Errorf("the stub on PATH is usable: %s", why)
 	}

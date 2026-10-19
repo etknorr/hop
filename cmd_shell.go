@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/etknorr/hop/internal/act"
 	"github.com/etknorr/hop/internal/config"
 	doc "github.com/etknorr/hop/internal/doctor"
 	"github.com/etknorr/hop/internal/shell"
@@ -118,11 +119,12 @@ func install() upgrade.Install { return upgrade.Detect(self(), version.Read()) }
 // doctor is --doctor; mode is "" or "short", which parseHop has already checked.
 func doctor(mode string, stdout io.Writer) int {
 	return doc.Run(stdout, doc.Options{
-		Short:    mode == "short",
-		Install:  install(),
-		Version:  strings.TrimPrefix(version.Line(), "hop "),
-		InitHash: version.InitHash(),
-		Recipes:  config.Recipes(),
+		Short:      mode == "short",
+		Install:    install(),
+		Version:    strings.TrimPrefix(version.Line(), "hop "),
+		InitHash:   version.InitHash(),
+		Recipes:    config.Recipes(),
+		CodeUsable: act.CodeUsable,
 	})
 }
 
