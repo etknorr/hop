@@ -32,6 +32,15 @@ set left (count $TMPDIR/hop.*)
 if test $left = 0; echo "PASS no-cmdfile-left"; else; echo "FAIL no-cmdfile-left $left"; end
 if head -1 $HOP_HISTFILE | grep -q '/beta/gamma$'; and grep -q '/alpha$' $HOP_HISTFILE; echo "PASS mru"; else; echo "FAIL mru"; end
 if set -q HOP_CMDFILE; echo "FAIL env-clean HOP_CMDFILE leaked"; else; echo "PASS env-clean"; end
+cd $R/beta/gamma; hopr; check hopr "$R"
+cd $R/beta
+begin
+	set -lx HOP_WORKSPACES $HOP_T
+	hopw 2>/dev/null
+end
+if test "$PWD" = "$HOP_T"; echo "PASS hopw"; else; echo "XFAIL hopw: needs hop __hopw, workstream A's; PWD=$PWD"; end
+cd $R; set v (hop -V)
+if string match -q 'hop *' -- "$v"; and not string match -q '*predates*' -- "$v"; echo "PASS version-current"; else; echo "FAIL version-current: $v"; end
 # cd - only works through fish's cd function, which is why the init never uses builtin cd.
 cd $R; builtin cd $R/alpha; cd - 2>/dev/null
 if test "$PWD" = "$R"; echo "INFO builtin cd keeps cd -: yes"; else; echo "INFO builtin cd keeps cd -: no"; end
