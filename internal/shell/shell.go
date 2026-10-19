@@ -2,8 +2,11 @@
 package shell
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,17 +15,31 @@ import (
 //go:embed init/*
 var scripts embed.FS
 
-// Shells maps each `hop init` name to its script.
-var Shells = map[string]string{"zsh": "hop.zsh", "bash": "hop.bash", "fish": "hop.fish", "pwsh": "hop.ps1", "powershell": "hop.ps1"}
+// Names is every shell `hop init` takes, in the order help and completion list them.
+var Names = []string{"zsh", "bash", "fish"}
 
 var cmdName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
 
-// Init is `hop init <shell> [--cmd NAME]`: the script with its function named, and pwsh's binary path baked in.
+// Hash is the first 12 hex digits of sha256 over every template, which each script exports as HOP_INIT_HASH.
+// - One hash for all shells: a template change asks every shell to reload, which costs one `exec` and never misses one.
+func Hash() string {
+	h := sha256.New()
+	names, _ := fs.Glob(scripts, "init/*")
+	slices.Sort(names)
+	for _, n := range names {
+		b, _ := scripts.ReadFile(n)
+		fmt.Fprintf(h, "%s\x00%d\x00", n, len(b))
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}
+
+// Init is `hop init <shell> [--cmd NAME]`: the script with its function named.
 // - The function is hop unless --cmd renames it, zoxide-style.
-func Init(sh, cmd, bin string) (string, error) {
-	name, ok := Shells[sh]
-	if !ok {
-		return "", fmt.Errorf("unsupported shell %q: one of zsh, bash, fish, pwsh", sh)
+// - hopr and hopw come only with the plain name, so a try-out `--cmd hop1` leaves an installed hop's alone.
+func Init(sh, cmd string) (string, error) {
+	if !slices.Contains(Names, sh) {
+		return "", fmt.Errorf("unsupported shell %q: one of %s", sh, strings.Join(Names, ", "))
 	}
 	if cmd == "" {
 		cmd = "hop"
@@ -30,12 +47,20 @@ func Init(sh, cmd, bin string) (string, error) {
 	if !cmdName.MatchString(cmd) {
 		return "", fmt.Errorf("--cmd %q is not a plain function name", cmd)
 	}
-	b, err := scripts.ReadFile("init/" + name)
+	b, err := scripts.ReadFile("init/hop." + sh)
 	if err != nil {
 		return "", err
 	}
-	s := strings.ReplaceAll(string(b), "@CMD@", cmd)
-	return strings.ReplaceAll(s, "@BIN@", strings.ReplaceAll(bin, "'", "''")), nil
+	s := string(b)
+	if cmd == "hop" {
+		x, err := scripts.ReadFile("init/hopr." + sh)
+		if err != nil {
+			return "", err
+		}
+		s += "\n" + string(x)
+	}
+	s = strings.ReplaceAll(s, "@HASH@", Hash())
+	return strings.ReplaceAll(s, "@CMD@", cmd), nil
 }
 
 // Kind is a completion candidate for -k: a name and its description.
@@ -61,7 +86,7 @@ var firstWords = [][2]string{
 }
 
 // Complete is `hop __complete <words...>`: the words after the command name, the last one being the word under the cursor.
-// - Each candidate is `word<TAB>description`; zsh, fish and pwsh show the description, bash keeps the word.
+// - Each candidate is `word<TAB>description`; zsh and fish show the description, bash keeps the word.
 func Complete(words []string, kinds []Kind, actions []string) []string {
 	cur, prev := "", ""
 	if n := len(words); n > 0 {
@@ -89,7 +114,7 @@ func Complete(words []string, kinds []Kind, actions []string) []string {
 			}
 		}
 	case len(words) == 2 && words[0] == "init":
-		for _, s := range []string{"zsh", "bash", "fish", "pwsh"} {
+		for _, s := range Names {
 			add(s, "")
 		}
 	case strings.HasPrefix(cur, "--action="):

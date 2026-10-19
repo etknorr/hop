@@ -15,7 +15,7 @@ import (
 	"github.com/etknorr/hop/internal/shell"
 )
 
-// self is the binary's absolute path, which --with-shell and the pwsh script bake in.
+// self is the binary's absolute path, which --with-shell bakes in.
 func self() string {
 	p, err := os.Executable()
 	if err != nil {
@@ -42,7 +42,7 @@ func cmdInit(args []string, stdout io.Writer) error {
 	if sh == "" {
 		return errUsage
 	}
-	s, err := shell.Init(sh, cmd, self())
+	s, err := shell.Init(sh, cmd)
 	if err != nil {
 		return err
 	}

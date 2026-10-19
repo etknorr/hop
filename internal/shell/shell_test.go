@@ -4,11 +4,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
 
-// TestInitParses checks every script with each host shell's own parser; fish and pwsh are checked in docker by test/shell/run-all.sh.
+// TestInitParses checks every script with each host shell's own parser; CI and test/shell/run-all.sh cover fish where the host lacks it.
 func TestInitParses(t *testing.T) {
 	for _, c := range []struct {
 		shell string
@@ -24,7 +25,7 @@ func TestInitParses(t *testing.T) {
 			continue
 		}
 		for _, cmd := range []string{"", "j"} {
-			s, err := Init(c.shell, cmd, "/opt/it's/hop")
+			s, err := Init(c.shell, cmd)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -38,16 +39,26 @@ func TestInitParses(t *testing.T) {
 }
 
 func TestInitText(t *testing.T) {
-	for sh := range Shells {
-		s, err := Init(sh, "jump", "/opt/it's/hop")
+	hash := Hash()
+	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(hash) {
+		t.Fatalf("Hash() = %q", hash)
+	}
+	for _, sh := range Names {
+		s, err := Init(sh, "jump")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(s, "@CMD@") || strings.Contains(s, "@BIN@") {
+		if regexp.MustCompile(`@[A-Z]+@`).MatchString(s) {
 			t.Errorf("%s: a placeholder survived", sh)
 		}
 		if !strings.Contains(s, "jump") {
 			t.Errorf("%s: --cmd did not rename the function", sh)
+		}
+		if strings.Contains(s, "hopr") || strings.Contains(s, "hopw") {
+			t.Errorf("%s: hopr and hopw come only with the plain name", sh)
+		}
+		if !strings.Contains(s, "HOP_SHELL="+sh+" HOP_INIT_HASH="+hash+" command hop") {
+			t.Errorf("%s: the call must export HOP_SHELL and HOP_INIT_HASH", sh)
 		}
 		var code []string
 		for _, l := range strings.Split(s, "\n") {
@@ -58,25 +69,26 @@ func TestInitText(t *testing.T) {
 		if body := strings.Join(code, "\n"); strings.Contains(body, "builtin cd") || strings.Contains(body, "eval") {
 			t.Errorf("%s: never builtin cd and never eval", sh)
 		}
+		plain, _ := Init(sh, "")
+		for _, f := range []string{"hopr", "hopw", "hop __hopw", "hop /"} {
+			if !strings.Contains(plain, f) {
+				t.Errorf("%s: plain init lacks %q", sh, f)
+			}
+		}
 	}
-	ps, _ := Init("pwsh", "", "/opt/it's/hop")
-	if !strings.Contains(ps, "$global:__HopBin = '/opt/it''s/hop'") {
-		t.Error("pwsh bakes in the binary path, single quotes doubled")
-	}
-	zs, _ := Init("zsh", "", "/x")
+	zs, _ := Init("zsh", "")
 	if !strings.Contains(zs, "command hop") || !strings.Contains(zs, "hop() {") {
 		t.Error("zsh defines hop and reaches the binary with command")
 	}
-	for _, bad := range []string{"hop x", "a;b", "", "-x"} {
-		if bad == "" {
-			continue
-		}
-		if _, err := Init("zsh", bad, "/x"); err == nil {
+	for _, bad := range []string{"hop x", "a;b", "-x"} {
+		if _, err := Init("zsh", bad); err == nil {
 			t.Errorf("--cmd %q must be refused", bad)
 		}
 	}
-	if _, err := Init("tcsh", "", "/x"); err == nil {
-		t.Error("tcsh is not supported")
+	for _, sh := range []string{"tcsh", "pwsh", "powershell"} {
+		if _, err := Init(sh, ""); err == nil {
+			t.Errorf("%s is not a 1.0 shell", sh)
+		}
 	}
 }
 
