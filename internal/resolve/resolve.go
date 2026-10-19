@@ -735,7 +735,7 @@ func (s *state) allButOne(eqs []string) bool {
 			pairs = append(pairs, eqs[i]+" | "+eqs[j])
 		}
 	}
-	// No ancestor is injected: one that holds a single word, as every acct-*-prod/ does for prod, would bury the order.
+	// No ancestor is injected: one that holds a single word, as every team-*-prod/ does for prod, would bury the order.
 	s.decide("relaxed", strings.Join(pairs, " "), true, true, out)
 	return true
 }
