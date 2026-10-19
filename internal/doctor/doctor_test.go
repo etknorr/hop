@@ -11,7 +11,6 @@ import (
 
 	"github.com/etknorr/hop/internal/testfix"
 	"github.com/etknorr/hop/internal/upgrade"
-	"github.com/etknorr/hop/internal/workspace"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/golden/ops/doctor*.golden")
@@ -228,14 +227,5 @@ func TestDoctorSourcesAndModes(t *testing.T) {
 	}
 	if short := run(opts(true)); !strings.Contains(short, "HOP_JUMP               (not a mode, withheld) (env), so hop uses auto") {
 		t.Errorf("short withholds the bad mode:\n%s", short)
-	}
-}
-
-func TestWsFor(t *testing.T) {
-	wss := []workspace.Workspace{{Name: "w", Path: "/w"}, {Name: "code", Path: "/w/code"}, {Name: "x", Path: "/x/"}}
-	for dir, want := range map[string]string{"/w/code/repo": "/w/code", "/w/codex": "/w", "/w": "/w", "/x/y": "/x", "/y": ""} {
-		if got, ok := wsFor(dir, wss); got != want || ok != (want != "") {
-			t.Errorf("wsFor(%s) = %q %v, want %q", dir, got, ok, want)
-		}
 	}
 }

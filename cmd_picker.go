@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/etknorr/hop/internal/act"
 	"github.com/etknorr/hop/internal/guard"
@@ -113,21 +112,10 @@ func cmdHopw(args []string, stdout, stderr io.Writer) int {
 	}
 	set := cfg.Settings
 	pwd := logicalPWD()
-	ws, ok := wsFor(realpath(pwd), workspace.Parse(set.Workspaces, set.WorkspacesFile))
+	ws, ok := workspace.For(realpath(pwd), workspace.Parse(set.Workspaces, set.WorkspacesFile))
 	if !ok {
 		fmt.Fprintf(stderr, "hop: %s is not inside any configured workspace\n", pwd)
 		return 1
 	}
 	return act.CD(ws, stdout, stderr, set.HistFile, set.HistMax)
-}
-
-// wsFor is _hop_ws_for: the longest workspace path that is dir or one of its parents.
-func wsFor(dir string, wss []workspace.Workspace) (string, bool) {
-	best := ""
-	for _, w := range wss {
-		if (dir == w.Path || strings.HasPrefix(dir, w.Path+"/")) && len(w.Path) > len(best) {
-			best = w.Path
-		}
-	}
-	return best, best != ""
 }

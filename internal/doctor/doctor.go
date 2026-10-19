@@ -394,18 +394,6 @@ func pwd() string {
 	return wd
 }
 
-// wsFor is _hop_ws_for: the workspace holding dir, the longest path winning when two nest.
-func wsFor(dir string, wss []workspace.Workspace) (string, bool) {
-	best := ""
-	for _, w := range wss {
-		p := strings.TrimRight(w.Path, "/")
-		if (dir == p || strings.HasPrefix(dir, p+"/")) && len(p) > len(best) {
-			best = p
-		}
-	}
-	return best, best != ""
-}
-
 func (r *report) wss() []workspace.Workspace {
 	if r.cfg == nil {
 		return nil
@@ -422,7 +410,7 @@ func (r *report) where() {
 		top = "NONE, so hop opens the workspace or repo picker"
 	}
 	r.kv("git toplevel", top)
-	if w, ok := wsFor(wd, r.wss()); ok {
+	if w, ok := workspace.For(wd, r.wss()); ok {
 		r.kv("workspace for PWD", w)
 	} else {
 		r.kv("workspace for PWD", "none")
