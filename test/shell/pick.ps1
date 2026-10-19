@@ -4,7 +4,7 @@ $R = "$env:HOP_T/repo"
 function check($n, $want) { if ($PWD.ProviderPath -eq $want) { "PASS $n" } else { "FAIL ${n}: PWD=$($PWD.ProviderPath) want=$want" } }
 function withopts($o, [scriptblock]$b) { $env:FZF_DEFAULT_OPTS = $o; try { & $b } finally { Remove-Item Env:FZF_DEFAULT_OPTS } }
 Set-Location -LiteralPath $R; withopts '--bind=load:abort' { hop -p alpha }
-if ($LASTEXITCODE -eq 130 -and $PWD.ProviderPath -eq $R) { 'PASS cancel-130' } else { "FAIL cancel-130 rc=$LASTEXITCODE" }
+if ($LASTEXITCODE -eq 0 -and $PWD.ProviderPath -eq $R) { 'PASS cancel-0' } else { "FAIL cancel-0 rc=$LASTEXITCODE" }
 Set-Location -LiteralPath $R; withopts '--bind=load:accept' { hop -p gamma }; check picker-enter "$R/beta/gamma"
 Set-Location -LiteralPath $R; withopts '--bind=load:accept' { hop -p with space }; check picker-space "$R/with space"
 Set-Location -LiteralPath $R; withopts '--bind=load:accept' { hop -p brack }; check picker-bracket "$R/brack[1]"

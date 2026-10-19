@@ -48,7 +48,7 @@ box() {
 	docker run --rm -v "$REPO:/hop:ro" -v "$B/linux:/hopbin:ro" "hop-test-$image" sh -c '
 		sh /hop/test/shell/fixture.sh /fx >/dev/null || exit 1
 		for c; do
-			env -i HOME=/fx/home PATH=/hopbin:/fx/stub:/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 TERM=xterm-256color \
+			env -i HOME=/fx/home PATH=/hopbin:/fx/stub:/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 TERM=xterm-256color DISPLAY=:0 \
 				TMPDIR=/fx/tmp/ HOP_T=/fx HOP_CONFIG=/fx/config.toml HOP_HISTFILE=/fx/tmp/hist HOP_FZF_HEIGHT= sh -c "$c" </dev/null
 		done' box "$@" 2>&1 | tr -d '\r'
 }
@@ -97,8 +97,8 @@ g6() {
 	local image=$1 shells=$2 out
 	out=$(docker run --rm -v "$REPO:$REPO:ro" -v "$B/linux:/hopbin:ro" -w "$REPO" \
 		-e HOP_TEST_BIN=/hopbin/hop -e HOP_TEST_SHELLS="$shells" "hop-test-$image" \
-		/hopbin/hop.test -test.run 'TestPicker$' -test.v 2>&1)
-	print -r -- "$out" | grep -E '^ +--- (PASS|FAIL)' | sed -E 's/^ +--- (PASS|FAIL): TestPicker\/([^ ]+).*/\1 g6-picker-callbacks SHELL=\2/'
+		/hopbin/hop.test -test.run 'TestPickerModal$' -test.v 2>&1)
+	print -r -- "$out" | grep -E '^ +--- (PASS|FAIL)' | sed -E 's/^ +--- (PASS|FAIL): TestPickerModal\/([^ ]+).*/\1 g6-picker-callbacks SHELL=\2/'
 	print -r -- "$out" | grep -E '^ +pty_test' | sed 's/^ */FAIL detail: /'
 }
 for s in $docker_shells; do

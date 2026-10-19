@@ -61,7 +61,7 @@ func cmdRowsSession(names []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if len(names) == 0 {
-		names = s.Kinds
+		names = s.Current()
 	}
 	gen := kinds.Generate(cfg, s.Root, uniqStrings(names), stderr)
 	if s.Under != "" {

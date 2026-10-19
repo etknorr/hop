@@ -22,6 +22,7 @@ import (
 	"github.com/etknorr/hop/internal/rows"
 	"github.com/etknorr/hop/internal/tty"
 	"github.com/etknorr/hop/internal/workspace"
+	"golang.org/x/term"
 )
 
 // hopOpts is hop()'s parsed command line.
@@ -31,6 +32,7 @@ type hopOpts struct {
 	all, repos, wss, here, pick bool
 	actCD, actOpen, actReveal   bool
 	actFlag, mode               string
+	vim                         *bool
 }
 
 // parseHop is hop()'s option loop (hop.zsh:458), with its exit-2 rules.
@@ -56,6 +58,9 @@ func parseHop(args []string, stderr io.Writer) (*hopOpts, int) {
 			o.actOpen, opts = true, true
 		case a == "-e" || a == "--reveal":
 			o.actReveal, opts = true, true
+		case a == "--vim" || a == "--no-vim":
+			on := a == "--vim"
+			o.vim, opts = &on, true
 		case a == "--action" || a == "--action=":
 			fmt.Fprintln(stderr, "hop: --action needs a mode, as --action=MODE:", strings.Join(config.Actions, ", "))
 			return nil, 2
@@ -103,6 +108,41 @@ func parseHop(args []string, stderr io.Writer) (*hopOpts, int) {
 		}
 	}
 	return o, 0
+}
+
+func (o *hopOpts) decidesMode() bool { return o.actCD || o.actOpen || o.actReveal || o.actFlag != "" }
+
+// loadHop is load for hop() itself, minus the warnings about an environment value hop() words at its own point.
+func loadHop(stderr io.Writer) (*config.Config, error) {
+	cfg, err := config.Load(config.Path())
+	if err != nil {
+		return nil, err
+	}
+	bad := func(env string, valid []string) bool {
+		v := os.Getenv(env)
+		return v != "" && !slices.Contains(valid, v)
+	}
+	for _, w := range cfg.Warnings {
+		if strings.HasPrefix(w, "action ") && bad("HOP_ACTION", config.Actions) || strings.HasPrefix(w, "jump ") && bad("HOP_JUMP", config.Jumps) {
+			continue
+		}
+		fmt.Fprintln(stderr, "hop: warning:", w)
+	}
+	return cfg, nil
+}
+
+// termCols is zsh's $COLUMNS for the mode headers: the terminal's width, else COLUMNS, else 80.
+func termCols() int {
+	if t := tty.Open(); t != nil {
+		defer t.Close()
+		if w, _, err := term.GetSize(int(t.Fd())); err == nil && w > 0 {
+			return w
+		}
+	}
+	if n, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && n > 0 {
+		return n
+	}
+	return 80
 }
 
 // enterMode is hop()'s _hop_mode: the flags replace HOP_ACTION for this call.
@@ -196,19 +236,26 @@ type session struct {
 	mode, jump     string
 	// kword is the kind the first word was read as, hop 0.3.0's `hop file x` for `hop -k file x`.
 	kword string
+	vim   bool
+	cols  int
 }
 
 // level is one picker's targets and what its keys can reach: _hop_run's and _hop_res_pick's arguments.
-// - root is set only on the kinds level, which is what enables the alt-k menu; folder marks workspace and repo rows.
+// - root is set only on a targets level, which is what enables the `:` menu and r; folder marks workspace and repo rows.
+// - drill and up are the level moves l/ctrl-l and h/ctrl-h make, nil where there is nothing to move to.
+// - upFrom finds up only once a picker opens, so a jump never pays for listing every workspace's repos.
 type level struct {
 	label, root, under string
 	targets            []string
 	kinds, reload      []string
 	folder             bool
+	drill              func(dir string) int
+	up                 func() int
+	upFrom             func() func() int
 }
 
 func (s *session) resolver(root, under string) *resolve.Resolver {
-	return &resolve.Resolver{Match: s.fzf, Root: root, Action: s.mode, Jump: s.jump, Under: under, Kinds: s.cfg.AllKinds()}
+	return &resolve.Resolver{Match: s.fzf, Root: root, Action: s.mode, Jump: s.jump, Under: under, Kinds: s.cfg.AllKinds(), Vim: s.vim}
 }
 
 func (s *session) actor(folder bool) *act.Actor {
@@ -221,7 +268,8 @@ func (s *session) actor(folder bool) *act.Actor {
 
 // pick is _hop_res_pick then _hop_dispatch: a jump jumps, no terminal reports, and anything else opens fzf.
 // - A resolver pick opens ordered, best rows first, and never with --select-1, so one approximate candidate can't accept itself.
-// - 130 is a cancel and stays silent; hop returns 0 there, the spec's cd protocol says 130.
+// - 130 is esc or ctrl-c, a cancel, which is silent and succeeds, as in hop.
+// - ctrl-l and ctrl-h move a level; the levels run in this process, each opening on an empty query.
 func (s *session) pick(res resolve.Result, query string, lv level) int {
 	a := s.actor(lv.folder)
 	if res.Verdict == "jump" {
@@ -239,12 +287,16 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 		}
 		return rc
 	}
+	if lv.upFrom != nil {
+		lv.up = lv.upFrom()
+	}
 	o := pick.Opts{
 		Self: self(), Label: lv.label, Note: res.Note, Query: res.Query, Height: *s.cfg.Settings.FzfHeight, Reload: lv.reload,
-		Legend: pick.Legend(s.mode, lv.folder, len(lv.reload) > 0, lv.root != ""), Menu: lv.root != "",
+		Legend: pick.Legend(s.mode, lv.folder, len(lv.reload) > 0), Menu: lv.root != "", Drill: lv.drill != nil, Up: lv.up != nil,
+		Vim: s.vim, Enter: pick.EnterName(s.mode, lv.folder), Cols: s.cols,
 	}
-	if v := s.fzf.Version(); v != "" && !match.Less(v, "0.67.0") {
-		o.FreezeLeft = true
+	if v := s.fzf.Version(); v != "" {
+		o.FreezeLeft, o.ShellQuotes = !match.Less(v, "0.67.0"), !match.Less(v, "0.71.0")
 	}
 	input := lv.targets
 	switch res.Verdict {
@@ -254,14 +306,14 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 	case "empty":
 		o.Select1 = s.jump != "never" && s.kword == ""
 	}
-	sess := &pick.Session{Root: lv.root, Under: lv.under, Kinds: lv.kinds, All: s.cfg.AllKinds(), Header: o.Header()}
+	sess := &pick.Session{Root: lv.root, Under: lv.under, Kinds: lv.kinds, All: s.cfg.AllKinds(), Keys: o.Keys()}
 	out, st, err := pick.Run(s.fzf.Bin, o, sess, input, s.stderr)
 	switch {
 	case err != nil:
 		fmt.Fprintln(s.stderr, "hop: fzf:", err)
 		return 2
 	case st == 130:
-		return 130
+		return 0
 	case st == 1:
 		if query != "" {
 			fmt.Fprintln(s.stderr, "hop: no match for:", query)
@@ -276,6 +328,12 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 	r, ok := pick.Parse(out)
 	if !ok {
 		return 0
+	}
+	switch {
+	case r.Key == "ctrl-l" && lv.drill != nil:
+		return lv.drill(r.Dir)
+	case r.Key == "ctrl-h" && lv.up != nil:
+		return lv.up()
 	}
 	return a.Dispatch(r.Key, r.Dir, r.Preview, r.Rel)
 }
@@ -301,42 +359,119 @@ func (s *session) elsewhere(query, root, pwd string) (rc int, done bool) {
 	return s.pick(a.Res, query, level{label: fmt.Sprintf("paths  %d found", len(a.Rows)), targets: a.Rows}), true
 }
 
-func (s *session) repoRows() []string {
+func (s *session) workspaces() []workspace.Workspace {
 	set := s.cfg.Settings
-	return renderAll(kinds.RepoRows(workspace.RepoList(set.Repos, workspace.Parse(set.Workspaces, set.WorkspacesFile))), "")
+	return workspace.Parse(set.Workspaces, set.WorkspacesFile)
+}
+
+// repoRows is _hop_repo_targets: rc 1 when no repo is configured or found, 2 when none of them is readable.
+func (s *session) repoRows(list []string) ([]string, int) {
+	if len(list) == 0 {
+		return nil, 1
+	}
+	rs := renderAll(kinds.RepoRows(list), "")
+	if len(rs) == 0 {
+		return nil, 2
+	}
+	return rs, 0
+}
+
+func (s *session) allRepos() []string {
+	return workspace.RepoList(s.cfg.Settings.Repos, s.workspaces())
 }
 
 // wsLevel is _hop_ws_picker: outside a repo, a query no workspace answers exactly is tried on the repos too.
+// - l drills into the workspace's own repos, where h comes back here.
 func (s *session) wsLevel(query string, fallback bool) int {
-	set := s.cfg.Settings
-	targets := renderAll(kinds.WorkspaceRows(workspace.Parse(set.Workspaces, set.WorkspacesFile)), "")
+	targets := renderAll(kinds.WorkspaceRows(s.workspaces()), "")
 	if len(targets) == 0 {
-		fmt.Fprintf(s.stderr, "hop: no workspaces configured (edit %s)\n", set.WorkspacesFile)
+		fmt.Fprintf(s.stderr, "hop: no workspaces configured (edit %s)\n", s.cfg.Settings.WorkspacesFile)
 		return 1
 	}
 	res := s.resolver("", "").Resolve(query, targets)
 	if fallback && res.Verdict != "jump" && res.Verdict != "empty" && res.Tier != "T1" {
-		if repos := s.repoRows(); len(repos) > 0 {
+		if repos, rc := s.repoRows(s.allRepos()); rc == 0 {
 			rr := s.resolver("", "").Resolve(query, repos)
 			if rr.Rank() > res.Rank() {
-				return s.pick(rr, query, repoLevel(repos))
+				return s.pick(rr, query, s.repoLv(repos, s.allRepos, s.upToWorkspaces()))
 			}
 		}
 	}
-	return s.pick(res, query, level{label: fmt.Sprintf("workspaces  %d", len(targets)), targets: targets, folder: true})
+	back := func() int { return s.wsLevel("", false) }
+	return s.pick(res, query, level{
+		label: fmt.Sprintf("workspaces  %d", len(targets)), targets: targets, folder: true,
+		drill: func(dir string) int {
+			return s.reposOf(func() []string { return workspace.Repos(dir) }, back)
+		},
+	})
 }
 
-func repoLevel(repos []string) level {
-	return level{label: fmt.Sprintf("repos  %d found", len(repos)), targets: repos, folder: true}
+// upToWorkspaces is h on a repo level reached from the top: the workspace picker, when there is one to go to.
+func (s *session) upToWorkspaces() func() int {
+	if len(s.workspaces()) == 0 {
+		return nil
+	}
+	return func() int { return s.wsLevel("", false) }
+}
+
+// repoLv is a repo level over repos, listed again by list when h comes back to it from a repo's targets.
+func (s *session) repoLv(repos []string, list func() []string, up func() int) level {
+	back := func() int { return s.reposOf(list, up) }
+	return level{
+		label: fmt.Sprintf("repos  %d found", len(repos)), targets: repos, folder: true, up: up,
+		drill: func(dir string) int { return s.targetsIn(dir, back) },
+	}
+}
+
+// reposOf opens a repo level, with an empty query, on the repos list names.
+func (s *session) reposOf(list func() []string, up func() int) int {
+	repos, rc := s.repoRows(list())
+	switch rc {
+	case 1:
+		fmt.Fprintln(s.stderr, "hop: not in a git repository, and no repos found (set $HOP_REPOS)")
+		return 1
+	case 2:
+		fmt.Fprintln(s.stderr, "hop: no readable repos in $HOP_REPOS")
+		return 1
+	}
+	return s.pick(s.resolver("", "").Resolve("", repos), "", s.repoLv(repos, list, up))
 }
 
 func (s *session) repoLevel(query string) int {
-	repos := s.repoRows()
-	if len(repos) == 0 {
+	repos, rc := s.repoRows(s.allRepos())
+	switch rc {
+	case 1:
 		fmt.Fprintln(s.stderr, "hop: not in a git repository, and no repos found (set $HOP_REPOS)")
 		return 1
+	case 2:
+		fmt.Fprintln(s.stderr, "hop: no readable repos in $HOP_REPOS")
+		return 1
 	}
-	return s.pick(s.resolver("", "").Resolve(query, repos), query, repoLevel(repos))
+	return s.pick(s.resolver("", "").Resolve(query, repos), query, s.repoLv(repos, s.allRepos, s.upToWorkspaces()))
+}
+
+// targetsIn is l on a repo row, new in 1.0: that repo's default kinds, with no cd until the final Enter decides.
+func (s *session) targetsIn(root string, up func() int) int {
+	names := uniqStrings(s.cfg.DefaultKinds())
+	if len(names) == 0 {
+		fmt.Fprintln(s.stderr, "hop: no kinds selected")
+		return 2
+	}
+	all, st := listRows(s.cfg, root, "", names, s.stderr)
+	if st != 0 {
+		fmt.Fprintf(s.stderr, "hop: no targets in %s for kinds: %s\n", root, strings.Join(names, ","))
+		return 1
+	}
+	r := s.resolver(root, "")
+	r.Like = all[0]
+	return s.pick(r.Resolve("", all), "", s.targetsLv(root, "", all, names, up))
+}
+
+func (s *session) targetsLv(root, under string, all, names []string, up func() int) level {
+	return level{
+		label: fmt.Sprintf("%s  %d targets  %s", filepath.Base(root), len(all), strings.Join(names, ",")),
+		root:  root, under: under, targets: all, kinds: names, reload: s.cfg.AllKinds(), up: up,
+	}
 }
 
 // cmdHop is hop() (hop.zsh:439) up to the picker: T0, then enumerate, rank, resolve, and jump or report.
@@ -349,13 +484,16 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "hop: `hop -` is the shell function's own cd -; run `eval \"$(hop init zsh)\"` or your shell's equivalent")
 		return 2
 	}
-	cfg, err := load(stderr)
+	cfg, err := loadHop(stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "hop:", err)
 		return 1
 	}
 	set := cfg.Settings
-	s := &session{cfg: cfg, stdout: stdout, stderr: stderr, mode: o.enterMode(set.Action), jump: set.Jump}
+	s := &session{cfg: cfg, stdout: stdout, stderr: stderr, mode: o.enterMode(set.Action), jump: set.Jump, vim: *set.Vim, cols: termCols()}
+	if o.vim != nil {
+		s.vim = *o.vim
+	}
 	if o.pick {
 		s.jump = "never"
 	}
@@ -366,6 +504,13 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return act.CD(root, stdout, stderr, set.HistFile, set.HistMax)
+	}
+	// hop() warns about these where it reads them: after / and -, HOP_ACTION only when no flag chose the mode, HOP_JUMP never under -p.
+	if v := os.Getenv("HOP_ACTION"); v != "" && !slices.Contains(config.Actions, v) && !o.decidesMode() {
+		fmt.Fprintf(stderr, "hop: HOP_ACTION=%s is not one of %s; using cd\n", v, strings.Join(config.Actions, ", "))
+	}
+	if v := os.Getenv("HOP_JUMP"); v != "" && !slices.Contains(config.Jumps, v) && !o.pick {
+		fmt.Fprintf(stderr, "hop: HOP_JUMP=%s is not one of auto, unique, never; using auto\n", v)
 	}
 	pwd := logicalPWD()
 	names := cfg.DefaultKinds()
@@ -475,10 +620,14 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 			return rc
 		}
 	}
-	return s.pick(res, query, level{
-		label: fmt.Sprintf("%s  %d targets  %s", filepath.Base(root), len(all), strings.Join(names, ",")),
-		root:  root, under: under, targets: all, kinds: names, reload: cfg.AllKinds(),
-	})
+	lv := s.targetsLv(root, under, all, names, nil)
+	lv.upFrom = func() func() int {
+		if len(s.allRepos()) == 0 {
+			return nil
+		}
+		return func() int { return s.repoLevel("") }
+	}
+	return s.pick(res, query, lv)
 }
 
 func uniqStrings(ss []string) []string {

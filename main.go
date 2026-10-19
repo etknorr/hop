@@ -49,6 +49,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && pickerVerbs[args[0]] != nil {
+		return pickerVerbs[args[0]](args[1:], stdout, stderr)
+	}
 	if len(args) == 0 || !subcommands[args[0]] {
 		return cmdHop(args, stdout, stderr)
 	}
@@ -88,7 +91,7 @@ func argAt(a []string, i int) string {
 var subcommands = map[string]bool{
 	"-h": true, "--help": true, "help": true, "-V": true, "-v": true, "--version": true, "init": true,
 	"rows": true, "kinds": true, "config": true, "__rows": true, "__resolve-dump": true,
-	"__sh": true, "__preview": true, "__menu": true, "__key": true, "__header": true, "__complete": true,
+	"__sh": true, "__preview": true, "__menu": true, "__complete": true,
 }
 
 func dispatch(args []string, stdout, stderr io.Writer) error {
@@ -120,20 +123,6 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 		return nil
 	case "__menu":
 		return cmdMenu(stdout, stderr)
-	case "__key":
-		s, err := pick.Load()
-		if err != nil {
-			return err
-		}
-		_, err = io.WriteString(stdout, pick.Key(s, argAt(args, 1), argAt(args, 2)))
-		return err
-	case "__header":
-		s, err := pick.Load()
-		if err != nil {
-			return err
-		}
-		_, err = io.WriteString(stdout, s.Header)
-		return err
 	case "__complete":
 		return cmdComplete(args[1:], stdout, stderr)
 	case "kinds":
