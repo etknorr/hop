@@ -379,6 +379,22 @@ func TestEricConfigLoads(t *testing.T) {
 	}
 }
 
+func TestExampleLoads(t *testing.T) {
+	clearEnv(t)
+	c, err := Load(filepath.Join("..", "..", "config.example.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Warnings) > 0 {
+		t.Errorf("warnings: %q", c.Warnings)
+	}
+	if got := strings.Join(c.AllKinds(), " "); got != "dir project file tg helm svc envconf stack deploy notes" {
+		t.Errorf("kinds = %s", got)
+	}
+	if tg, _ := c.Lookup("tg"); tg.Under != "live" || tg.MinDepth != 1 {
+		t.Errorf("tg = %+v", tg)
+	}
+}
 
 func TestWorkspaceSettings(t *testing.T) {
 	clearEnv(t)
