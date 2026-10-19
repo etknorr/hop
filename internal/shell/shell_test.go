@@ -94,7 +94,7 @@ func TestInitText(t *testing.T) {
 
 func TestComplete(t *testing.T) {
 	ks := []Kind{{"tg", "units"}, {"mod", "modules"}, {"helm", "charts"}}
-	acts := []string{"cd", "open"}
+	acts := []string{"cd", "open", "reveal", "cd+open", "cd+reveal"}
 	c := func(words ...string) string {
 		var w []string
 		for _, l := range Complete(words, ks, acts) {
@@ -102,25 +102,113 @@ func TestComplete(t *testing.T) {
 		}
 		return strings.Join(w, " ")
 	}
+	all := "-a --all -k --kinds -R --repos -w --workspaces -c --cwd --here -p --pick --cd -o --open -e --reveal --action= --no-vim --vim --doctor --doctor= -h --help -V -v --version"
+	without := func(drop ...string) string {
+		var out []string
+		for _, f := range strings.Fields(all) {
+			keep := true
+			for _, d := range drop {
+				keep = keep && f != d
+			}
+			if keep {
+				out = append(out, f)
+			}
+		}
+		return strings.Join(out, " ")
+	}
 	for _, x := range []struct{ words, want string }{
 		{"-k|", "tg mod helm"},
 		{"-k|m", "mod"},
 		{"--kinds|tg,", "tg,mod tg,helm"},
 		{"-k|tg,h", "tg,helm"},
-		{"--action=|", ""},
+		{"-k|tg,mod,", "tg,mod,helm"},
+		{"--action=", "--action=cd --action=open --action=reveal --action=cd+open --action=cd+reveal"},
 		{"--action=o", "--action=open"},
+		{"--cd|--action=", ""},
+		{"-o|--action=", ""},
+		{"--doctor=", "--doctor=short"},
 		{"--al", "--all"},
-		{"", "/ - init rows kinds config"},
-		{"-", "- -a --all -k --kinds -c --here -R --repos -w --workspaces -p --pick --cd -o --open -e --reveal --action= -h -V"},
+		{"", "/ - upgrade init import"},
+		{"u", "upgrade"},
+		{"-", "- " + all},
+		{"-a|-", without("-a", "--all")},
+		{"--here|-", without("-c", "--cwd", "--here")},
+		{"-o|-", without("-o", "--open", "-e", "--reveal", "--action=")},
+		{"-e|-", without("-o", "--open", "-e", "--reveal", "--action=")},
+		{"--cd|-", without("--cd", "--action=")},
+		{"--action=open|-", without("--cd", "-o", "--open", "-e", "--reveal", "--action=")},
+		{"--vim|-", without("--vim", "--no-vim")},
+		{"--no-vim|-", without("--vim", "--no-vim")},
+		{"-p|-", without("-p", "--pick")},
+		{"-V|-", ""},
+		{"-h|-", ""},
+		{"--doctor|-", ""},
+		{"--doctor=short|-", ""},
+		{"vpc|-", all},
+		{"vpc|", ""},
+		{"vpc|/", ""},
+		{"--|-", ""},
+		{"upgrade|-", "--check --dry-run -n -h --help"},
+		{"upgrade|--check|-", "-h --help"},
+		{"upgrade|-n|-", "-h --help"},
+		{"upgrade|-h|-", ""},
+		{"upgrade|", ""},
+		{"init|", "zsh bash fish"},
 		{"init|f", "fish"},
+		{"init|zsh|-", "--cmd"},
+		{"init|zsh|--cmd|", ""},
+		{"init|zsh|--cmd|j|-", ""},
+		{"import|-", "-o --force"},
+		{"import|-o|", ""},
+		{"import|--force|-", "-o"},
 		{"vpc|pro", ""},
 	} {
 		words := strings.Split(x.words, "|")
 		if got := c(words...); got != x.want {
-			t.Errorf("Complete(%q) = %q, want %q", words, got, x.want)
+			t.Errorf("Complete(%q)\n got %q\nwant %q", words, got, x.want)
 		}
 	}
 	if got := Complete([]string{"-k", "h"}, ks, acts); len(got) != 1 || got[0] != "helm\tcharts" {
 		t.Errorf("kinds carry their descriptions: %q", got)
+	}
+	v := Complete([]string{"-v"}, ks, acts)
+	V := Complete([]string{"-V"}, ks, acts)
+	if len(v) != 1 || len(V) != 1 || strings.Split(v[0], "\t")[1] != strings.Split(V[0], "\t")[1] {
+		t.Errorf("-v is described exactly as -V: %q %q", v, V)
+	}
+}
+
+// TestCompleteCoversEveryFlag is suite_completions' "every option hop parses has a completion spec", read off hop.go's option loop.
+func TestCompleteCoversEveryFlag(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "hop.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loop := string(src)
+	if i := strings.Index(loop, "func parseHop("); i >= 0 {
+		loop = loop[i:]
+		if j := strings.Index(loop, "\n}\n"); j >= 0 {
+			loop = loop[:j]
+		}
+	}
+	have := map[string]bool{}
+	for _, f := range hopFlags {
+		for _, n := range f.names {
+			have[n] = true
+		}
+	}
+	n := 0
+	for _, m := range regexp.MustCompile(`a == "(-[^"]*)"|HasPrefix\(a, "(--[a-z]+=)"\)`).FindAllStringSubmatch(loop, -1) {
+		name := m[1] + m[2]
+		if name == "--action" || name == "--" || name == "-" {
+			continue
+		}
+		n++
+		if !have[name] {
+			t.Errorf("hop.go parses %s, which completion never offers", name)
+		}
+	}
+	if n < 20 {
+		t.Errorf("the scan found only %d options in hop.go, so it no longer reads the option loop", n)
 	}
 }
