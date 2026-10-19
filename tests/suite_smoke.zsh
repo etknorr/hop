@@ -452,6 +452,7 @@ if (( ${+commands[python3]} )) && python3 -c 'import yaml' 2>/dev/null; then
 		.github/ISSUE_TEMPLATE/config.yml
 		.github/ISSUE_TEMPLATE/feature_request.yml
 		.github/workflows/ci.yml
+		.github/workflows/release.yml
 	)
 	assert_eq "${(j:,:)yamlwant}" "${(j:,:)yamlsorted}" 'the yml glob no longer matches the files in .github'
 
