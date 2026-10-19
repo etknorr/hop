@@ -238,8 +238,6 @@ jobs:
     name: go floor (fzf ${{ matrix.fzf }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Known red until workstream A's floor work lands: TestArgvParses on 0.60.3 and TestPicker on both, as at v1/go 2e60cd6.
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
