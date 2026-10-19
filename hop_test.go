@@ -377,3 +377,14 @@ func TestDebugLogAgainstHop(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigZshHintPrintedAsIs(t *testing.T) {
+	e := newE2E(t)
+	os.MkdirAll(filepath.Join(e.home, ".config", "hop"), 0o755)
+	os.WriteFile(filepath.Join(e.home, ".config", "hop", "config.zsh"), []byte("typeset -g HOP_JUMP=auto\n"), 0o644)
+	_, errs, _ := e.detached(e.root, []string{"HOP_HISTFILE=" + filepath.Join(e.tmp, "h")}, e.bin, "zzqx")
+	want := "hop: found config.zsh; run 'hop import -o ~/.config/hop/config.toml' to use it\n"
+	if !strings.HasPrefix(errs, want) || strings.Count(errs, "found config.zsh") != 1 {
+		t.Errorf("the hint is printed once, as config words it: %q", errs)
+	}
+}
