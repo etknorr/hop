@@ -47,10 +47,12 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	done := testfix.Isolate()
 	code := m.Run()
 	if fixDir != "" {
 		os.RemoveAll(fixDir)
 	}
+	done()
 	os.Exit(code)
 }
 

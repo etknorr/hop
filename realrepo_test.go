@@ -63,7 +63,7 @@ func TestRealRepoPicker(t *testing.T) {
 		os.Remove(cf)
 		c := exec.Command(bin, s.args...)
 		c.Dir = filepath.Join(repo, s.dir)
-		c.Env = append([]string{"PATH=" + stub + ":" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "TMPDIR=" + tmp, "PWD=" + c.Dir,
+		c.Env = append([]string{"PATH=" + stub + ":" + os.Getenv("PATH"), "HOME=" + testfix.RealHome, "TMPDIR=" + tmp, "PWD=" + c.Dir,
 			"LANG=en_US.UTF-8", "TERM=xterm-256color", "SHELL=/bin/zsh", "HOP_CONFIG=" + testdata("eric.toml"),
 			"HOP_HISTFILE=" + filepath.Join(tmp, "hist"), "HOP_CMDFILE=" + cf, "HOP_FZF_HEIGHT=", "FZF_DEFAULT_OPTS="}, s.env...)
 		start := time.Now()

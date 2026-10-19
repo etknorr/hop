@@ -11,6 +11,8 @@ import (
 	"github.com/etknorr/hop/internal/testfix"
 )
 
+func TestMain(m *testing.M) { testfix.Main(m) }
+
 func runHop(t *testing.T, args ...string) (string, string, int) {
 	t.Helper()
 	var out, errb bytes.Buffer
@@ -119,6 +121,7 @@ func TestParityRows(t *testing.T) {
 		t.Skip("set HOP_PARITY_REPO to a repo matching testdata/eric.toml, e.g. ~/strava/configuration")
 	}
 	cmd := exec.Command("bash", filepath.Join("test", "parity", "rows.sh"), repo)
+	cmd.Env = testfix.Inherited
 	out, err := cmd.CombinedOutput()
 	t.Logf("\n%s", out)
 	if err != nil {
@@ -133,8 +136,9 @@ func TestParityResolve(t *testing.T) {
 		t.Skip("set HOP_PARITY_REPO to a repo matching testdata/eric.toml, e.g. ~/strava/configuration")
 	}
 	cmd := exec.Command("bash", filepath.Join("test", "parity", "resolve.sh"), repo)
+	cmd.Env = testfix.Inherited
 	if os.Getenv("PARITY_JUMPS") == "" {
-		cmd.Env = append(os.Environ(), "PARITY_JUMPS=auto")
+		cmd.Env = append(cmd.Env, "PARITY_JUMPS=auto")
 	}
 	out, err := cmd.CombinedOutput()
 	t.Logf("\n%s", out)

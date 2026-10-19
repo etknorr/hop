@@ -29,3 +29,15 @@ func TestBuild(t *testing.T) {
 		t.Errorf("RefHome %s has no hop.zsh", ref)
 	}
 }
+
+func TestIsolated(t *testing.T) {
+	if os.Getenv("HOME") == RealHome || !strings.HasPrefix(os.Getenv("XDG_STATE_HOME"), os.Getenv("HOME")+"/") {
+		t.Errorf("HOME %s and XDG_STATE_HOME %s still reach the real home %s", os.Getenv("HOME"), os.Getenv("XDG_STATE_HOME"), RealHome)
+	}
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if (strings.HasPrefix(k, "HOP_") || strings.HasPrefix(k, "FZF_")) && !strings.HasPrefix(k, "HOP_PARITY_") && !strings.HasPrefix(k, "HOP_TEST_") {
+			t.Errorf("%s leaked into the tests", k)
+		}
+	}
+}

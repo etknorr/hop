@@ -162,10 +162,14 @@ func TestImportErrors(t *testing.T) {
 // TestEricConfig re-imports Eric's live config.zsh, only for a parity run, since that file is his to change.
 func TestEricConfig(t *testing.T) {
 	if os.Getenv("HOP_PARITY_REPO") == "" {
-		t.Skip("set HOP_PARITY_REPO to check testdata/eric.toml against ~/.config/hop/config.zsh")
+		t.Skip("set HOP_PARITY_REPO to check testdata/eric.toml against $HOP_PARITY_ZSHCONFIG, default ~/.config/hop/config.zsh")
 	}
 	needZsh(t)
-	src := filepath.Join(os.Getenv("HOME"), ".config", "hop", "config.zsh")
+	t.Setenv("HOME", testfix.RealHome)
+	src := os.Getenv("HOP_PARITY_ZSHCONFIG")
+	if src == "" {
+		src = filepath.Join(testfix.RealHome, ".config", "hop", "config.zsh")
+	}
 	res, err := Import(src)
 	if err != nil {
 		t.Fatal(err)
