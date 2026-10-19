@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
-# rows.sh [ROOT]: the Go hop's rows against zsh hop's _hop_generate, per kind, for the default set, and for -w and -R.
+# rows.sh: the Go hop's rows against zsh hop's _hop_generate, per kind, for the default set, and for -w and -R.
+# - HOP_PARITY_HOME (a zsh hop install, the oracle) and HOP_PARITY_REPO (the repo to sweep) are required; HOP_PARITY_ZSHCONFIG
+#   is the oracle's config.zsh (default zsh hop's own path) and HOP_PARITY_CONFIG the Go side's TOML (default testdata/eric.toml).
 # - Prints `kind rows-zsh rows-go IDENTICAL|DIFF first-diff-line set-diff`; set-diff counts ANSI-stripped rows in only one side.
-# - The hop is the worktree's unless HOP_PARITY_HOME names another, such as ~/.local/share/hop; the Go hop's layout follows its VERSION.
+# - The Go hop's layout follows the oracle's VERSION.
 # - Exit status is the number of DIFF lines, capped at 99.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-hopdir=${HOP_PARITY_HOME:-$repo}
+if [ -z "${HOP_PARITY_HOME:-}" ] || [ -z "${HOP_PARITY_REPO:-}" ]; then
+	echo "usage: HOP_PARITY_HOME=<zsh hop dir> HOP_PARITY_REPO=<repo> [HOP_PARITY_ZSHCONFIG=<config.zsh>] [HOP_PARITY_CONFIG=<config.toml>] $0" >&2
+	exit 2
+fi
+root=$HOP_PARITY_REPO
+zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
+gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
+hopdir=$HOP_PARITY_HOME
 # hop 0.3.0 fitted the columns to each list; against an older hop, the Go hop lays rows out the old way.
 case $(cat "$hopdir/VERSION" 2>/dev/null) in
 	0.1.* | 0.2.*) layout=fixed ;;
 	*) layout=fit ;;
 esac
-root=${1:-${HOP_PARITY_REPO:-$HOME/strava/configuration}}
-zshcfg=${HOP_PARITY_ZSHCONFIG:-$HOME/.config/hop/config.zsh}
-gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
 bin=${HOP_BIN:-}
 out=$(mktemp -d "${TMPDIR:-/tmp}/hop-parity.XXXXXX")
 trap 'rm -rf "$out"' EXIT

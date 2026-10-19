@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# e2e.sh [ROOT]: the Go hop against zsh hop end to end, through each one's shell function, over eval_real's query sets and two more.
-# - The reference is the hop Eric runs, $HOP_PARITY_HOME (default ~/.local/share/hop), with his config.zsh; the Go hop reads eric.toml.
+# e2e.sh: the Go hop against zsh hop end to end, through each one's shell function, over eval_real's query sets and two more.
+# - HOP_PARITY_HOME (a zsh hop install, the oracle) and HOP_PARITY_REPO (the repo to sweep) are required; HOP_PARITY_ZSHCONFIG
+#   is the oracle's config.zsh (default zsh hop's own path) and HOP_PARITY_CONFIG the Go side's TOML (default testdata/eric.toml).
 # - The sets are built by that hop from its own rows (sets.zsh), so they are what its eval_real would sweep.
 # - A verdict is jump (the function cd'd), pick (N matched), none (nothing matched) or rc<N>.
 # - The target is the landing dir for a jump and the "best matches" line for a pick; agree means verdict and target match.
@@ -12,15 +13,19 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-root=${1:-${HOP_PARITY_REPO:-$HOME/strava/configuration}}
-hophome=${HOP_PARITY_HOME:-$HOME/.local/share/hop}
+if [ -z "${HOP_PARITY_HOME:-}" ] || [ -z "${HOP_PARITY_REPO:-}" ]; then
+	echo "usage: HOP_PARITY_HOME=<zsh hop dir> HOP_PARITY_REPO=<repo> [HOP_PARITY_ZSHCONFIG=<config.zsh>] [HOP_PARITY_CONFIG=<config.toml>] $0" >&2
+	exit 2
+fi
+root=$HOP_PARITY_REPO
+zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
+gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
+hophome=$HOP_PARITY_HOME
 # hop 0.3.0 fitted the columns to each list; against an older hop, the Go hop lays rows out the old way.
 case $(cat "$hophome/VERSION" 2>/dev/null) in
 	0.1.* | 0.2.*) layout=fixed ;;
 	*) layout=fit ;;
 esac
-zshcfg=${HOP_PARITY_ZSHCONFIG:-$HOME/.config/hop/config.zsh}
-gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
 jumps=${PARITY_JUMPS:-auto unique never}
 workers=${PARITY_WORKERS:-8}
 sets="names pref3 scope+env name+env nonsense v03 away"

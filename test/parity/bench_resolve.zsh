@@ -1,21 +1,25 @@
 #!/usr/bin/env zsh
-# bench_resolve.zsh [ROOT] [RUNS]: median wall ms for the Go `hop [-p] <q>` against zsh hop's, headless, on the four probe queries.
+# bench_resolve.zsh [RUNS]: median wall ms for the Go `hop [-p] <q>` against zsh hop's, headless, on the four probe queries.
 # - With no terminal both end at the headless report, which is where the picker's first draw would start.
 # - "hop cold" is a fresh zsh sourcing hop.zsh first; "hop warm" is hop alone in an already-sourced shell.
 # - Each run cds nowhere: a jump under the Go hop writes a cmdfile in the temp dir, and hop's runs are subshells.
 emulate -L zsh
 zmodload zsh/datetime
 local here=${0:A:h}
-local repo=${here:h:h} hopdir=${here:h:h}
-local root=${1:-$HOME/strava/configuration}
-local -i runs=${2:-15}
+local repo=${here:h:h} hopdir=${HOP_PARITY_HOME:-} root=${HOP_PARITY_REPO:-}
+if [[ -z $hopdir || -z $root ]]; then
+	print -ru2 -- "usage: HOP_PARITY_HOME=<zsh hop dir> HOP_PARITY_REPO=<repo> [HOP_PARITY_ZSHCONFIG=<config.zsh>] [HOP_PARITY_CONFIG=<config.toml>] $0 [RUNS]"
+	return 2
+fi
+local zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh} gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
+local -i runs=${1:-15}
 local tmp
 tmp=$(mktemp -d) || return 1
 local bin="$tmp/hop"
 (cd "$repo" && go build -o "$bin" .) || return 1
 # The exports are zsh hop's; the Go binary runs through gohop, since HOP_CONFIG and HOP_HISTFILE name other files to it.
-export HOP_HISTFILE=/dev/null XDG_CACHE_HOME="$tmp/cache" HOP_CONFIG="$HOME/.config/hop/config.zsh"
-gohop() { HOP_CONFIG="$repo/testdata/eric.toml" HOP_HISTFILE="$tmp/hist" "$bin" "$@" }
+export HOP_HISTFILE=/dev/null XDG_CACHE_HOME="$tmp/cache" HOP_CONFIG="$zshcfg"
+gohop() { HOP_CONFIG="$gocfg" HOP_HISTFILE="$tmp/hist" "$bin" "$@" }
 unset HOP_DEFAULT_KINDS HOP_JUMP FZF_DEFAULT_OPTS FZF_DEFAULT_OPTS_FILE
 builtin cd -q -- "$root" || return 1
 

@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
-# perf.sh [ROOT]: the Go hop against zsh hop for speed: enumeration, resolve per tier, and end to end through the shell function.
-# - The reference is $HOP_PARITY_HOME (default ~/.local/share/hop); the Go hop's layout follows its VERSION, as in e2e.sh.
+# perf.sh: the Go hop against zsh hop for speed: enumeration, resolve per tier, and end to end through the shell function.
+# - HOP_PARITY_HOME (a zsh hop install, the oracle) and HOP_PARITY_REPO (the repo to sweep) are required; HOP_PARITY_ZSHCONFIG
+#   is the oracle's config.zsh (default zsh hop's own path) and HOP_PARITY_CONFIG the Go side's TOML (default testdata/eric.toml).
 # - Enumeration: go is a whole `hop rows` process; zsh is _hop_rows in an already-sourced shell, which is what hop() pays.
 # - Resolve: per query, T0 first, enumeration excluded; zsh's in one sourced shell, go's from __resolve-dump --ms.
 # - End to end: every PERF_EVERY-th query of each set, plus e2e.sh's v03 and away, serially and headless through both functions.
+# - The Go hop's layout follows the oracle's VERSION, as in e2e.sh.
 # - Medians and p90s; the machine is shared, so read the ratios rather than the absolute times.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-root=${1:-${HOP_PARITY_REPO:-$HOME/strava/configuration}}
-hophome=${HOP_PARITY_HOME:-$HOME/.local/share/hop}
-zshcfg=${HOP_PARITY_ZSHCONFIG:-$HOME/.config/hop/config.zsh}
+if [ -z "${HOP_PARITY_HOME:-}" ] || [ -z "${HOP_PARITY_REPO:-}" ]; then
+	echo "usage: HOP_PARITY_HOME=<zsh hop dir> HOP_PARITY_REPO=<repo> [HOP_PARITY_ZSHCONFIG=<config.zsh>] [HOP_PARITY_CONFIG=<config.toml>] $0" >&2
+	exit 2
+fi
+root=$HOP_PARITY_REPO
+zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh}
 gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
+hophome=$HOP_PARITY_HOME
 runs=${PERF_RUNS:-15}
 every=${PERF_EVERY:-10}
 case $(cat "$hophome/VERSION" 2>/dev/null) in

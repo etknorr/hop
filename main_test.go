@@ -116,11 +116,10 @@ func TestConfigErrorExits1(t *testing.T) {
 
 // TestParityRows runs test/parity/rows.sh against a real repo, which only a parity run has.
 func TestParityRows(t *testing.T) {
-	repo := os.Getenv("HOP_PARITY_REPO")
-	if repo == "" {
-		t.Skip("set HOP_PARITY_REPO to a repo matching testdata/eric.toml, e.g. ~/strava/configuration")
+	if os.Getenv("HOP_PARITY_REPO") == "" || os.Getenv("HOP_PARITY_HOME") == "" {
+		t.Skip("set HOP_PARITY_HOME and HOP_PARITY_REPO, as test/parity/rows.sh asks")
 	}
-	cmd := exec.Command("bash", filepath.Join("test", "parity", "rows.sh"), repo)
+	cmd := exec.Command("bash", filepath.Join("test", "parity", "rows.sh"))
 	cmd.Env = testfix.Inherited
 	out, err := cmd.CombinedOutput()
 	t.Logf("\n%s", out)
@@ -131,11 +130,10 @@ func TestParityRows(t *testing.T) {
 
 // TestParityResolve runs test/parity/resolve.sh under HOP_JUMP=auto, or $PARITY_JUMPS, against a real repo.
 func TestParityResolve(t *testing.T) {
-	repo := os.Getenv("HOP_PARITY_REPO")
-	if repo == "" {
-		t.Skip("set HOP_PARITY_REPO to a repo matching testdata/eric.toml, e.g. ~/strava/configuration")
+	if os.Getenv("HOP_PARITY_REPO") == "" || os.Getenv("HOP_PARITY_HOME") == "" {
+		t.Skip("set HOP_PARITY_HOME and HOP_PARITY_REPO, as test/parity/resolve.sh asks")
 	}
-	cmd := exec.Command("bash", filepath.Join("test", "parity", "resolve.sh"), repo)
+	cmd := exec.Command("bash", filepath.Join("test", "parity", "resolve.sh"))
 	cmd.Env = testfix.Inherited
 	if os.Getenv("PARITY_JUMPS") == "" {
 		cmd.Env = append(cmd.Env, "PARITY_JUMPS=auto")

@@ -1,20 +1,24 @@
 #!/usr/bin/env zsh
-# bench_rows.zsh [ROOT] [RUNS]: median wall ms for the Go hop's rows against zsh hop, for the default set and `file`.
+# bench_rows.zsh [RUNS]: median wall ms for the Go hop's rows against zsh hop, for the default set and `file`.
 # - "hop cold" is a fresh zsh that sources hop.zsh and runs _hop_generate, which is what the Go binary's exec replaces.
 # - "hop warm" is _hop_generate alone in an already-sourced shell, which is what an interactive hop pays.
 emulate -L zsh
 zmodload zsh/datetime
 local here=${0:A:h}
-local repo=${here:h:h} hopdir=${here:h:h}
-local root=${1:-$HOME/strava/configuration}
-local -i runs=${2:-15}
+local repo=${here:h:h} hopdir=${HOP_PARITY_HOME:-} root=${HOP_PARITY_REPO:-}
+if [[ -z $hopdir || -z $root ]]; then
+	print -ru2 -- "usage: HOP_PARITY_HOME=<zsh hop dir> HOP_PARITY_REPO=<repo> [HOP_PARITY_ZSHCONFIG=<config.zsh>] [HOP_PARITY_CONFIG=<config.toml>] $0 [RUNS]"
+	return 2
+fi
+local zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh} gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
+local -i runs=${1:-15}
 local tmp
 tmp=$(mktemp -d) || return 1
 local bin="$tmp/hop"
 (cd "$repo" && go build -o "$bin" .) || return 1
 # The exports are zsh hop's; the Go binary runs through gohop, since HOP_CONFIG and HOP_HISTFILE name other files to it.
-export HOP_HISTFILE=/dev/null XDG_CACHE_HOME="$tmp/cache" HOP_CONFIG="$HOME/.config/hop/config.zsh"
-gohop() { HOP_CONFIG="$repo/testdata/eric.toml" HOP_HISTFILE="$tmp/hist" "$bin" "$@" }
+export HOP_HISTFILE=/dev/null XDG_CACHE_HOME="$tmp/cache" HOP_CONFIG="$zshcfg"
+gohop() { HOP_CONFIG="$gocfg" HOP_HISTFILE="$tmp/hist" "$bin" "$@" }
 unset HOP_DEFAULT_KINDS
 
 median() {

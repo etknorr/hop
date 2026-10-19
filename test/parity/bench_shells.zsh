@@ -1,21 +1,25 @@
 #!/usr/bin/env zsh
-# bench_shells.zsh [ROOT] [RUNS]: what the shell function costs, per shell, against hop in zsh.
+# bench_shells.zsh [RUNS]: what the shell function costs, per shell, against hop in zsh.
 # - jump: one `<fn> eks security` through the shell function, cd included, as (T(15 jumps) - T(0 jumps)) / 15 in one shell.
 # - init: `eval "$(hop init <shell>)"` (or `source hop.zsh`) over a bare `<shell> -c :`, median of RUNS.
-# - fish and pwsh run in the test/docker images with ROOT mounted read-only at /repo, so their numbers include
+# - fish and pwsh run in the test/docker images with HOP_PARITY_REPO mounted read-only at /repo, so their numbers include
 #   docker's bind-mount filesystem and are not comparable to the host rows.
-# - /repo and not ROOT's own path: a ~/strava path mounted at itself shows up empty under Docker Desktop.
+# - /repo and not the repo's own path: a ~/strava path mounted at itself shows up empty under Docker Desktop.
 emulate -L zsh
 zmodload zsh/datetime
 local here=${0:A:h}
-local repo=${here:h:h} hopdir=${here:h:h}
-local root=${1:-$HOME/strava/configuration}
-local -i runs=${2:-15} n=15
+local repo=${here:h:h} hopdir=${HOP_PARITY_HOME:-} root=${HOP_PARITY_REPO:-}
+if [[ -z $hopdir || -z $root ]]; then
+	print -ru2 -- "usage: HOP_PARITY_HOME=<zsh hop dir> HOP_PARITY_REPO=<repo> [HOP_PARITY_ZSHCONFIG=<config.zsh>] [HOP_PARITY_CONFIG=<config.toml>] $0 [RUNS]"
+	return 2
+fi
+local zshcfg=${HOP_PARITY_ZSHCONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/hop/config.zsh} gocfg=${HOP_PARITY_CONFIG:-$repo/testdata/eric.toml}
+local -i runs=${1:-15} n=15
 local tmp
 tmp=$(mktemp -d) || return 1
 mkdir -p "$tmp/darwin" "$tmp/linux"
 (cd "$repo" && go build -o "$tmp/darwin/hop" . && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "$tmp/linux/hop" .) || return 1
-local cfg="$repo/testdata/eric.toml" zshcfg="$HOME/.config/hop/config.zsh"
+local cfg=$gocfg
 local -a envv=(env -i HOME="$tmp" PATH="$tmp/darwin:/usr/bin:/bin:/opt/homebrew/bin" LANG=en_US.UTF-8 TERM=xterm-256color TMPDIR="$tmp/"
 	XDG_CACHE_HOME="$tmp/cache")
 # HOP_CONFIG and HOP_HISTFILE name different files to the two hops; each row's argv starts with its side's, which env reads.
