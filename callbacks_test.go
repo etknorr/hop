@@ -33,7 +33,7 @@ func TestRowsCallback(t *testing.T) {
 	got, _, rc := runHop(t, "__rows")
 	want := strings.Join(mru.Rank(lines, []string{pinned}), "\n") + "\n"
 	if rc != 0 || got != want {
-		t.Errorf("__rows in a picker is hop rows plus rank: rc %d\n%s\nwant\n%s", rc, got, want)
+		t.Errorf("__rows in a picker is hop __dump-rows plus rank: rc %d\n%s\nwant\n%s", rc, got, want)
 	}
 	if !strings.HasPrefix(got, lines[len(lines)-1]) {
 		t.Error("the remembered row comes first")

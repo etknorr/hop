@@ -43,7 +43,7 @@ time_cmd() {
 }
 
 local -a f
-f=("${(@ps:\t:)$(gohop rows -k tg | sed -n 1p)}")
+f=("${(@ps:\t:)$(gohop __dump-rows -k tg | sed -n 1p)}")
 local dir=${f[2]} file=${f[3]}
 local -a kinds=(tg mod helm dir mesos)
 print -r -- "{\"root\":\"$root\",\"kinds\":[\"${(j:",":)kinds}\"]}" >"$tmp/session.json"

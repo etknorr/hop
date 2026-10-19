@@ -86,11 +86,11 @@ func newPicker(t *testing.T) *picker {
 	} {
 		os.WriteFile(filepath.Join(p.stub, name), []byte("#!/bin/sh\nT="+tmp+"\n"+body+"\n"), 0o755)
 	}
-	c := exec.Command(p.bin, "rows")
+	c := exec.Command(p.bin, "__dump-rows")
 	c.Dir, c.Env = p.root, []string{"PATH=" + os.Getenv("PATH"), "HOME=" + tmp, "HOP_CONFIG=" + p.cfg}
 	out, err := c.Output()
 	if err != nil {
-		t.Fatalf("hop rows: %v", err)
+		t.Fatalf("hop __dump-rows: %v", err)
 	}
 	p.list = match.Lines(string(out))
 	return p

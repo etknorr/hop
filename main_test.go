@@ -49,7 +49,7 @@ func TestUsageAndVersion(t *testing.T) {
 		}
 	}
 	for _, a := range [][]string{{"-Z"}, {"-o", "-e"}, {"--action"}, {"--action=bogus"}, {"--action=open", "-o"}, {"/", "x"}, {"x", "-"}, {"-k"},
-		{"rows", "-w", "-R"}, {"rows", "-a", "-k", "dir"}, {"rows", "extra"}, {"__rows"}, {"config"}, {"__resolve-dump", "--bogus"}} {
+		{"__dump-rows", "-w", "-R"}, {"__dump-rows", "-a", "-k", "dir"}, {"__dump-rows", "extra"}, {"__rows"}, {"__config"}, {"__resolve-dump", "--bogus"}} {
 		if _, _, rc := runHop(t, a...); rc != 2 {
 			t.Errorf("%v: rc %d, want 2", a, rc)
 		}
@@ -58,7 +58,7 @@ func TestUsageAndVersion(t *testing.T) {
 
 func TestRowsForms(t *testing.T) {
 	root := setup(t)
-	def, _, rc := runHop(t, "rows", "--root", root)
+	def, _, rc := runHop(t, "__dump-rows", "--root", root)
 	if rc != 0 || strings.Count(def, "\n") == 0 {
 		t.Fatalf("rows: rc %d", rc)
 	}
@@ -66,20 +66,20 @@ func TestRowsForms(t *testing.T) {
 	if hidden != def {
 		t.Error("__rows with no kind must be the default set")
 	}
-	k, _, _ := runHop(t, "rows", "--root", root, "-k", "svc, dir")
+	k, _, _ := runHop(t, "__dump-rows", "--root", root, "-k", "svc, dir")
 	hk, _, _ := runHop(t, "__rows", root, "svc", "dir")
 	if k != hk || !strings.Contains(k, "<root>") {
 		t.Error("-k and __rows disagree")
 	}
-	all, _, _ := runHop(t, "rows", "--root", root, "-a")
+	all, _, _ := runHop(t, "__dump-rows", "--root", root, "-a")
 	if strings.Count(all, "\n") <= strings.Count(def, "\n") {
 		t.Error("-a must add the non-default kinds")
 	}
-	_, e, rc := runHop(t, "rows", "--root", root, "-k", "nope")
+	_, e, rc := runHop(t, "__dump-rows", "--root", root, "-k", "nope")
 	if rc != 1 || !strings.Contains(e, "unknown kind: nope") {
 		t.Errorf("unknown kind: rc %d %q", rc, e)
 	}
-	if o, _, _ := runHop(t, "kinds"); !strings.Contains(o, "* tg") || !strings.Contains(o, "  fx") {
+	if o, _, _ := runHop(t, "__kinds"); !strings.Contains(o, "* tg") || !strings.Contains(o, "  fx") {
 		t.Errorf("kinds:\n%s", o)
 	}
 }
@@ -90,17 +90,17 @@ func TestConfigImportWritesOnlyWhereTold(t *testing.T) {
 	}
 	setup(t)
 	out := filepath.Join(t.TempDir(), "out.toml")
-	o, _, rc := runHop(t, "config", "import", filepath.Join("testdata", "fixture.zsh"), "-o", out)
+	o, _, rc := runHop(t, "import", filepath.Join("testdata", "fixture.zsh"), "-o", out)
 	if rc != 0 || o != "" {
 		t.Fatalf("import -o: rc %d, stdout %q", rc, o)
 	}
 	b, _ := os.ReadFile(out)
-	o, _, _ = runHop(t, "config", "import", "-o", "", filepath.Join("testdata", "fixture.zsh"))
+	o, _, _ = runHop(t, "import", "-o", "", filepath.Join("testdata", "fixture.zsh"))
 	if string(b) != o || !strings.Contains(o, "[[kind]]") {
 		t.Error("stdout and -o output differ")
 	}
 	t.Setenv("HOP_CONFIG", out)
-	if o, _, rc := runHop(t, "config", "check"); rc != 0 || !strings.Contains(o, "14 kinds") {
+	if o, _, rc := runHop(t, "__config", "check"); rc != 0 || !strings.Contains(o, "14 kinds") {
 		t.Errorf("check: rc %d %q", rc, o)
 	}
 }
@@ -109,7 +109,7 @@ func TestConfigErrorExits1(t *testing.T) {
 	bad := filepath.Join(t.TempDir(), "bad.toml")
 	os.WriteFile(bad, []byte("[[kind]]\nname = 'x'\n"), 0o644)
 	t.Setenv("HOP_CONFIG", bad)
-	if _, e, rc := runHop(t, "kinds"); rc != 1 || !strings.Contains(e, "bad.toml:2:") {
+	if _, e, rc := runHop(t, "__kinds"); rc != 1 || !strings.Contains(e, "bad.toml:2:") {
 		t.Errorf("rc %d %q", rc, e)
 	}
 }

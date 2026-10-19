@@ -74,20 +74,20 @@ check() {
 }
 
 printf '%-10s %6s %6s %-9s %-6s %s\n' kind zsh go verdict first set-diff
-kinds=$(xhop kinds | cut -c3- | awk '{print $1}')
+kinds=$(xhop __kinds | cut -c3- | awk '{print $1}')
 for k in $kinds; do
 	zhop "$root" "$k" >"$out/$k.zsh" 2>"$out/$k.zsh.err"
 	xhop __rows "$root" "$k" >"$out/$k.go" 2>"$out/$k.go.err"
 	check "$k"
 done
 zhop -d "$root" >"$out/default.zsh" 2>/dev/null
-xhop rows --root "$root" >"$out/default.go" 2>/dev/null
+xhop __dump-rows --root "$root" >"$out/default.go" 2>/dev/null
 check default
 zhop -w >"$out/ws.zsh" 2>/dev/null
-xhop rows -w >"$out/ws.go" 2>/dev/null
+xhop __dump-rows -w >"$out/ws.go" 2>/dev/null
 check ws
 zhop -R >"$out/repo.zsh" 2>/dev/null
-xhop rows -R >"$out/repo.go" 2>/dev/null
+xhop __dump-rows -R >"$out/repo.go" 2>/dev/null
 check repo
 
 if [ -n "${PARITY_KEEP:-}" ]; then

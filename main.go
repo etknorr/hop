@@ -65,11 +65,12 @@ func argAt(a []string, i int) string {
 	return ""
 }
 
-// subcommands take the first word; anything else is hop's own command line, so a target named rows needs `hop -- rows`.
+// subcommands take the first word; anything else is hop's own command line, so a target named init needs `hop -- init`.
+// - Only init, upgrade and import are public; the rest start with __ so no dir name, such as config, stops being a query.
 // - -h, -V and --doctor aren't here: they are cases of hop's option loop, so `hop -a -V` works as 0.3.1's does.
 var subcommands = map[string]bool{
 	"init": true, "upgrade": true, "import": true,
-	"rows": true, "kinds": true, "config": true, "__rows": true, "__resolve-dump": true,
+	"__dump-rows": true, "__kinds": true, "__config": true, "__rows": true, "__resolve-dump": true,
 	"__sh": true, "__preview": true, "__menu": true, "__complete": true,
 }
 
@@ -80,7 +81,7 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "upgrade":
 		return exitCode(cmdUpgrade(args[1:], stdout, stderr))
-	case "rows":
+	case "__dump-rows":
 		return cmdRows(args[1:], stdout, stderr)
 	case "__rows":
 		return cmdRowsHidden(args[1:], stdout, stderr)
@@ -100,9 +101,9 @@ func dispatch(args []string, stdout, stderr io.Writer) error {
 		return cmdMenu(stdout, stderr)
 	case "__complete":
 		return cmdComplete(args[1:], stdout, stderr)
-	case "kinds":
+	case "__kinds":
 		return cmdKinds(stdout, stderr)
-	case "config":
+	case "__config":
 		return cmdConfig(args[1:], stdout, stderr)
 	case "import":
 		return cmdImport(args[1:], stdout, stderr)
@@ -250,8 +251,6 @@ func cmdConfig(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "%s: %d kinds, defaults %s\n", config.Path(), len(cfg.Kinds), strings.Join(cfg.DefaultKinds(), " "))
 		return nil
-	case "import":
-		return cmdImport(args[1:], stdout, stderr)
 	}
 	return errUsage
 }

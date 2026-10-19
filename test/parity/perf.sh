@@ -2,7 +2,7 @@
 # perf.sh: the Go hop against zsh hop for speed: enumeration, resolve per tier, and end to end through the shell function.
 # - HOP_PARITY_HOME (a zsh hop install, the oracle) and HOP_PARITY_REPO (the repo to sweep) are required; HOP_PARITY_ZSHCONFIG
 #   is the oracle's config.zsh (default zsh hop's own path) and HOP_PARITY_CONFIG the Go side's TOML (default testdata/eric.toml).
-# - Enumeration: go is a whole `hop rows` process; zsh is _hop_rows in an already-sourced shell, which is what hop() pays.
+# - Enumeration: go is a whole `hop __dump-rows` process; zsh is _hop_rows in an already-sourced shell, which is what hop() pays.
 # - Resolve: per query, T0 first, enumeration excluded; zsh's in one sourced shell, go's from __resolve-dump --ms.
 # - End to end: every PERF_EVERY-th query of each set, plus e2e.sh's v03 and away, serially and headless through both functions.
 # - The Go hop's layout follows the oracle's VERSION, as in e2e.sh.
@@ -64,7 +64,7 @@ for set in default file; do
 	: >"$out/x" && : >"$out/f"
 	for _ in $(seq "$runs"); do
 		t0=$(now_ms)
-		gclean "$bin" rows "${k[@]}" --root "$root" >/dev/null 2>&1
+		gclean "$bin" __dump-rows "${k[@]}" --root "$root" >/dev/null 2>&1
 		echo "$(now_ms) - $t0" | bc >>"$out/x"
 		t0=$(now_ms)
 		if [ "$set" = file ]; then

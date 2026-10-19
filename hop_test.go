@@ -388,3 +388,16 @@ func TestConfigZshHintPrintedAsIs(t *testing.T) {
 		t.Errorf("the hint is printed once, as config words it: %q", errs)
 	}
 }
+
+// TestFormerVerbsAreQueries holds the spike's config, kinds and rows verbs to what 0.3.1 does with those words: search.
+func TestFormerVerbsAreQueries(t *testing.T) {
+	if !testfix.HaveZsh() {
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
+	}
+	e := newE2E(t)
+	var cases []headlessCase
+	for _, w := range []string{"config", "kinds", "rows", "help"} {
+		cases = append(cases, headlessCase{e.root, nil, []string{w}})
+	}
+	e.compare(t, cases)
+}
