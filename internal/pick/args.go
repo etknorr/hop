@@ -142,7 +142,7 @@ func Args(o Opts) []string {
 
 // Legend is _hop_header, the non-modal legend: the keys, each line short enough for a 36-column list pane.
 // - mode is what Enter does; on workspace and repo rows reveal is named open, since both run `code -n` there.
-// - hop 0.3.1 names alt-a `M-a +conf`, after one user's kind; 1.0 says what it does.
+// - hop 0.3.1's legend named alt-a after one user's own kind; 1.0 says what it does.
 func Legend(mode string, folder, reload bool) string {
 	mode = EnterName(mode, folder)
 	lines := []string{"enter cd · ^O file · ^T folder", "^Y copy · M-y copy file · M-o edit"}
