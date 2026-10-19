@@ -126,25 +126,6 @@ func parseHop(args []string, stderr io.Writer) (*hopOpts, int) {
 
 func (o *hopOpts) decidesMode() bool { return o.actCD || o.actOpen || o.actReveal || o.actFlag != "" }
 
-// loadHop is load for hop() itself, minus the warnings about an environment value hop() words at its own point.
-func loadHop(stderr io.Writer) (*config.Config, error) {
-	cfg, err := config.Load(config.Path())
-	if err != nil {
-		return nil, err
-	}
-	bad := func(env string, valid []string) bool {
-		v := os.Getenv(env)
-		return v != "" && !slices.Contains(valid, v)
-	}
-	for _, w := range cfg.Warnings {
-		if strings.HasPrefix(w, "action ") && bad("HOP_ACTION", config.Actions) || strings.HasPrefix(w, "jump ") && bad("HOP_JUMP", config.Jumps) {
-			continue
-		}
-		fmt.Fprintln(stderr, "hop: warning:", w)
-	}
-	return cfg, nil
-}
-
 // termCols is zsh's $COLUMNS for the mode headers: the terminal's width, else COLUMNS, else 80.
 func termCols() int {
 	if t := tty.Open(); t != nil {
@@ -530,7 +511,7 @@ func cmdHop(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "hop: `hop -` is the shell function's own cd -; run `eval \"$(hop init zsh)\"` or your shell's equivalent")
 		return 2
 	}
-	cfg, err := loadHop(stderr)
+	cfg, err := load(stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "hop:", err)
 		return 1
@@ -728,7 +709,7 @@ func cmdResolveDump(args []string, stdout, stderr io.Writer) error {
 			return errUsage
 		}
 	}
-	cfg, err := loadHop(stderr)
+	cfg, err := load(stderr)
 	if err != nil {
 		return err
 	}
