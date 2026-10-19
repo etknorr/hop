@@ -28,6 +28,7 @@ func newRig(t *testing.T) *rig {
 	os.WriteFile(filepath.Join(bin, "code"), []byte("#!/bin/sh\necho \"code $*\" >>\""+r.log+"\"\nexit ${CODE_RC:-0}\n"), 0o755)
 	os.WriteFile(filepath.Join(bin, "pbcopy"), []byte("#!/bin/sh\ncat >\""+r.log+".clip\"\n"), 0o755)
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("DISPLAY", ":0")
 	t.Setenv("HOP_CMDFILE", r.cmdfile)
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "vi -n")
@@ -175,6 +176,8 @@ func TestKeys(t *testing.T) {
 // TestCodeUsable is _hop_code_usable's cases: the launcher, a live IPC socket, SSH, and a Linux display or WSL.
 func TestCodeUsable(t *testing.T) {
 	r := newRig(t)
+	defer func(g string) { goos = g }(goos)
+	goos = "darwin"
 	for _, k := range []string{"VSCODE_IPC_HOOK_CLI", "SSH_CONNECTION", "SSH_TTY", "DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME", "WSL_INTEROP", "HOP_CODE"} {
 		t.Setenv(k, "")
 	}
@@ -201,7 +204,6 @@ func TestCodeUsable(t *testing.T) {
 		t.Skip("no unix sockets here:", err)
 	}
 	defer l.Close()
-	defer func(g string) { goos = g }(goos)
 	goos = "linux"
 	t.Setenv("SSH_CONNECTION", "1 2 3 4")
 	if ok, why := usable(); !ok {
