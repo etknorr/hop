@@ -83,8 +83,9 @@ var Columns = []string{"scope", "env", "region", "name"}
 func New() *Config { return &Config{byName: map[string]*Kind{}} }
 
 // Path is $HOP_CONFIG, else ${XDG_CONFIG_HOME:-~/.config}/hop/config.toml.
+// - A $HOP_CONFIG ending in .zsh is zsh hop's, which it exports into every child, so it is never read as TOML.
 func Path() string {
-	if p := os.Getenv("HOP_CONFIG"); p != "" {
+	if p := os.Getenv("HOP_CONFIG"); p != "" && !strings.HasSuffix(p, ".zsh") {
 		return p
 	}
 	base := os.Getenv("XDG_CONFIG_HOME")

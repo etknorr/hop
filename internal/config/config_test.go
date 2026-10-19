@@ -191,6 +191,10 @@ func TestPath(t *testing.T) {
 	if p := Path(); p != "/y.toml" {
 		t.Errorf("Path = %s", p)
 	}
+	t.Setenv("HOP_CONFIG", "/home/me/.config/hop/config.zsh")
+	if p := Path(); p != "/x/hop/config.toml" {
+		t.Errorf("a .zsh HOP_CONFIG is zsh hop's and never read as TOML: Path = %s", p)
+	}
 }
 
 func TestEricConfigLoads(t *testing.T) {
