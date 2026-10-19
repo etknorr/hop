@@ -20,13 +20,16 @@ This file is for the agents building it. Read it top to bottom before starting a
 
 - Write only in your own worktree under `~/worktrees/hop/<slug>` and on your branch. Create it with `git -C ~/personal/code/hop fetch origin` and then `git -C ~/personal/code/hop worktree add ~/worktrees/hop/<slug> -b <branch> origin/v1/go`. Never under `/tmp`, and never switch branches in `~/personal/code/hop`.
 - Read-only: `~/.zshrc`, `~/.config/hop/`, `~/.local/share/hop`, `~/strava/configuration`. Generated config goes to a file in the worktree, such as `testdata/eric.toml`.
-- Never write Eric's history, `~/.local/state/hop/history`. After the restructure the binary's default history path IS that file, so every test, harness and manual run sets `HOP_HISTFILE` to a temp file. Gate: the file's checksum is the same before and after your run.
-- Never `go install`, `brew install` or `brew tap` on the host: each writes outside the worktree. Build with `go build -o <worktree>/bin/hop .`.
+- Never write Eric's history, `~/.local/state/hop/history`, or his debug log, `~/.local/state/hop/debug.log`. After the restructure the binary's defaults ARE those files, so every test, harness and manual run sets `HOP_HISTFILE` (and `HOP_DEBUG_LOG` when `HOP_DEBUG` is on) to a temp file. A checksum can't gate this, because Eric's own zsh hop rewrites the history while you work. Gate: `grep -nE '^(/private)?/(var/folders|tmp)/|/worktrees/hop/' ~/.local/state/hop/history ~/.local/state/hop/debug.log` prints nothing after your run, so no fixture or worktree path reached either file.
+- The read-only paths are checked the same way: `git -C ~/.local/share/hop rev-parse HEAD` and `git -C ~/.local/share/hop status --porcelain` match before and after, and `shasum ~/.config/hop/*` matches.
+- Your shell inherits Eric's environment, including `HOP_CONFIG=~/.config/hop/config.zsh`, which zsh hop exports. Once R1 renames `HOPX_*` to `HOP_*`, the Go binary sees it, so run it with `env -u HOP_CONFIG` or an explicit `HOP_CONFIG`, and never assume a clean `HOP_*` or `FZF_*` environment.
+- Never `go install`, `brew install`, `brew upgrade` or `brew tap` on the host: each writes outside the worktree. Build with `go build -o <worktree>/bin/hop .`. Go's module and build caches are the only writes outside the worktree that are allowed, and `go run pkg@version` counts as a cache write, not an install.
+- Never run `hop upgrade` without `--check` from a binary built in a worktree: the worktree is a checkout of this module, so the checkout method would move it. Upgrade tests use temp clones only.
 - No merges to `main`, no tags, no releases, no PRs. Push your branch when your task says so.
 - Commits: one-line Conventional Commit subjects (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `build:`, `ci:`), at most 72 characters, no body, no AI attribution, no ticket IDs, one logical concern each.
 - Code style matches the spike: `gofmt`, `go vet` clean, no comment unless it names a constraint, trap or non-obvious why.
 - Allowed Go dependencies stay the spike's: `github.com/BurntSushi/toml`, `golang.org/x/sys`, `golang.org/x/term`. No workstream adds one, so `go.sum` never conflicts.
-- fzf floor stays 0.60.3. Scratch binaries: `~/personal/code/hop/.git/scratch/bin0603/fzf` (0.60.3) and `bin0670/fzf` (0.67.0). The host's `/opt/homebrew/bin/fzf` is 0.73.1, the latest. Linux fzf tarballs for docker are in `~/personal/code/hop/.git/scratch/linux` and `spike/docker`.
+- fzf floor stays 0.60.3. Scratch binaries: `~/personal/code/hop/.git/scratch/bin0603/fzf` (0.60.3) and `bin0670/fzf` (0.67.0). The host's `/opt/homebrew/bin/fzf` is 0.73.1, which is not the latest: fzf 0.74.5 is (checked 2026-10-19), and only its `linux_arm64` tarball is local, in `~/personal/code/hop/.git/scratch/linux` beside 0.60.3, 0.67.0 and 0.73.1. So "the latest" runs in docker and in CI, never by upgrading the host's fzf.
 - A hook or permission denial means stop and report it. Never route around one.
 - Verify with real runs: `go vet ./...`, `go test ./...`, the parity harness and the pty tests. Report failures as they are.
 
@@ -49,11 +52,12 @@ After the retirement step the repo looks like this:
 ```
 go.mod                    module github.com/etknorr/hop, go 1.26
 go.sum
-main.go                   verb registry and dispatch, -h, -V (B)
-hop.go                    hop()'s flow: T0, levels, enumerate, rank, resolve, pick (A)
-cmd_picker.go             __rows, __menu, __key, __guard, __keys, __hopw (A)
-cmd_shell.go              init, __complete, upgrade, --doctor (B)
-cmd_config.go             import, __config, __kinds, __dump-rows (C)
+main.go                   verb registry and dispatch (B)
+hop.go                    hop()'s flow: option loop, T0, levels, enumerate, rank, resolve, pick (A)
+cmd_picker.go             __rows, __menu, __key, __header, __preview, __sh, __resolve-dump, __guard, __keys, __hopw (A)
+cmd_shell.go              init, __complete, upgrade, and the -h, -V and --doctor bodies the option loop calls (B)
+cmd_config.go             import, __config, __kinds, __dump-rows, load() and its warnings (C)
+cmd_*_test.go             each file's tests, owned with it
 internal/
   act/                    cd, open, reveal, edit, copy, browse, Enter modes (A)
   collate/                zsh's en_US sort order (frozen)
@@ -147,6 +151,7 @@ The resolver, rows and headless output are already proven: rows are byte-identic
 | `--doctor`, `--doctor=short`, `--doctor short`; `--doctor=x` says `hop: --doctor=x: unknown --doctor mode, want: --doctor=short`, exit 2 | `hop.zsh:555` | none | missing | B |
 | `-V`, `-v`, `--version` | `hop.zsh:491`, `:136` | `main.go:102` prints `hopx 0.0.0-spike` | deviates | B |
 | `-h`, `--help`: usage, keys, and the registered kinds with `*` on defaults | `hop.zsh:47` | `main.go:25` | deviates: different text | B |
+| `-h`, `-V` and `--doctor` are cases of the option loop, so they act wherever they sit and stop parsing there: `hop -a -V` prints the version, `hop vpc -h` the usage, `hop -o -e -h` the usage (exclusivity is checked after the loop), and only an earlier bad option wins (`hop --bogus -h` exits 2) | `hop.zsh:485-570` | first word only (`main.go:89`), so `hop -a -V` says `hop: unknown option: -V` | deviates | R2 adds the cases to `parseHop`, calling B's bodies (4.2) |
 | `--` ends options; `hop: unknown option: X`, exit 2 | `hop.zsh:606` | `hop.go:84` | done | |
 | `hop /` cds to the repo root; `hop: not in a git repository`; `/` or `-` with anything else says `hop: / takes no other arguments`, exit 2 | `hop.zsh:596`, `:646` | `hop.go:73`, `:363` | done | |
 | `hop -` is `cd -` | `hop.zsh:638` | the init scripts do it; the bare binary exits 2 with a message | done in the shell | |
@@ -157,8 +162,8 @@ The resolver, rows and headless output are already proven: rows are byte-identic
 | `hop: fzf is not installed`, exit 1 | `hop.zsh:743` | `match/match.go` | done | |
 | fzf below the floor: four lines naming the version, the cause and the fix | `lib/ui.zsh:361` | `match/match.go:133`, one line | deviates | A |
 | `HOP_FZF_MIN` lowers the floor | `lib/ui.zsh:320` | none | missing | A |
-| An invalid `HOP_JUMP` warns `hop: HOP_JUMP=x is not one of auto, unique, never; using auto` | `hop.zsh:671` | `config/settings.go` warns in other words | deviates | C |
-| An invalid `HOP_ACTION` warns `hop: HOP_ACTION=x is not one of cd, open, reveal, cd+open, cd+reveal; using cd` once per call | `lib/actions.zsh:87` | `config/settings.go` | deviates | C |
+| An invalid `HOP_JUMP` warns `hop: HOP_JUMP=x is not one of auto, unique, never; using auto`, but only where hop() reads it: after `/` and `-` are handled, and never under `-p`, which sets the jump itself | `hop.zsh:671` | `config/settings.go` warns at load, in other words, under every flag | deviates | A prints it at 0.3.1's point; C keeps the raw value in `Settings` (4.2) |
+| An invalid `HOP_ACTION` warns `hop: HOP_ACTION=x is not one of cd, open, reveal, cd+open, cd+reveal; using cd` once per call, and only when no `--cd`, `-o`, `-e` or `--action=` decided the mode | `lib/actions.zsh:87`, `hop.zsh:667` | `config/settings.go`, at load | deviates | A, as for `HOP_JUMP` |
 | `hop: no kinds selected`, exit 2; `hop: no targets under PWD for kinds: k`, exit 1; `hop: no targets in ROOT for kinds: k`, exit 1 | `hop.zsh:772-797` | `hop.go` | done | |
 | Outside a repo: the workspace picker when workspaces exist (with the repo fallback), else the repo picker | `hop.zsh:758` | `hop.go:310` | done | |
 | `hop: no workspaces configured (edit FILE)`; `hop: not in a git repository, and no repos found (set $HOP_REPOS)` | `hop.zsh:376`, `:452` | `hop.go` | done | |
@@ -166,7 +171,7 @@ The resolver, rows and headless output are already proven: rows are byte-identic
 | `hopr` cds to the repo root | `hop.zsh:813` | none | missing | B (shell), uses `hop /` |
 | `hopw` cds to the workspace holding `$PWD`, longest prefix; `hop: PWD is not inside any configured workspace` | `hop.zsh:413` | none | missing | A (`hop __hopw`), B (shell function) |
 | `^G` and `alt-g` open hop from a half-typed line, which survives | `hop.zsh:827` | `shell/init/hopx.zsh` uses `push-input` plus `accept-line` | deviates: ` hop` reaches scrollback, and history without `HIST_IGNORE_SPACE`. Kept, because precmd hooks then see the new dir | B |
-| Esc out of the picker returns 0 | `hop.zsh:253` | returns 130 | deviates | A: return 0 |
+| Esc (and ctrl-c) out of the picker returns 0 | `hop.zsh:253` | returns 130, and `test/shell/pick.sh` and `pick.fish` assert 130 | deviates | R2: return 0 and flip the two assertions in one commit, since the code is A's and the tests are B's |
 
 ### 2.2 Resolver (`lib/match.zsh`; spike `internal/resolve/`)
 
@@ -233,7 +238,7 @@ The resolver, rows and headless output are already proven: rows are byte-identic
 | alt-a reloads with every kind, keeping `-c` and the history order | done | |
 | `--select-1` only for an empty query and never for a kind word; ordered mode for a resolver pick | done | |
 | The resolver's note above the legend | done | |
-| Non-modal legend, three lines of 35 columns or less (`lib/ui.zsh:13`) | deviates: adds `M-k` lines (`pick/args.go:112`) | A |
+| Non-modal legend, three lines of 35 columns or less (`lib/ui.zsh:13`) | deviates: adds `M-k` lines (`pick/args.go:112`) | A drops them. 0.3.1's last line says `M-a +conf`, naming Eric's `conf` kind; 1.0 keeps the spike's `M-a all`, a deliberate deviation listed in the CHANGELOG |
 | fzf exit 1 says `hop: no match for: q`; others say `hop: fzf exited with status N` | done | |
 | Callbacks run as `hop __verb` through `--with-shell 'hop __sh'`, never `$SHELL` | new design, done (`pick/shim.go:65`) | |
 | `/dev/tty` reopened when fds are pipes | done (`internal/tty`) | |
@@ -255,7 +260,7 @@ All missing in the spike, all A's.
 | Esc: in the menu goes back to the view you came from; in SEARCH returns to NORMAL keeping the query; in NORMAL with a query clears it; in NORMAL with no query quits. A query matching nothing comes back as an empty NORMAL list and the second esc restores all rows (0.3.0) | `:180`, CHANGELOG 0.3.0 |
 | Headers: `NORMAL  j/k move  g/G top/bot  / search  : view  ? help  enter cd  q quit` and the SEARCH line, re-flowed to three lines when wider than the pane (45% of `COLUMNS` from 120); `: view` only with a root; enter named by the mode, plus `c cd` or `M-enter cd` when Enter isn't cd | `:73` |
 | `?` overlay in the preview pane, label ` keys `, closed by any nav key; lists only the live optional keys (r, :, l, h, M-a) and what Enter does | `:183`, `bin/hop-preview:27-105` |
-| Escape guard: each alt-<char> hop doesn't own marks the time; o O e y Y b c l h q are refused within `HOP_GUARD_WINDOW` (0.15 s) of a mark, each refusal re-arms it, any malformed state fails open, `0` disables it; state lives in a mode-700 per-picker dir, stale ones reaped after a day | `:137-147`, `:257`, `:280`, `:514-531`, `bin/hop-guard` |
+| Escape guard: each alt-<char> hop doesn't own marks the time; o O e y Y b c l h q are refused within `HOP_GUARD_WINDOW` (0.15 s) of a mark, each refusal re-arms it, any malformed state fails open, `0` disables it, and it only exists with the modal layer on; state lives in a mode-700 per-picker dir, stale ones reaped after a day. In 1.0 that dir is the session dir (`hop-pick-*`), so the day-old reap applies to it, since a SIGKILLed picker leaves it behind | `:137-147`, `:257`, `:280`, `:514-531`, `bin/hop-guard` |
 | The kind-count cache is not ported: counts are live (43 ms on Eric's repo) | DEVIATIONS B3 #4, kept |
 
 ### 2.8 Kind menu (`lib/ui.zsh:187-210`, `bin/hop-kinds`; spike `callbacks.go:89`, `pick/session.go:61`)
@@ -327,10 +332,10 @@ Every variable becomes a `[settings]` key too. Env beats the file, which inverts
 
 | Variable | 1.0 | Owner |
 |---|---|---|
-| `HOP_CONFIG` | path of `config.toml`. A value ending in `.zsh` is zsh hop's, which 0.3.1 exports into every child; 1.0 ignores it for loading and uses it as `hop import`'s default source | C |
+| `HOP_CONFIG` | path of `config.toml`. A value ending in `.zsh` is zsh hop's, which 0.3.1 exports into every child; 1.0 ignores it for loading and uses it as `hop import`'s default source | R1 (ignoring it), C (import) |
 | `HOP_DEFAULT_KINDS`, `HOP_WORKSPACES_FILE`, `HOP_WORKSPACES`, `HOP_REPOS`, `HOP_ACTION`, `HOP_JUMP`, `HOP_CODE`, `HOP_HIST_MAX`, `HOP_CLIPBOARD`, `HOP_FZF_HEIGHT` | as 0.3.1 | done |
 | `HOP_HISTFILE` | as 0.3.1 | R (rename from `HOPX_HISTFILE`) |
-| `HOP_VIM`, `HOP_GUARD_WINDOW`, `HOP_FZF_MIN` | as 0.3.1 | A |
+| `HOP_VIM`, `HOP_GUARD_WINDOW`, `HOP_FZF_MIN` | as 0.3.1 | A (C parses them, 4.2) |
 | `HOP_DEBUG`, `HOP_DEBUG_LOG` | as 0.3.1 | B |
 | `HOP_HOPRC` | unsupported; `1` warns once | C |
 | `HOP_HOME` | gone; nothing reads it | |
@@ -355,7 +360,7 @@ Recipes are embedded TOML files. Three are core and six are opt-in:
 
 A config with neither a `recipes` key nor any `[[kind]]` gets `recipes = ["dir", "project", "file"]`. Once a config sets `recipes` or declares a kind, it gets exactly what it names, as 0.3.1 loads presets only into an empty registry.
 
-`~/.config/hop/config.zsh` present with no `config.toml` prints one line, `hop: found config.zsh; run 'hop import -o ~/.config/hop/config.toml' to use it`, and runs on the zero-config defaults.
+When the config path in use doesn't exist (no `HOP_CONFIG`, or one ending in `.zsh`) and `${XDG_CONFIG_HOME:-~/.config}/hop/config.zsh` does, hop prints one line, `hop: found config.zsh; run 'hop import -o ~/.config/hop/config.toml' to use it`, and runs on the zero-config defaults. A `HOP_CONFIG` naming a TOML file never prints it, so the parity harness's stderr stays byte-equal. It goes through `cfg.Warnings`, which only the top-level call prints, never a callback whose stderr fzf would show.
 
 ### 3.2 The project kind
 
@@ -382,7 +387,7 @@ preview = ["README.md", "README", "package.json", "go.mod", "Cargo.toml", "pypro
 
 ### 3.3 Recipes
 
-- Top-level `recipes = ["terragrunt", "helm"]` loads those recipes in order, before the file's `[[kind]]` tables. It replaces the spike's `presets` key; there's no alias, because the only existing TOML is Eric's, which the importer regenerates.
+- Top-level `recipes = ["terragrunt", "helm"]` loads those recipes in order, before the file's `[[kind]]` tables. It replaces the spike's `presets` key with no alias. Three checked-in TOML files use `presets` today: `testdata/eric.toml`, `match.toml` (`helm`, `terraform-modules`, `dir`, which the resolver's 126 suite_match cases and `resolve.tsv` depend on) and `fixture.toml`. C regenerates every one through `hop import`, so each inlines the frozen 0.3.1 definitions with `recipes = []` and no test config moves when a recipe goes generic. `fixture.toml`'s `--fn` kinds run through `compat.zsh`, which goes, so C rewrites them as `exec` scripts in `testdata/` or drops them, and says which in the agnostic ledger.
 - A `[[kind]]` with a recipe's kind name replaces it in place, keeping its menu position, and `extend = true` merges into it, as today.
 - `hop --doctor` lists the available recipes and which are loaded. `hop -h` lists the registered kinds as today.
 - The opt-in recipes become generic. They assume a tool's file names, never a directory convention:
@@ -406,7 +411,7 @@ preview = ["README.md", "README", "package.json", "go.mod", "Cargo.toml", "pypro
 | `recipes` | top level | 3.3 |
 | `marker` as a list | marker kinds | a dir holding any of these is one row; entries may be basename globs (`*.csproj`) or a relative path (`manifests/init.pp`) |
 | `min_depth` | marker kinds | the matched dir must sit at least this many segments below `under` (or the root); default 0 |
-| `nested` | marker kinds | `false` drops a match inside another match of the same source; default `true` |
+| `nested` | marker kinds | `false` drops a match inside another match of the same source; default `true`. Applied after `min_depth` and `exclude`, so a root `package.json` that `min_depth = 1` dropped can't swallow every package below it |
 | `[[kind.source]]` | any kind | a kind built from several shapes, each a table with its own `dirs`, `files` or `marker` and the per-shape options; rows come out source by source, in order. `name`, `desc` and `default` stay on the kind. A kind has either a top-level shape or sources, never both |
 | `skip` | `builtin = "dir"` | top-level dirs that are never targets; default `["target", "tmp"]` |
 | `env_colors` | `[settings]` | env word to colour class: `{ prod = ["prod"], staging = ["staging"], dev = ["dev"] }` by default; any other env is magenta |
@@ -462,7 +467,7 @@ After this, `kinds/builtins.go` keeps `builtinDir` and loses `builtinHelm` and `
 
 ### 3.6 Strava- and Eric-specific things to move out
 
-From `git grep -niE 'strava|acct-|mesos|cluster-apps|playbook|playground|kubernetes/(values|services|charts)|provider_\*|variables_defaults|versions_override'` on a4c7f42:
+From `git grep -niE 'strava|acct-|mesos|cluster-apps|playbook|playground|kubernetes/(values|services|charts)|provider_\*\.tf|variables_defaults|versions_override|\+conf'` on a4c7f42 (the spike's `provider_\*` pattern also matched the importer's legitimate `_hop_provider_*`, so it's anchored on `.tf` here):
 
 | What | zsh | spike | Goes to |
 |---|---|---|---|
@@ -473,14 +478,23 @@ From `git grep -niE 'strava|acct-|mesos|cluster-apps|playbook|playground|kuberne
 | `terraform/modules` depth 2, `modules/`, `serverless/`, `backstage/` | `presets/*.zsh` | `config/presets/*.toml` | Eric's config; recipes go generic |
 | All eight presets as the zero-config default | `hop.zsh:37` | `config/config.go:21` `PresetOrder`, `LoadAllPresets` | `dir`, `project`, `file` |
 | `playground` as a dev colour | `lib/providers.zsh:161-162` | `rows/rows.go:102` | `[settings] env_colors` in Eric's config |
+| `M-a +conf` in the non-modal legend, naming Eric's `conf` kind | `lib/ui.zsh:29` | already `M-a all` | stays `M-a all` (2.6) |
+| The trim error's example `trim must be a table like { scope = "acct-" }` | | `config/config.go:431`, and the comment at `:427` | a generic prefix, such as `{ scope = "team-" }` |
 | Usage examples `hop vpc prod`, `hop terraform/x`, `-k tg,helm` | `hop.zsh:55-69` | | generic examples in B's usage text |
 | README examples (`terraform/payments/...`, `kubernetes/values/web/`) | `README.md:15` | | generic examples in the new README |
 | Default parity repo `~/strava/configuration`, and Eric's paths in tests | | `main_test.go:119`, `realrepo_test.go:22`, `pty_test.go:105`, `test/parity/*.sh` | `HOP_PARITY_REPO` required with no default; R2 moves every test that needs Eric's repo into `eric_test.go`, skipped unless it's set |
 | Comments citing Strava paths | `lib/match.zsh` throughout | `resolve/resolve.go:738`, `resolve/elsewhere.go:29`, `resolve/report.go:14`, `config/config.go:427` | reworded with generic examples |
 
-Kept, because they're generic: the env-word map (`prd`, `stg`, `devel`...), `CLAUDE.md` in the dir preview, `target` and `tmp` in the dir skip list, and the default workspace guesses.
+Kept, because they're generic: the env-word map (`prd`, `stg`, `devel`...), `CLAUDE.md` in the dir preview, `target` and `tmp` in the dir skip list, the default workspace guesses, and the row's fixed `scope`, `env`, `region`, `name` columns, which every layout and the 4-field row depend on.
 
-Gate: the grep above, run over the tree minus `testdata/eric.toml`, `eric_test.go`, `docs/spike/`, `docs/V1-PLAN.md` and `CHANGELOG.md`, prints nothing.
+Also kept: the test fixtures ported verbatim from 0.3.1's suites. `internal/testfix` (frozen), `testdata/golden/`, `testdata/match.*`, `resolve_test.go`, `hop_test.go`'s `BuildMatch` paths and `test/parity/corpus/` reproduce `match_fixture` and Eric's real queries, and their goldens are captured from zsh hop, so renaming them buys nothing and breaks the capture. They're test data, not shipped behaviour.
+
+Gates, both run from the repo root:
+
+1. Shipped files are clean: `git grep -niE '<the pattern above>' -- '*.go' ':!:*_test.go' ':!:internal/testfix/' internal/config/recipes internal/shell/init README.md config.example.toml docs ':!:docs/spike/' ':!:docs/V1-PLAN.md'` prints nothing, and neither does `hop -h | grep -iE '<the pattern>'`.
+2. Nothing anywhere names Eric's machine: `git grep -nE '~/strava|HOME/strava|/Users/eknorr' -- ':!:testdata/eric.toml' ':!:*eric_test.go' ':!:docs/spike/' ':!:docs/V1-PLAN.md' ':!:CHANGELOG.md'` prints nothing. (`~/.config/hop/config.zsh` is zsh hop's own default path, not Eric's, so the importer and 3.1 may name it.)
+
+The importer's frozen 0.3.1 definitions, the helm sources in 3.5 included, live in `internal/importer/v031/presets.toml`, never as Go string literals, so gate 1 doesn't need an exception for them.
 
 ### 3.7 Eric's import
 
@@ -518,45 +532,53 @@ Move the spike to the root, update imports, `build.sh` and the parity harness pa
 
 1. `git mv` everything in `spike/hopx/` to the repo root; merge `spike/hopx/.gitignore` (`dist/`) into the root `.gitignore` and add `bin/hop` there too (`bin/` itself still holds zsh's scripts until retirement, so the ignore is the file, not the dir). Move `spike/parity` to `test/parity`, `spike/shell/test` to `test/shell`, `spike/docker` to `test/docker`, `spike/docs` to `docs/spike`, and `spike/hopx/build.sh` to `scripts/build.sh`.
 2. `go.mod` module `github.com/etknorr/hop`; rewrite every import from `github.com/etknorr/hop/spike/hopx/internal/...`.
-3. Name the binary `hop`: `go build` output, `scripts/build.sh` names (`hop-<os>-<arch>`), the prompt `hop ▸ `, every `hopx:` message to `hop:`, every callback string (`hopx __preview` to `hop __preview`), the init scripts (`init/hop.zsh` and friends, function default `hop`), and `HOPX_*` env names to `HOP_*` (`HOP_CONFIG`, `HOP_HISTFILE` with the default `~/.local/state/hop/history`, `HOP_CMDFILE`, `HOP_SESSION`, `HOP_LAYOUT` for the test-only fixed layout, `HOP_BIN`). The parity knobs become `HOP_PARITY_HOME` (the oracle install), `HOP_PARITY_REPO`, `HOP_PARITY_ZSHCONFIG` (the oracle's config.zsh, the spike's `HOP_PARITY_CONFIG`) and `HOP_PARITY_CONFIG` (the Go side's TOML, the spike's `HOPX_PARITY_CONFIG`, default `testdata/eric.toml`). `--cmd NAME` still renames the function.
+3. Name the binary `hop`: `go build` output, `scripts/build.sh` names (`hop-<os>-<arch>`), the prompt `hop ▸ `, every `hopx:` message to `hop:`, every callback string (`hopx __preview` to `hop __preview`), the init scripts (`init/hop.zsh` and friends, function default `hop`), and `HOPX_*` env names to `HOP_*` (`HOP_CONFIG`, `HOP_HISTFILE` with the default `~/.local/state/hop/history`, `HOP_CMDFILE`, `HOP_SESSION`, `HOP_LAYOUT` for the test-only fixed layout, `HOP_BIN`). The parity knobs become `HOP_PARITY_HOME` (the oracle install), `HOP_PARITY_REPO`, `HOP_PARITY_ZSHCONFIG` (the oracle's config.zsh, the spike's `HOP_PARITY_CONFIG`) and `HOP_PARITY_CONFIG` (the Go side's TOML, the spike's `HOPX_PARITY_CONFIG`, default `testdata/eric.toml`). `--cmd NAME` still renames the function. The rename is what lets the binary see the `HOP_CONFIG=…/config.zsh` that zsh hop exports into every agent's and Eric's shell, so R1 also lands 2.15's rule that a `HOP_CONFIG` ending in `.zsh` is never loaded as TOML (falling back to the default path), with a test; without it every manual run in an inherited shell fails to parse a zsh file.
 4. The zsh widget can't be named `hop-widget`, because zsh hop's is. Name it `<cmd>-widget`, and skip binding ^G and alt-g only when `${widgets[hop-widget]}` is zsh hop's (`user:_hop_widget`). The completion function is `_<cmd>_complete`, so it never replaces zsh hop's `_hop`.
-5. Point the live-zsh tests at `testfix.RefHome("v0.3.1")` (unpacked from the tag), not the worktree's `hop.zsh`: the four failures in section 0, `match_test.go`'s read of `lib/ui.zsh`, and every `HopHome()` use. Resolve comparisons run zsh with `HOP_VIM=0`. This is what lets the tests survive deleting `hop.zsh`.
+5. Point the live-zsh tests at `testfix.RefHome("v0.3.1")` (unpacked from the tag), not the worktree's `hop.zsh`: the four failures in section 0, `match_test.go`'s read of `lib/ui.zsh`, and every `HopHome()` use, which includes `importer_test.go`'s reads of `config.example.zsh` and `presets/*.zsh` and `resolve_test.go`'s read of `tests/fixtures/nonsense.txt`. Resolve comparisons run zsh with `HOP_VIM=0`. This is what lets the tests survive deleting `hop.zsh`. Two traps in `testfix`, which R1 fixes before it freezes: `HopHome()` is `ModuleRoot()/../..`, which becomes the repo's parent once the module is at the root, and `HaveZsh()` tests for the worktree's `hop.zsh`, so after retirement every live-zsh test would SKIP and `go test` would still say ok. `HopHome()` becomes the module root (used only for `git -C`), `Zsh()` runs against `RefHome`, and `HaveZsh()` checks zsh plus `RefHome(RefLayout) != ""`.
 6. Parity harness: paths for the new layout; the oracle is `HOP_PARITY_HOME` and the repo `HOP_PARITY_REPO`, both required, with a usage line and exit 2 when unset, so no Eric path lives in the scripts. Each side gets its own env (`HOP_CONFIG` and `HOP_HISTFILE` mean different files to the two hops).
-7. `TestMain` in every package that runs the binary or writes history sets `HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` to a temp dir.
+7. `TestMain` in every package that runs the binary or writes history sets `HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` to a temp dir and unsets every inherited `HOP_*`, `HOPX_*` and `FZF_*` variable. It first pins `GOMODCACHE`, `GOCACHE` and `GOPATH` to their real values from `go env`, because `hop_test.go` runs `go build` and a temp `HOME` would otherwise send it to an empty module cache and the network. One helper in `testfix` does all of this, so each `TestMain` is one call.
 
 Gates:
 
 - `go build ./... && go vet ./... && gofmt -l .` (empty) and `go test ./...` all pass at the root, the four failures included.
 - `HOP_PARITY_HOME=~/.local/share/hop HOP_PARITY_REPO=~/strava/configuration HOP_PARITY_ZSHCONFIG=~/.config/hop/config.zsh test/parity/rows.sh`, then `resolve.sh` and `e2e.sh` the same way, with the default `testdata/eric.toml`: identical, as the spike recorded.
 - `test/shell/run-all.sh` passes zsh, bash 5.3, `/bin/bash` 3.2 and fish (docker).
-- `git grep -n 'spike/hopx\|hopx'` prints nothing outside `docs/spike/` and `CHANGELOG.md`.
-- The history checksum is unchanged.
+- `git grep -n 'spike/hopx\|hopx'` prints nothing outside `docs/spike/`, `docs/V1-PLAN.md` and `CHANGELOG.md`.
+- `go test -v ./... 2>&1 | grep -c -- '--- SKIP'` is no higher than on the spike, and the four formerly failing tests report PASS, not SKIP.
+- The history, debug-log and read-only checks in section 0 hold.
 
 Commits, for example: `refactor: move the hopx module to the repo root`, `refactor: rename the hopx binary and env to hop`, `test: compare live-zsh tests against v0.3.1`, `test: require the parity oracle and repo by env`.
 
 ### 4.2 R2: seams
 
-Small, behaviour-neutral changes that give A, B and C files of their own. Same agent, same branch, after R1.
+Small changes that give A, B and C files of their own. Same agent, same branch, after R1. They're behaviour-neutral except two parity fixes whose code and tests straddle owners: `-h`, `-V` and `--doctor` anywhere in the option loop (step 1), and esc exiting 0 (step 8).
 
-1. Verb registry: `main.go` gets `register(name string, public bool, fn func(args []string, stdout, stderr io.Writer) int)`, and each `cmd_*.go` registers its verbs in `init()`. Public verbs take the first word only when nothing precedes it, as `upgrade` does in 0.3.1. Split `callbacks.go`, the command half of `main.go` and their tests into `cmd_picker.go` (`__rows`, `__menu`, `__key`, `__header`, `__preview`, `__sh`, `__resolve-dump`), `cmd_shell.go` (`init`, `__complete`) and `cmd_config.go` (`config`, `kinds`, `rows`, `config import`).
+1. Verb registry: `main.go` gets `register(name string, public bool, fn func(args []string, stdout, stderr io.Writer) int)`, and each `cmd_*.go` registers its verbs in `init()`. Public verbs take the first word only when nothing precedes it, as `upgrade` does in 0.3.1. Split `callbacks.go`, the command half of `main.go` and their tests into `cmd_picker.go` (`__rows`, `__menu`, `__key`, `__header`, `__preview`, `__sh`, `__resolve-dump`), `cmd_shell.go` (`init`, `__complete`) and `cmd_config.go` (`config`, `kinds`, `rows`, `config import`, and `load()`), each with its own `cmd_*_test.go`; `main_test.go` keeps only dispatch tests. `load()` prints each `cfg.Warnings` line verbatim instead of prefixing `hopx: warning:`, so C owns the wording without touching B's file.
+   `-h`, `-V` and `--doctor` leave the first-word registry and become cases in `parseHop` (2.1), alongside `--vim` and `--no-vim`, each calling a function in a file its owner holds: `usage(stdout)` and `printVersion(stdout)` and `doctor(args, stdout)` in `cmd_shell.go` (B, stubbed to today's text and `hop: --doctor is not built yet`, exit 2), and an `o.vim` field A reads. After this, nobody but A edits `parseHop`.
 2. Shrink the first-word verbs to `init`, `import` and `upgrade` (the last registered by B). `rows` becomes `__dump-rows`, `kinds` becomes `__kinds`, `config check|path` becomes `__config check|path`, `config import` becomes `import`, and `help` becomes a query again, as in 0.3.1. `hop config`, `hop rows` and `hop kinds` are then queries; a dir named `config` is common. Update `test/parity/*.sh` to match.
 3. API stubs, so each workstream compiles against the others from day one:
    - `internal/debuglog`: `Printf(format string, args ...any)`, a no-op until B fills it in.
    - `internal/version`: `String() string` returning the current constant.
    - `act.CodeUsable() (ok bool, reason string)`, exported, with today's body.
-   - `config.Settings` gains `Debug`, `DebugLog`, `FzfMin`, `GuardWindow` and `EnvColors`, each parsed from env and `[settings]` and otherwise unused.
+   - `config.Settings` gains `Vim`, `Debug`, `DebugLog`, `FzfMin`, `GuardWindow` and `EnvColors`, each parsed from env and `[settings]` and otherwise unused, plus `JumpRaw` and `ActionRaw`, the values as given, so A can word 2.1's warnings at hop()'s points.
+   - `config.Recipes() []string`, returning today's `PresetOrder`.
+   - `version.InitHash() string`, returning `""`.
+   - `workspace.For(dir string, wss []Workspace) (string, bool)`, `_hop_ws_for`'s longest-prefix rule, which A's `hop __hopw` and B's doctor ("workspace for PWD") both need; added before `workspace` freezes so neither writes its own.
+   - `testfix.BuildFrom(dir string, files map[string]string) error`, so C's recipe, `project` and helm-gap fixtures and A's level fixtures are built from maps in their own test files, never by editing the frozen `testfix`.
+   - `testdata/fetch-repos.sh`, a stub that exits 0 with an empty `testdata/repos.lock`, so B's CI can call it from day one and C fills it in.
 4. `README.md` becomes a skeleton with one section per owner, each between a heading and an `<!-- end: X -->` line so git merges the three without conflict: Install and shell setup (B), Using the picker (A), Configuring kinds (C), Upgrading, releases and the environment (B). The 0.3.1 README stays readable with `git show v0.3.1:README.md`.
-5. A ledger per workstream, `docs/v1/ported-interactive.md`, `ported-ops.md` and `ported-agnostic.md`, each listing the `t '...'` case names from its suites (below), to fill in as Go test name or `n/a: reason`.
-6. `.gitignore`: `testdata/repos/`.
-7. Move every test gated on `HOP_PARITY_REPO` (`realrepo_test.go`, the Eric-repo cases in `main_test.go` and `pty_test.go`) into `eric_test.go`, so Eric's paths live in one file.
+5. A ledger per workstream, `docs/v1/ported-interactive.md`, `ported-ops.md` and `ported-agnostic.md`, to fill in as Go test name or `n/a: reason`. R2 sorts all 713 `t '...'` cases one by one, by the package whose test would hold the port, not by suite, because the suites cut across owners: `suite_smoke` holds doctor and version (B) but also `_hop_rank`, `_hop_remember` and reload cases (A) and `-c` filtering (C), and `suite_core` holds `HOP_DEBUG` pick logging (B's log, A's call site). The table below is only where each suite's cases mostly land. Cases for a frozen package (`workspace`, `collate`, `tty`) go to C's ledger, and a frozen package takes new `*_test.go` files only, never edits to existing files.
+6. `.gitignore`: `testdata/repos/`. `ci.yml`: push on `main` and `v1/**` plus `workflow_dispatch`, and a minimal Go job (checkout with `fetch-depth: 0` for the `v0.3.1` tag, setup-go from `go.mod`, upstream fzf, zsh, then vet, gofmt and `go test ./...` on macOS and ubuntu). Today's workflow runs only on `main` and only the zsh suites, so without this A's and C's pushed branches get no CI at all until B's lands.
+7. Move every test gated on `HOP_PARITY_REPO` (`realrepo_test.go`, the Eric-repo cases in `main_test.go` and `pty_test.go`) into `eric_test.go`, so Eric's paths live in one file. `importer_test.go`'s `TestEricConfig` stays in its package. A new Eric-repo test goes in its owner's own `*_eric_test.go`.
+8. Esc's exit status: 130 becomes 0, and the `cancel-130` assertions in `test/shell/pick.sh` and `pick.fish` flip with it, in one commit (2.1). It sits in R2 because its code is A's and its tests are B's.
 
-| Suites (cases) | Ledger |
+| Suites (cases) | Mostly lands in |
 |---|---|
 | keymap (71), guard (15), pty (9), pty_escape (11), pty_filter (4), pty_reload (1), actions (39), clipboard (12), editor_path (8), nottty (31), fzf_version (24), match (93), core (51) | interactive |
 | upgrade (50), completions (10), smoke (51), harness (4), runner (2) | ops |
 | dsl (44), providers (78), layout (16), cache (2), workspaces (52), integration (35) | agnostic |
 
-Gates: R1's gates again, plus `hop config` and `hop kinds` resolving as queries in a test. Push `v1/restructure`, then fast-forward `v1/go` to it (the integration owner does this).
+Gates: R1's gates again, plus `hop config` and `hop kinds` resolving as queries in a test, `hop -a -V` printing the version, `hop vpc -h` printing usage, and esc exiting 0 in `run-all.sh`. Push `v1/restructure`, then fast-forward `v1/go` to it (the integration owner does this).
 
 ### 4.3 Ownership
 
@@ -564,22 +586,25 @@ Strict: a workstream edits only its own paths. Anything else goes through the in
 
 | Path | A interactive | B ops | C agnostic |
 |---|---|---|---|
-| `hop.go`, `cmd_picker.go`, `pty_test.go`, `hop_test.go`, `eric_test.go` | owns | | |
+| `hop.go` (with `parseHop`), `cmd_picker.go`, `cmd_picker_test.go`, `pty_test.go`, `hop_test.go`, `eric_test.go` | owns | | |
 | `internal/pick`, `keymap` (new), `guard` (new), `act`, `resolve`, `match`, `mru`, `ptytest` | owns | | |
+| `testdata/golden/argv.golden`, `testdata/golden/resolve.tsv`, `testdata/resolve_runner.zsh`, `testdata/golden/interactive/` | owns | | |
 | `test/parity/` | owns edits | runs | runs |
 | `docs/SMOKE.md`, README "Using the picker", `docs/v1/ported-interactive.md` | owns | | |
-| `main.go`, `main_test.go`, `cmd_shell.go` | | owns | |
+| `main.go`, `main_test.go`, `cmd_shell.go`, `cmd_shell_test.go` | | owns | |
 | `internal/shell`, `debuglog`, `doctor` (new), `upgrade` (new), `version` | | owns | |
 | `test/shell/`, `test/docker/`, `scripts/build.sh`, `.github/`, `.goreleaser.yaml`, `Formula/` | | owns | |
 | `docs/RELEASING.md`, README "Install and shell setup" and "Upgrading, releases and the environment", `docs/v1/ported-ops.md` | | owns | |
-| `cmd_config.go` | | | owns |
+| `cmd_config.go`, `cmd_config_test.go` | | | owns |
 | `internal/config`, `kinds`, `importer`, `rows`, `gitls` | | | owns |
-| `testdata/` (all of it), `config.example.toml`, `workspaces.example` | | | owns |
+| the rest of `testdata/`: every config (`eric.toml`, `match.*`, `fixture.*`), the row goldens, `public/`, `repos.lock`, `fetch-repos.sh`; `config.example.toml`, `workspaces.example` | | | owns |
 | README "Configuring kinds", `docs/v1/ported-agnostic.md` | | | owns |
-| `internal/collate`, `tty`, `testfix`, `workspace`, `go.mod`, `go.sum` | frozen | frozen | frozen |
-| `CHANGELOG.md`, `VERSION`, zsh files, `tests/` | integration only | | |
+| `testdata/golden/ops/` | | owns | |
+| `internal/collate`, `tty`, `testfix`, `workspace` | new `*_test.go` only | new `*_test.go` only | new `*_test.go` only |
+| `go.mod`, `go.sum` | frozen | frozen | frozen |
+| `CHANGELOG.md`, `VERSION`, `.gitignore`, `.editorconfig`, zsh files, `tests/` | integration only | | |
 
-Tests that need a fixture from `testdata/` read it; only C changes it. A or B needing a new golden puts it under `testdata/golden/interactive/` or `testdata/golden/ops/`, which C leaves alone.
+Tests that need a config or fixture from `testdata/` read it; only C changes those. The argv and resolve goldens are A's, because the modal layer and the T4 hint are what move them; a C change that shifts a resolve golden (a regenerated `match.toml`, say) is a bug in C's change, since the import must reproduce 0.3.1 exactly.
 
 ### 4.4 Interfaces between workstreams
 
@@ -591,6 +616,9 @@ Tests that need a fixture from `testdata/` read it; only C changes it. A or B ne
 | `act.CodeUsable() (bool, string)` | A | B (doctor) | the same check every code verb runs, so doctor can't disagree |
 | `debuglog.Printf` | B | A (generate, resolve, pick, dispatch lines in 2.11) | never fails, no-op unless `Settings.Debug` |
 | `version.String()`, `version.InitHash()` | B | A (none yet), B | |
+| `usage`, `printVersion`, `doctor` in `cmd_shell.go` | B | A (`parseHop` calls them) | signatures fixed by R2; B changes only the bodies |
+| `Settings.JumpRaw`, `Settings.ActionRaw` | C | A | the value as given by env or file, unvalidated, `""` when unset |
+| `workspace.For`, `testfix.BuildFrom` | R2 | A, B, C | frozen |
 | Shell to binary | B (init) | A (picker) | `HOP_CMDFILE` set per call; the binary writes one absolute path there with `O_EXCL`, mode 0600, no newline; the function `cd`s with plain `cd`; exit 0 success or cancel, 1 nothing chosen or matched, 2 usage. `hop -` never reaches the binary; `hopr` is `hop /`; `hopw` calls `hop __hopw`. The function exports `HOP_SHELL=<shell>` and `HOP_INIT_HASH=<hash>` for that call |
 | Callbacks | A | | every fzf callback is `hop __<verb>` through `--with-shell '<abs hop> __sh'`; state is the session JSON named by `HOP_SESSION` |
 | `hop __complete <words...>` | B | shells | one candidate per line, `word TAB description` |
@@ -607,16 +635,16 @@ Design:
 - `hop __keys` renders the `?` overlay (`bin/hop-preview --keys`), live keys and Enter mode from the session.
 - `internal/guard`: `hop __guard mark` and `hop __guard check <action>`, state in the session dir. Port `bin/hop-guard`'s fail-open rules, re-arm and `HOP_GUARD_WINDOW` exactly. Measure the Go fork cost on an idle machine and at load, and record it in `docs/v1/ported-interactive.md`, since the 0.15 s window was sized for zsh's 15 to 22 ms fork.
 - Levels run in-process in `hop.go`: a stack of {level, scope}. l/ctrl-l pushes (workspace to its repos, repo to its targets), h/ctrl-h pops, or from the top builds the level above (targets to all repos, repos to workspaces). Each level opens with an empty query. l and h are bound, in the legend and in the overlay only where that move exists. A repo opened by drilling isn't `cd`'d into; the final Enter decides.
-- T4 hint reads the vim setting. Esc out returns 0. The four-line fzf floor message and `HOP_FZF_MIN`. `act.CodeUsable` gets the IPC socket, SSH, DISPLAY and WSL checks. `hop __hopw`.
+- T4 hint reads the vim setting. The `HOP_JUMP` and `HOP_ACTION` warnings at hop()'s points (2.1). The four-line fzf floor message and `HOP_FZF_MIN`. `act.CodeUsable` gets the IPC socket, SSH, DISPLAY and WSL checks. `hop __hopw`.
 - `docs/SMOKE.md`: the manual checks that need eyes (header wrapping at 80 columns, clipping, the overlay's width), rewritten from `SMOKE.md`.
 
 Tests:
 
 - Argv goldens for NORMAL start, SEARCH start, `HOP_VIM=0`, a workspace level, a repo level and a targets level, and every argv parses under fzf 0.60.3 and 0.67.0 (`fzf <argv> --filter x </dev/null` exits 0).
-- pty tests through `internal/ptytest`, fullscreen (`HOP_FZF_HEIGHT=`), each run against `bin0603/fzf`, `bin0670/fzf` and the host's 0.73.1: j j k moves; `/` then `vpc` filters; esc keeps the query and j/k walk the filtered rows; esc esc restores all rows, including from a zero-match query; esc on an empty query exits 0; `:` opens the menu with the query cleared, enter switches with `-c` kept, esc goes back; `?` opens and j closes the overlay; o, O, e, y, Y, b and c with stub `code`, `gh`, editor and clipboard on PATH; l and h across workspace, repo and targets on a fixture with two workspaces; a forged `\e]11;rgb:...\e\\` burst followed by `b` doesn't run the stub `gh`, while `j j b` at 60 ms spacing does; `HOP_VIM=0` shows the plain legend and alt-a reloads.
+- pty tests through `internal/ptytest`, fullscreen (`HOP_FZF_HEIGHT=`), each run against `bin0603/fzf`, `bin0670/fzf` and the host's 0.73.1 (the latest, 0.74.5 today, is covered by B's CI test job once the branches meet, section 5): j j k moves; `/` then `vpc` filters; esc keeps the query and j/k walk the filtered rows; esc esc restores all rows, including from a zero-match query; esc on an empty query exits 0; `:` opens the menu with the query cleared, enter switches with `-c` kept, esc goes back; `?` opens and j closes the overlay; o, O, e, y, Y, b and c with stub `code`, `gh`, editor and clipboard on PATH; l and h across workspace, repo and targets on a fixture with two workspaces; a forged `\e]11;rgb:...\e\\` burst followed by `b` doesn't run the stub `gh`, while `j j b` at 60 ms spacing does; `HOP_VIM=0` shows the plain legend and alt-a reloads.
 - Every case in `docs/v1/ported-interactive.md` is a Go test or says why not.
 
-Gates: `go vet`, `go test ./...` with the pty tests passing on all three fzf versions; `resolve.sh` and `e2e.sh` identical with the modal layer on and with `HOP_VIM=0` (A adds the `PARITY_VIM` loop to the harness); `rows.sh` identical; `test/shell/run-all.sh` still passes; history checksum unchanged.
+Gates: `go vet`, `go test ./...` with the pty tests passing on all three fzf versions; `resolve.sh` and `e2e.sh` identical with the modal layer on and with `HOP_VIM=0` (A adds the `PARITY_VIM` loop to the harness); `rows.sh` identical; `test/shell/run-all.sh` still passes; section 0's history and read-only checks hold.
 
 ### 4.6 B: ops
 
@@ -632,10 +660,11 @@ Design:
   - go install (build info names module `github.com/etknorr/hop` with a semver): runs `go install github.com/etknorr/hop@<vX.Y.Z or latest>`, and warns when `go env GOBIN` (or `GOPATH/bin`) isn't the running binary's dir.
   - checkout (the executable sits in a git work tree whose `go.mod` is this module): every 0.3.1 rule in 2.12, then `go build -o <the executable> .`.
   - unknown: prints what it found and the three install commands.
-  - `--check` for all of them: installed version against the newest strict `vX.Y.Z` from `git ls-remote --tags --refs https://github.com/etknorr/hop`, so it needs no API token.
+  - `--check` for all of them: installed version against the newest strict `vX.Y.Z` from `git ls-remote --tags --refs https://github.com/etknorr/hop` (a checkout asks its own `origin`, as 0.3.1 does), so it needs no API token. The URL is overridable by an undocumented `HOP_UPGRADE_REMOTE`, so tests point it at a local bare repo and never reach GitHub.
+  - A 0.3.x zsh checkout upgraded across the major lands on a tree with no `hop.zsh` (risk table, section 7). 1.0 can't fix that from the Go side; the README's migration section and the CHANGELOG say to install the binary first and never `hop upgrade` a zsh hop to 1.0.
 - Release: `.goreleaser.yaml` builds darwin and linux on amd64 and arm64 with `CGO_ENABLED=0 -trimpath -ldflags '-s -w -X .../internal/version.Version={{.Version}}'`, archives, checksums, and the release body from the matching CHANGELOG section. `release.yml` runs on `v*` tags, fails unless the tag is `v$(cat VERSION)`, and runs goreleaser through its pinned action.
 - Formula: `Formula/hop.rb` builds from source (`url "https://github.com/etknorr/hop.git", tag: "vX.Y.Z"`, `depends_on "go" => :build`, `depends_on "fzf"`, `head ... branch: "main"`), so it works on macOS and Linux, needs no bottles and needs no goreleaser Homebrew support. The release commit bumps its tag line with VERSION. Install: `brew tap etknorr/hop https://github.com/etknorr/hop` then `brew install etknorr/hop/hop`.
-- CI (`ci.yml`, keeping the zsh jobs until retirement): `push` on `main` and `v1/**`, `pull_request` and `workflow_dispatch`. Jobs: test on macos-latest and ubuntu-latest (setup-go from `go.mod`, latest fzf, zsh, `actions/checkout` with `fetch-depth: 0` for the `v0.3.1` tag, then vet, gofmt and `go test ./...`); floor on ubuntu with fzf 0.60.3 and 0.67.0, checksum-verified as today, running the pty and argv tests; shells on ubuntu (zsh, bash 5, fish from apt) and macOS (zsh, `/bin/bash` 3.2, brew bash 5) running `test/shell/run-all.sh` with `NO_DOCKER=1` and host fish; cross running `scripts/build.sh` for all six targets; formula running `brew style` and `brew install --HEAD --build-from-source ./Formula/hop.rb` on macOS.
+- CI (`ci.yml`, keeping the zsh jobs until retirement): triggers and the minimal Go job are R2's (4.2 step 6); B grows that job into the full matrix and adds the step that runs `testdata/fetch-repos.sh` before the tests. Jobs: test on macos-latest and ubuntu-latest (setup-go from `go.mod`, latest fzf, zsh, `actions/checkout` with `fetch-depth: 0` for the `v0.3.1` tag, then vet, gofmt and `go test ./...`); floor on ubuntu with fzf 0.60.3 and 0.67.0, checksum-verified as today, running the pty and argv tests; shells on ubuntu (zsh, bash 5, fish from apt) and macOS (zsh, `/bin/bash` 3.2, brew bash 5) running `test/shell/run-all.sh` with `NO_DOCKER=1` and host fish; cross running `scripts/build.sh` for all six targets; formula on macOS and ubuntu running `brew style Formula/hop.rb`, then installing from this commit, not from a tag or `main`: `--HEAD` builds `main`, which has no `go.mod` until 1.0 merges, and recent Homebrew rejects a formula file outside a tap. So the job copies the formula into a throwaway local tap (`brew tap-new`) with `url` rewritten to `file://$GITHUB_WORKSPACE`, `using: :git, revision: "$GITHUB_SHA"`, then runs `brew install --build-from-source`, `brew test` and `hop -V`. The formula's real tag URL can only be exercised after Eric tags, so `release.yml` ends with a job that taps `https://github.com/etknorr/hop`, installs `etknorr/hop/hop` on both OSes and checks `hop -V` names the tag.
 - `docs/RELEASING.md`: the same steps, with the formula tag bump added and the manual `gh release create` replaced by the release workflow.
 
 Tests: `bash -n`, `/bin/bash -n`, `zsh -n` and `fish -n` on every init output; `run-all.sh` green on four shells; doctor goldens for full and short with a fake `HOME`; upgrade against a local bare-repo origin for every checkout refusal and move from `suite_upgrade.zsh`, and with stub `brew` and `go` on PATH for the other two methods; completion cases for comma lists, exclusions and `upgrade`; `-V` with and without a stale `HOP_INIT_HASH`; `go run github.com/goreleaser/goreleaser/v2@<pinned> release --snapshot --clean` produces four archives.
@@ -646,7 +675,7 @@ Gates: the above, plus a green CI run of `ci.yml` on the pushed `v1/ops` branch,
 
 Scope: section 3 in full, plus `config.example.toml` and the README "Configuring kinds" section.
 
-Design: as in section 3. The config package gains `recipes`, the schema extensions in 3.4 and the zero-config rule in 3.1; kinds gains sources, marker lists, `min_depth`, `nested` and `skip`, and loses builtin helm and `compat.zsh`; rows reads `env_colors`; the importer works as in 3.7. The settings warnings get 0.3.1's wording.
+Design: as in section 3. The config package gains `recipes`, the schema extensions in 3.4 and the zero-config rule in 3.1; kinds gains sources, marker lists, `min_depth`, `nested` and `skip`, and loses builtin helm and `compat.zsh`; rows reads `env_colors`; the importer works as in 3.7; every TOML in `testdata/` is regenerated through the importer (3.3). An invalid `jump` or `action` in `[settings]` is a load error with its file and line, like any other bad value; an invalid env value is kept raw for A to warn about (2.1), so `load()` never warns about the environment.
 
 Public test repos, pinned by commit in `testdata/repos.lock` and shallow-fetched by `testdata/fetch-repos.sh` into the gitignored `testdata/repos/` (`git fetch --depth 1 origin <sha>`):
 
@@ -662,7 +691,7 @@ README "Configuring kinds" leads with the zero-config defaults and `project`, th
 
 Tests: config validation for every new key and error; recipe fixtures; the declarative helm against the builtin on a fixture holding all four families and the gap cases in 3.5, before the builtin is deleted; importer round trips on `config.example.zsh`, a fixture covering every option, and Eric's config; zero-config with and without a config.zsh beside it; `HOP_CONFIG` ending in `.zsh`; the ported-agnostic ledger.
 
-Gates: `go vet`, `go test ./...`; `rows.sh` IDENTICAL for all 14 lists with the regenerated `eric.toml`, then `resolve.sh` and `e2e.sh` identical; the public-repo goldens reviewed and their counts recorded; the 3.6 grep prints nothing; history checksum unchanged.
+Gates: `go vet`, `go test ./...`; `rows.sh` IDENTICAL for all 14 lists with the regenerated `eric.toml`, then `resolve.sh` and `e2e.sh` identical; the public-repo row counts and every rejected false positive recorded in `testdata/public/README.md`; both 3.6 gates print nothing; section 0's history and read-only checks hold.
 
 ## 5. Integration and retirement
 
@@ -671,18 +700,20 @@ The integration owner works in `~/worktrees/hop/go-1.0` on `v1/go`.
 1. Merge C first, because it changes the config every parity run reads: `git merge --no-ff origin/v1/agnostic`. Re-run R1's gates.
 2. Merge A next. A's parity runs used the old `eric.toml`, so re-run `resolve.sh` and `e2e.sh` (vim on and off) and the pty tests on all three fzf versions with C's config.
 3. Merge B last, since its CI tests everything the others built. Push `v1/go` and wait for a green CI run.
-4. Final parity run with the imported config: regenerate `testdata/eric.toml` with the merged binary's `hop import`, confirm it's byte-identical to C's, then `rows.sh`, `resolve.sh` under auto, unique and never, and `e2e.sh` under all three, against `HOP_PARITY_HOME=~/.local/share/hop` (0.3.1), `HOP_PARITY_REPO=~/strava/configuration` and `HOP_PARITY_ZSHCONFIG=~/.config/hop/config.zsh`. Zero diffs. Also `perf.sh`, checked against FINDINGS' medians: no measure more than 20% slower.
+4. Final parity run with the imported config: regenerate `testdata/eric.toml` with the merged binary's `hop import`, confirm it's byte-identical to C's, then `rows.sh`, `resolve.sh` under auto, unique and never, and `e2e.sh` under all three, against `HOP_PARITY_HOME=~/.local/share/hop` (0.3.1), `HOP_PARITY_REPO=~/strava/configuration` and `HOP_PARITY_ZSHCONFIG=~/.config/hop/config.zsh`. Zero diffs. Also `perf.sh`, which times both hops in the same session: FINDINGS' milliseconds came from a machine at load 3 to 6, so the gate is the ratio, and no measure's zsh-to-Go ratio may fall more than 20% below FINDINGS' (8.7x for the default kinds, 31x for `file`, 6.8x for a jump, 28x for `hop file aeraki.yaml`; the literal path stays near 0.8x).
 5. Retirement, on `v1/retire` from `v1/go`, then merged back:
    - delete `hop.zsh`, `hop.plugin.zsh`, `lib/`, `bin/` (zsh's scripts), `presets/`, `completions/`, `tests/`, `config.example.zsh`, `SMOKE.md`, `docs/spike/`, the three `docs/v1/ported-*.md` ledgers once every row is filled in, the 0.2 fixed layout and `HOP_LAYOUT`, and the zsh jobs in `ci.yml`;
    - rewrite `CONTRIBUTING.md` and the issue templates for Go;
-   - re-run the full gate set: `go test ./...` (the `RefHome` tests still work, because they read the `v0.3.1` tag), the parity harness against the external oracle, `run-all.sh`, CI;
-   - CHANGELOG: under `## [Unreleased]`, the 1.0.0 notes: Changed (hop is a Go binary; config is TOML; env beats the config file), Added (bash and fish, `project`, recipes, `[[kind.source]]`, `hop import`, Homebrew and `go install`, drilling from a repo into its targets), Removed (the zsh plugin and plugin-manager installs, `hop_kind`, `--fn`, `.hoprc`, the kind-count cache), and migration steps;
+   - re-run the full gate set: `go test ./...` (the `RefHome` tests still work, because they read the `v0.3.1` tag), with `go test -v` showing no more SKIPs than before the deletion, since a live-zsh test that lost its reference skips rather than fails; the parity harness against the external oracle; `run-all.sh`; CI;
+   - CHANGELOG: under `## [Unreleased]`, the 1.0.0 notes: Changed (hop is a Go binary; config is TOML; env beats the config file), Added (bash and fish, `project`, recipes, `[[kind.source]]`, `hop import`, Homebrew and `go install`, drilling from a repo into its targets), Removed (the zsh plugin and plugin-manager installs, `hop_kind`, `--fn`, `.hoprc`, the kind-count cache), the deliberate deviations (`M-a all` for `M-a +conf`, `init` and `import` as verbs so `hop -- init` searches, `hash -d` names), and migration steps, which say to install the binary before anything else and never to run zsh hop's `hop upgrade` once 1.0 is out;
    - VERSION stays 0.3.1 here. Eric's release commit bumps it to 1.0.0 with the formula tag line and moves the CHANGELOG section, per `docs/RELEASING.md`, and `release.yml` refuses a tag that doesn't match it.
 6. Hand off to Eric: `v1/go` ready to merge to `main`. Merging, tagging and releasing are his.
 
 ## 6. Eric's switch procedure
 
-Done by Eric after the release, not by agents.
+Done after the release, by Eric or his own session, never by a build agent. `~/.zshrc` is rendered by chezmoi from `~/.local/share/chezmoi/dot_zshrc.tmpl`, and `~/.config/hop/` is chezmoi-managed, so step 3's new `config.toml` is `chezmoi add`ed and step 5 edits the template source and then runs `chezmoi apply ~/.zshrc`. A direct edit to `~/.zshrc` is reverted by the next apply, and lines 202 to 206 are the rendered file's numbers, not the template's.
+
+0. Don't run zsh hop's `hop upgrade` once v1.0.0 is tagged. It fast-forwards `~/.local/share/hop` to the Go tree, which has no `hop.zsh`, so the `source` line in `~/.zshrc` fails and the parity oracle is gone. If it happens, `git -C ~/.local/share/hop checkout --detach v0.3.1` restores both.
 
 1. Install:
    ```zsh
@@ -702,7 +733,7 @@ Done by Eric after the release, not by agents.
    eval "$(command hop init zsh --cmd hop1)"
    ```
    That defines `hop1` and `hop1-widget` and leaves `hop`, `hopr`, `hopw` and ^G on zsh hop. Try `hop1`, `hop1 vpc prod`, `hop1 -w`, and bind the widget by hand if you want it: `bindkey '^[G' hop1-widget`. Both read and write `~/.local/state/hop/history`, so ranking is shared.
-5. Switch: in `~/.zshrc`, replace the hop block at lines 202 to 206 (it's already after compinit, which completion needs) with:
+5. Switch: in `dot_zshrc.tmpl`, replace the hop block (lines 202 to 206 of the rendered `~/.zshrc`, already after compinit, which completion needs) with:
    ```zsh
    if (( $+commands[hop] )); then
    	eval "$(hop init zsh)"
@@ -719,8 +750,10 @@ Done by Eric after the release, not by agents.
 
 | Risk | Mitigation | Owner |
 |---|---|---|
-| zsh hop exports `HOP_CONFIG` (pointing at config.zsh) into every child, so a Go `hop` run from Eric's shell would read the wrong file | a `.zsh` value is never loaded as TOML (2.15) | C |
-| The binary's default history is Eric's real file | temp `HOP_HISTFILE` everywhere, `TestMain` isolation, checksum gate | R, all |
+| zsh hop exports `HOP_CONFIG` (pointing at config.zsh) into every child, agents' shells included, so a Go `hop` run from one would read the wrong file | a `.zsh` value is never loaded as TOML (2.15), landed in R1 with the rename that exposes it; `TestMain` unsets inherited `HOP_*` and `FZF_*` | R1, C |
+| The binary's default history and debug log are Eric's real files, which his own zsh hop also writes, so a checksum can't tell who changed them | temp `HOP_HISTFILE` and `HOP_DEBUG_LOG` everywhere, `TestMain` isolation, and section 0's grep for fixture and worktree paths in both files | R, all |
+| A 0.3.x checkout that runs `hop upgrade` after v1.0.0 moves to a tree with no `hop.zsh`, Eric's install and parity oracle included | section 6 step 0; README and CHANGELOG migration notes; whether 1.0 ships a 10-line `hop.zsh` stub that prints the migration steps is Eric's call, and the default is no stub, since the zsh implementation is deleted | B, I, Eric |
+| `~/.zshrc` and `~/.config/hop/` are chezmoi-managed, so a direct edit in the switch is reverted by the next apply | section 6 edits the template source and `chezmoi add`s `config.toml` | Eric's session |
 | Widget and completion names collide with zsh hop's in try-it mode | `<cmd>-widget`, `_<cmd>_complete`, zsh hop's widget detected by its function name | R, B |
 | First-word verbs steal real queries (`hop config`) | only `init`, `import`, `upgrade` are verbs; `hop -- init` searches | R2 |
 | fzf behaviour moves between 0.60.3 and the latest (`--filter` with `--accept-nth`, `--freeze-left`, bind parsing) | argv parse tests and pty tests on all three versions locally, floor job in CI | A, B |
@@ -738,12 +771,12 @@ Done by Eric after the release, not by agents.
 
 ### Acceptance gates
 
-Every gate is a real run, with its output summarised in the branch report. Common to all: `go vet ./...` clean, `gofmt -l .` empty, `go test ./...` green, the history checksum unchanged, and no write outside the worktree.
+Every gate is a real run, with its output summarised in the branch report. Common to all: `go vet ./...` clean, `gofmt -l .` empty, `go test ./...` green with no unexplained new SKIP, and section 0's history, debug-log and read-only checks holding.
 
 | Step | Gates |
 |---|---|
 | R1, R2 | the four failing tests fixed; `rows.sh`, `resolve.sh` (3 modes) and `e2e.sh` identical to the spike's results; `run-all.sh` green on zsh, bash 5, bash 3.2 and fish; no `hopx` or `spike/hopx` left; `hop config` is a query |
 | A | pty suite green on fzf 0.60.3, 0.67.0 and 0.73.1; argv parses on 0.60.3 and 0.67.0; `resolve.sh` and `e2e.sh` identical with the modal layer on and off; `rows.sh` identical; the interactive ledger complete |
 | B | init parses in four shells; `run-all.sh` green; doctor, upgrade, completion and `-V` tests green; goreleaser snapshot builds four archives; a green CI run on `v1/ops`; the ops ledger complete |
-| C | `rows.sh` IDENTICAL on all 14 lists with the regenerated `eric.toml`, then `resolve.sh` and `e2e.sh` identical; declarative helm equals builtin helm on the fixture; public-repo goldens reviewed with counts recorded; the 3.6 grep empty; the agnostic ledger complete |
-| Integration | every workstream gate re-run after each merge; the final parity run in section 5 with zero diffs; `perf.sh` within 20% of FINDINGS; CI green on `v1/go` before and after retirement |
+| C | `rows.sh` IDENTICAL on all 14 lists with the regenerated `eric.toml`, then `resolve.sh` and `e2e.sh` identical; declarative helm equals builtin helm on the fixture; public-repo counts and rejected false positives recorded, and the goldens read by the integration owner before merging C; both 3.6 gates empty; the agnostic ledger complete |
+| Integration | every workstream gate re-run after each merge; the final parity run in section 5 with zero diffs; `perf.sh` ratios within 20% of FINDINGS'; CI green on `v1/go` before and after retirement |
