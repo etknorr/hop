@@ -405,3 +405,34 @@ func TestPickerLevels(t *testing.T) {
 		t.Errorf("HOP_VIM=0: ctrl-l drills and ctrl-h goes up: rc %d cd %q", o.rc, o.cd)
 	}
 }
+
+// TestPickerStatus is suite_core's fzf status ladder, which every level routes through: a failure is reported with its status,
+// no match says so, and a cancel is silent and succeeds.
+func TestPickerStatus(t *testing.T) {
+	p := newPicker(t)
+	ws1, ws2, cfg := levels(t, p)
+	real := mustLook(t, "fzf")
+	stub := filepath.Join(p.tmp, "fakefzf")
+	os.Mkdir(stub, 0o755)
+	os.WriteFile(filepath.Join(stub, "fzf"), []byte("#!/bin/sh\nfor a; do case $a in --version|--filter*) exec '"+real+"' \"$@\";; esac; done\nexit $FAKE_RC\n"), 0o755)
+	for _, args := range [][]string{{"-w"}, {"-R"}} {
+		for rc, want := range map[string]struct {
+			rc  int
+			say string
+		}{"2": {2, "hop: fzf exited with status 2"}, "1": {1, "hop: no match"}, "130": {0, ""}} {
+			c := exec.Command(p.bin, args...)
+			c.Dir = p.tmp
+			c.Env = []string{"PATH=" + stub + ":" + os.Getenv("PATH"), "HOME=" + p.tmp, "TMPDIR=" + p.tmp, "TERM=xterm-256color", "FAKE_RC=" + rc,
+				"HOP_CONFIG=" + cfg, "HOP_WORKSPACES=" + ws1 + ":" + ws2, "HOP_HISTFILE=" + filepath.Join(p.tmp, "hist"), "HOP_FZF_HEIGHT="}
+			term, err := ptytest.Start(c, 24, 80)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := term.Wait(10 * time.Second)
+			out := strings.TrimSpace(term.Plain())
+			if got != want.rc || (want.say == "" && out != "") || !strings.Contains(out, want.say) {
+				t.Errorf("hop %s with fzf exiting %s: rc %d %q, want %d %q", args[0], rc, got, out, want.rc, want.say)
+			}
+		}
+	}
+}

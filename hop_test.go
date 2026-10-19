@@ -315,3 +315,33 @@ func TestHeadlessSettingsAgainstHop(t *testing.T) {
 		{e.root, []string{oldPath, "HOP_FZF_MIN=garbage"}, []string{"vpc"}},
 	})
 }
+
+// TestFlagsAgainstHop is suite_actions' flag cases against zsh hop 0.3.1: the exit-2 messages, which flag beats HOP_ACTION,
+// and / staying a plain cd whatever the mode.
+func TestFlagsAgainstHop(t *testing.T) {
+	if !testfix.HaveZsh() {
+		t.Skipf("zsh or hop %s not available", testfix.RefLayout)
+	}
+	e := newE2E(t)
+	open := []string{"HOP_ACTION=open", "HOP_CODE=" + e.tmp + "/no-code"}
+	var cases []headlessCase
+	for _, args := range [][]string{
+		{"-o", "-e", "vpc"}, {"-e", "-o", "vpc"}, {"--action=cd", "-o", "vpc"}, {"--cd", "--action=open", "vpc"}, {"--action=bogus", "vpc"},
+		{"--action", "vpc"}, {"--action=", "vpc"}, {"-k"}, {"--bogus", "vpc"}, {"/", "x"}, {"-o", "/"}, {"-", "x"}, {"vpc", "/"},
+		{"--no-vim", "--bogus"}, {"--vim=1", "vpc"},
+	} {
+		cases = append(cases, headlessCase{e.root, nil, args})
+	}
+	for _, args := range [][]string{{"vpc"}, {"--cd", "eks", "security"}, {"/"}, {"-o", "/"}} {
+		cases = append(cases, headlessCase{e.root + "/terraform", open, args})
+	}
+	// -c compares the physical PWD with git's physical root, so a subtree entered through a symlink still narrows.
+	link := filepath.Join(e.tmp, "tf-link")
+	if err := os.Symlink(e.root+"/terraform", link); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"-c", "vpc"}, {"-c", "zzqx"}, {"-c"}} {
+		cases = append(cases, headlessCase{link, nil, args}, headlessCase{link + "/acct-infrastructure", nil, args})
+	}
+	e.compare(t, cases)
+}
