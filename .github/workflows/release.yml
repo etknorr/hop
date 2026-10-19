@@ -1,0 +1,82 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The tag, VERSION and the formula's tag line move together in the release commit; a tag that disagrees is a mistake to stop on.
+      - name: Check the tag against VERSION and the formula
+        run: |
+          set -euo pipefail
+          want="v$(tr -d '[:space:]' < VERSION)"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "tag $GITHUB_REF_NAME does not match VERSION ($want)" >&2
+            exit 1
+          fi
+          grep -qF "tag: \"$want\"" Formula/hop.rb || { echo "Formula/hop.rb does not name tag $want" >&2; exit 1; }
+
+      - name: Extract the CHANGELOG section
+        run: |
+          set -euo pipefail
+          v=${GITHUB_REF_NAME#v}
+          awk -v h="## [$v]" 'index($0, h) == 1 {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "CHANGELOG.md has no section for $v" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.18.3
+          args: release --clean --release-notes=${{ runner.temp }}/notes.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  # The formula's tag URL only exists once the tag does, so this is the first and only place it is installed for real.
+  formula:
+    name: formula (${{ matrix.os }})
+    needs: release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_FROM_API: '1'
+    steps:
+      - name: Put brew on PATH (Linux)
+        if: runner.os == 'Linux'
+        run: echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+
+      - name: Install from the tap
+        run: |
+          set -euo pipefail
+          brew tap etknorr/hop https://github.com/etknorr/hop
+          brew install etknorr/hop/hop
+          brew test etknorr/hop/hop
+
+      - name: Check hop -V names the tag
+        run: |
+          set -euo pipefail
+          got=$(hop -V)
+          echo "$got"
+          [ "$got" = "hop ${GITHUB_REF_NAME#v}" ]
