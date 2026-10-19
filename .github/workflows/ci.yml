@@ -218,7 +218,7 @@ jobs:
 
       - name: gofmt
         run: |
-          out=$(gofmt -l .)
+          out=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
           if [ -n "$out" ]; then printf '%s\n' "$out"; exit 1; fi
 
       - name: go test (macOS)
