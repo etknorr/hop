@@ -33,153 +33,97 @@ one install works across every repo you own. See [Configuring kinds](#configurin
 
 ## Install
 
-Requires `zsh` and [`fzf`](https://github.com/junegunn/fzf) **0.60.3 or newer**; `git` does the
-enumeration. Optional: [`bat`](https://github.com/sharkdp/bat) for highlighted previews, `gh` for
-the browse verb, and VS Code's `code` (or the CLI `HOP_CODE` names) for the open and reveal verbs.
+`hop` is one binary for macOS and Linux. It needs [`fzf`](https://github.com/junegunn/fzf)
+0.60.3 or newer, and `git`. Optional: [`bat`](https://github.com/sharkdp/bat) for highlighted
+previews, `gh` for the browse verb, and VS Code's `code` (or the CLI `HOP_CODE` names) for the open
+and reveal verbs.
 
-That fzf floor is newer than what some distros package, and it is not arbitrary. The picker passes
-`--accept-nth` together with `--select-1`: `--accept-nth` arrived in fzf 0.60.0 and only worked
-alongside `--select-1` from 0.60.3. Debian and Ubuntu currently package 0.44.x, which rejects the
-flag outright, so `apt install fzf` is not enough: install an
-[upstream release](https://github.com/junegunn/fzf/releases). `hop` checks once per shell and says
-so, rather than letting fzf fail with a bare `unknown option`.
+That fzf floor is newer than what some distros package. The picker passes `--accept-nth` together
+with `--select-1`: `--accept-nth` arrived in fzf 0.60.0 and only worked alongside `--select-1` from
+0.60.3. Debian and Ubuntu package 0.44.x, which rejects the flag, so `apt install fzf` isn't enough:
+install an [upstream release](https://github.com/junegunn/fzf/releases), or let Homebrew bring it.
 
-A zsh plugin is always **a local checkout plus one line that sources it.** There is nothing to
-compile and no binary to put on `$PATH`. What a plugin manager adds is bookkeeping: it does the
-clone, it can pin you to a released version, and it updates everything with one command. If you
-already use one, use it here. If you do not, the [manual clone](#manual-clone) is exactly what the
-others do underneath, and [`hop upgrade`](#updating) covers pinning and updating yourself.
+### Homebrew
 
-`hop` has to run **inside your interactive shell**, because its whole purpose is to `cd`. Anything
-that runs it in a subprocess or a container cannot work, which is also why there is no Homebrew
-formula and no container image.
-
-Each recipe below is given twice. Unpinned follows the default branch and changes when it changes;
-pinned sits on a release tag until you move it. Pinning is the better default for something you
-launch from muscle memory.
-
-### zinit
-
-```zsh
-# follows main
-zinit light etknorr/hop
-
-# pinned to a release
-zinit ice ver'v0.3.1'
-zinit light etknorr/hop
+```sh
+brew tap etknorr/hop https://github.com/etknorr/hop
+brew install etknorr/hop/hop
 ```
 
-### antidote
+The formula lives in this repo, builds `hop` from source with Go, and installs fzf with it. It works
+the same on macOS and Linux.
 
-In your plugin file, usually `~/.zsh_plugins.txt`:
+### go install
 
-```
-# follows main
-etknorr/hop
-
-# pinned to a release
-etknorr/hop branch:v0.3.1
+```sh
+go install github.com/etknorr/hop@latest
 ```
 
-The annotation is called `branch:`, but it is handed straight to `git clone`, so a tag pins fine.
+This needs Go 1.26 or newer, the version `go.mod` names. The binary lands in `$(go env GOBIN)`, or
+`$(go env GOPATH)/bin` when `GOBIN` is unset, and that directory has to be on your `PATH`. Install
+fzf separately.
 
-### sheldon
+### Release archives
 
-In `~/.config/sheldon/plugins.toml`:
+Every [release](https://github.com/etknorr/hop/releases) has a `.tar.gz` for darwin and linux on
+amd64 and arm64, with a `checksums.txt`. Put the `hop` inside on your `PATH`. `hop upgrade` can't
+update a copied binary, so it prints the other install commands instead.
 
-```toml
-# follows main
-[plugins.hop]
-github = "etknorr/hop"
+### From a checkout
 
-# pinned to a release
-[plugins.hop]
-github = "etknorr/hop"
-tag = "v0.3.1"
+```sh
+git clone https://github.com/etknorr/hop ~/src/hop
+cd ~/src/hop && go build -o bin/hop .
 ```
 
-Then `sheldon lock --update`.
+Then put `~/src/hop/bin` on your `PATH`. `hop upgrade` moves this checkout between releases and
+rebuilds the binary.
 
-### oh-my-zsh
+## Shell setup
 
-Oh-my-zsh has no fetcher, so the clone into its custom plugins directory is yours to make:
+`hop` exists to `cd`, and a child process can't change its parent shell's directory. So the binary
+prints a small shell function that runs it and does the `cd` itself. Add one line to your shell's rc
+file:
 
-```zsh
-# follows main
-git clone https://github.com/etknorr/hop.git \
-  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
+| Shell | File | Line |
+|---|---|---|
+| zsh | `~/.zshrc`, after `compinit` | `eval "$(hop init zsh)"` |
+| bash 3.2 and newer | `~/.bashrc` | `eval "$(hop init bash)"` |
+| fish | `~/.config/fish/config.fish` | `hop init fish \| source` |
 
-# pinned to a release
-git clone --branch v0.3.1 https://github.com/etknorr/hop.git \
-  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/hop"
-```
+That line defines:
 
-Then add it to the list in `.zshrc`, **before** `source $ZSH/oh-my-zsh.sh`:
+- `hop`, the function. It runs the binary and `cd`s to what it picked, with plain `cd`, so zoxide and
+  `chpwd` hooks see the jump. `hop -` is `cd -`.
+- `hopr`, which `cd`s to the repo root, and `hopw`, which `cd`s to the configured workspace holding
+  `$PWD`.
+- Completion for every flag, the kinds in your config, and the `upgrade`, `init` and `import` verbs.
+- `^G` and `alt-g`, which open `hop` from a half-typed command line. The line comes back at the next
+  prompt. In zsh, `^G` replaces `send-break`, so use `^C` to abandon a line.
 
-```zsh
-plugins=(git hop)
-```
+`--cmd NAME` gives the function another name and leaves out `hopr` and `hopw`, for example
+`eval "$(hop init zsh --cmd j)"`. In zsh, completion is only registered when `compinit` has already
+run, which is why the line goes after it.
 
-### Manual clone
+When a new `hop` changes these scripts, `hop -V` adds
+`hop: your shell integration predates this hop: run 'exec zsh' to reload it`.
 
-No manager, one line of `.zshrc`, and nothing between you and the checkout:
+### Moving from zsh hop 0.3
 
-```zsh
-# follows main
-git clone https://github.com/etknorr/hop.git ~/.local/share/hop
+`hop` 1.0 replaces the zsh plugin. Install the binary first, then:
 
-# pinned to a release
-git clone --branch v0.3.1 https://github.com/etknorr/hop.git ~/.local/share/hop
-```
+1. Convert your config. This reads `~/.config/hop/config.zsh` and leaves it alone:
+   ```sh
+   command hop import -o ~/.config/hop/config.toml
+   ```
+   Your history and workspaces files keep their format, so ranking carries over.
+2. Replace the line that sources `hop.zsh` (or your plugin manager's entry) with the init line
+   above, then `exec zsh`.
 
-```zsh
-source ~/.local/share/hop/hop.zsh
-```
-
-`HOP_HOME` resolves to `hop.zsh`'s own directory, so the checkout can live anywhere and be moved
-without editing anything. `hop.plugin.zsh` sits alongside it purely because that is the filename
-plugin managers look for; both do the same thing.
-
-### Updating
-
-A manager owns the checkouts it made, so update there: `zinit update etknorr/hop`,
-`antidote update`, `sheldon lock --update`, or re-clone the oh-my-zsh directory. Bump the pinned
-version in your config first if you set one.
-
-A manual clone updates itself:
-
-```zsh
-hop upgrade --check     # what is installed vs what is released; changes nothing
-hop upgrade             # fast-forward main to the newest release, staying on main
-hop upgrade 0.1.0       # pin to exactly that release, detached
-exec zsh                # reload; a sourced function cannot replace itself mid-call
-```
-
-The two forms land in different places on purpose. Bare `hop upgrade` fast-forwards your local
-`main`, so `git pull` and the next `hop upgrade` both keep working. Naming a version is a **pin**,
-which detaches `HEAD` at that tag; a bare `hop upgrade` brings you back to `main`, saying so as it
-goes.
-
-Between releases, `main` is normally *ahead* of the newest tag. `hop upgrade` reports that as up to
-date rather than moving you backwards onto the tag.
-
-`hop upgrade` refuses rather than acts when the checkout is dirty, sits on a branch other than
-`main`, is detached somewhere that is not a release tag, has no `origin` remote, or has a `main`
-that has diverged from the release. It never runs `git clean`, never hard-resets, never merges and
-never forces anything: `main` only ever moves by fast-forward. Untracked files are never touched.
-If one sits where the new release ships a file, that is a refusal too.
-
-`--check` never touches your worktree or `HEAD`. It does fetch tags, so it writes refs under `.git`.
-
-### Completions
-
-Completions need `hop.zsh` sourced *before* `compinit`. `hop.zsh` adds `$HOP_HOME/completions` to
-`fpath`, which only takes effect if `compinit` has not already run. Most managers handle this. If
-your `.zshrc` calls `compinit` first, symlink into a directory already on `fpath` instead:
-
-```zsh
-ln -s ~/.local/share/hop/completions/_hop ~/.zfunc/_hop
-```
+Don't run 0.3's `hop upgrade` once 1.0 is out. It fast-forwards the zsh checkout to the Go tree,
+which has no `hop.zsh`, so the `source` line in `~/.zshrc` fails. To undo it, run
+`git -C ~/.local/share/hop checkout --detach v0.3.1`. zinit, antidote, sheldon and oh-my-zsh
+installs have no 1.0 equivalent: use one of the installs above.
 
 ### Configuring it
 
@@ -204,7 +148,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `hop /` or `hopr` | `cd` to the repo root |
 | `hop -` | `cd -` |
 | `hopw` | `cd` to the workspace containing `$PWD`, deepest match winning |
-| `hop upgrade` | move a manual clone to the newest release; see [Updating](#updating) |
+| `hop upgrade` | update `hop` the way it was installed; see [Upgrading](#upgrading) |
 | `^G` or `alt-g` | open `hop` from a half-typed command line, which survives |
 
 `^G` replaces zsh's `send-break`. Use `^C` to abandon a line, or rebind `hop-widget`.
@@ -227,7 +171,7 @@ cp ~/.local/share/hop/workspaces.example ~/.config/hop/workspaces
 | `--vim` | force the modal layer on when `HOP_VIM=0` is set |
 | `--doctor` | dump config, tools and kind counts for a bug report |
 | `--doctor=short` | the same, minus paths and names; safe to paste publicly |
-| `-V`, `-v`, `--version` | print the version this shell loaded, and the installed one when they differ |
+| `-V`, `-v`, `--version` | print the version, and say when the shell integration predates the binary |
 | `-h`, `--help` | usage, listing the kinds actually registered |
 
 `-c` is the one to remember. `hop -c -k file pr` finds a file by name inside the subtree you are
@@ -795,12 +739,49 @@ workspaces.example      a workspace list to copy
 
 ---
 
+## Upgrading
+
+`hop upgrade` works out how `hop` was installed and upgrades it the same way:
+
+| Installed with | `hop upgrade` runs | `hop upgrade 1.2.0` |
+|---|---|---|
+| Homebrew | `brew upgrade etknorr/hop/hop` | refused, since brew only has the newest release |
+| `go install` | `go install github.com/etknorr/hop@latest` | `go install github.com/etknorr/hop@v1.2.0` |
+| a checkout | fast-forwards `main` to the newest release tag, then `go build -o <this binary> .` | checks out `v1.2.0` detached, then rebuilds |
+| anything else | nothing; it prints the three install commands | the same |
+
+`hop upgrade --check` (or `--dry-run`, or `-n`) prints the installed version against the newest
+`vX.Y.Z` tag and changes nothing. It reads the tags with `git ls-remote`, so it needs no GitHub
+token. A checkout asks its own `origin`.
+
+Under `go install`, `hop upgrade` warns when Go would write the new binary somewhere other than the
+directory the running `hop` is in, since the old one would then stay first on your `PATH`.
+
+A checkout has two ways to move. Bare `hop upgrade` fast-forwards your local `main`, so `git pull`
+and the next `hop upgrade` both keep working. Naming a version is a pin: it detaches `HEAD` at that
+tag, and a bare `hop upgrade` later brings you back to `main`, saying so. Between releases `main` is
+normally ahead of the newest tag, and `hop upgrade` reports that as up to date.
+
+A checkout upgrade refuses, changing nothing, when the checkout has uncommitted changes, sits on a
+branch other than `main`, is detached somewhere that isn't a release tag, has no `origin`, is inside
+another repo, or has a `main` that has diverged from the release. It never cleans, resets, merges
+or forces anything, and it never touches untracked files. An untracked file where the release ships
+one is a refusal too. `--check` changes no files, but it does fetch tags into `.git`.
+
+Releases are cut from a `v*` tag by the release workflow, as [docs/RELEASING.md](docs/RELEASING.md)
+describes.
+
+---
+
 ## Environment
+
+Each variable beats the same setting in `config.toml`'s `[settings]`, which is the reverse of zsh
+hop 0.3, where a `typeset` in `config.zsh` beat the environment.
 
 | Variable | Default | Does |
 |---|---|---|
-| `HOP_CONFIG` | `~/.config/hop/config.zsh` | your kind declarations |
-| `HOP_DEFAULT_KINDS` | kinds declared `--default` | the default kind set |
+| `HOP_CONFIG` | `~/.config/hop/config.toml` | your config; a value ending in `.zsh` is zsh hop's and is never read as TOML |
+| `HOP_DEFAULT_KINDS` | kinds declared `default = true` | the default kind set |
 | `HOP_WORKSPACES_FILE` | `~/.config/hop/workspaces` | workspace list |
 | `HOP_WORKSPACES` | unset | colon-separated workspaces, overrides the file |
 | `HOP_REPOS` | every repo in every workspace | colon-separated repo list for `-R` |
@@ -812,12 +793,14 @@ workspaces.example      a workspace list to copy
 | `HOP_CLIPBOARD` | unset | overrides the copy verb's clipboard command, skipping the probe |
 | `HOP_VIM` | `1` | `0` disables the modal layer |
 | `HOP_FZF_HEIGHT` | `80%` | picker height; **empty means fullscreen** |
-| `HOP_HOPRC` | unset | `1` allows a repo-root `.hoprc` to run |
 | `HOP_FZF_MIN` | `0.60.3` | the fzf floor; lower it if the check is wrong about your build |
 | `HOP_GUARD_WINDOW` | `0.15` | seconds the escape guard refuses a verb for; `0` disables it |
-| `HOP_DEBUG` | unset | `1` logs every key dispatch, readable via `--doctor` |
+| `HOP_DEBUG` | unset | any value logs every pick and key dispatch, readable with `--doctor` |
 | `HOP_DEBUG_LOG` | `~/.local/state/hop/debug.log` | where that log goes |
-| `HOP_HOME` | derived from `hop.zsh` | install directory |
+
+The `~/.config` and `~/.local/state` defaults follow `XDG_CONFIG_HOME` and `XDG_STATE_HOME` when
+they're set. The shell function sets `HOP_CMDFILE`, `HOP_SHELL` and `HOP_INIT_HASH` for each call;
+they aren't settings.
 
 ### `HOP_FZF_HEIGHT`
 
@@ -830,12 +813,11 @@ Fullscreen is also the only mode that survives a synthetic terminal, which is wh
 use. In `--height` mode fzf asks the terminal where the cursor is and waits for the answer, and
 nothing in `zsh/zpty` ever answers, so the picker hangs before it draws anything.
 
-### `.hoprc` is opt-in
+### `.hoprc` is gone
 
-A repo-root `.hoprc` can declare extra kinds, but sourcing it runs arbitrary code from whatever repo
-you happen to be standing in. Default-on meant `cd` into any clone plus one `hop` was a code
-execution path, so it now requires `HOP_HOPRC=1`. Only enable it for repos you would already
-`source` by hand.
+zsh hop 0.3 could source a repo-root `.hoprc` when `HOP_HOPRC=1` was set. That ran code from
+whatever repo you stood in, and 1.0 doesn't read it at all. `hop --doctor` reports a set
+`HOP_HOPRC` as unsupported.
 
 ### Degradations
 
