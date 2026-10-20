@@ -455,6 +455,23 @@ func TestCheckoutMoves(t *testing.T) {
 		out, _ := up(t, co(dir), "devel")
 		want(t, out, 0, 0, []string{"already at v0.2.0 on main"}, "exec")
 	})
+	t.Run("a release from before the Go hop is refused before anything moves", func(t *testing.T) {
+		dir := clone(t, bare)
+		empty := git(t, dir, "hash-object", "-t", "tree", "/dev/null")
+		zsh := git(t, dir, "commit-tree", empty, "-m", "the zsh hop")
+		git(t, dir, "tag", "-a", "-m", "release 0.0.9", "v0.0.9", zsh)
+		before := head(t, dir)
+		for _, v := range []string{"0.0.9", "v0.0.9"} {
+			out, rc := up(t, co(dir), "devel", v)
+			want(t, out, rc, 1, []string{"v0.0.9 predates the Go hop", "nothing was changed"}, "pinned at")
+			if head(t, dir) != before || branch(dir) != "main" {
+				t.Errorf("head %s branch %s: the refusal moved the checkout", head(t, dir), branch(dir))
+			}
+		}
+		if l := logOf(st, "go"); strings.Contains(l, dir) {
+			t.Errorf("go build ran: %q", l)
+		}
+	})
 	t.Run("a failed rebuild says so and names the fix", func(t *testing.T) {
 		dir := clone(t, bare)
 		git(t, dir, "checkout", "-q", "-B", "main", "v0.1.0")

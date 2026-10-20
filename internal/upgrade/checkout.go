@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/etknorr/hop/internal/version"
 )
 
 // A checkout moves exactly as zsh hop 0.3.1's did, then rebuilds the binary in place.
@@ -134,6 +136,26 @@ func (u *Upgrader) commit(ref string) string {
 
 func (u *Upgrader) ancestor(a, b string) bool { return u.gitOK("merge-base", "--is-ancestor", a, b) }
 
+// goTree is whether rev's tree builds this module; hop 0.x tags are the zsh hop, which go build cannot turn into a binary.
+func (u *Upgrader) goTree(rev string) bool {
+	out, err := u.git("show", rev+":go.mod")
+	if err != nil {
+		return false
+	}
+	for l := range strings.SplitSeq(out, "\n") {
+		if fs := strings.Fields(l); len(fs) == 2 && fs[0] == "module" {
+			return fs[1] == version.Module
+		}
+	}
+	return false
+}
+
+func (u *Upgrader) refuseZsh(tag string) int {
+	u.err(tag+" predates the Go hop, so this checkout cannot be rebuilt from it; nothing was changed.",
+		"Name a release from 1.0.0 on instead.")
+	return 1
+}
+
 func (u *Upgrader) checkout(check bool, tag string) int {
 	if !u.guardRepo() {
 		return 1
@@ -192,6 +214,9 @@ func (u *Upgrader) checkout(check bool, tag string) int {
 		u.say("hop is already at %s, so nothing changed.", tag)
 		return u.noop()
 	}
+	if !u.goTree(to) {
+		return u.refuseZsh(tag)
+	}
 	if !u.gitOK("-c", "advice.detachedHead=false", "checkout", "--quiet", "refs/tags/"+tag) {
 		u.err("git refused to check out "+tag+", so nothing was changed.", "Its own message above names what is in the way.")
 		return 1
@@ -226,6 +251,9 @@ func (u *Upgrader) track(tag string) int {
 	if mainc != tagc && !u.ancestor(mainc, tagc) && !u.ancestor(tagc, mainc) {
 		u.err("main has diverged from "+tag+", so it cannot be fast-forwarded.", "Sort that out by hand; this will not rebase or merge for you.")
 		return 1
+	}
+	if !u.ancestor(tagc, mainc) && !u.goTree(tagc) {
+		return u.refuseZsh(tag)
 	}
 	if !u.collidesOK(tagc) {
 		return 1
