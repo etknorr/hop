@@ -137,7 +137,7 @@ func TestDoctorGolden(t *testing.T) {
 			t.Errorf("%s has no end marker", name)
 		}
 	}
-	for _, s := range []string{"zzsentinelkind", "zzsentinelws", "bogus", "bin/code", "~/code/repo"} {
+	for _, s := range []string{"zzsentinelkind", "zzsentinelws", "bogus", "bin/code", "~/code/repo", "/src/hop"} {
 		if !strings.Contains(full, s) {
 			t.Errorf("full mode lacks %q", s)
 		}

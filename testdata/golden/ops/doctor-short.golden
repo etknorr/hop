@@ -2,8 +2,8 @@
 
 install
   version                1.0.0 (abc1234)
-  method                 checkout at /src/hop
-  binary                 /src/hop/bin/hop
+  method                 checkout (path withheld)
+  binary                 (withheld)
   shell                  zsh, but its integration predates this hop: run 'exec zsh'
 
 config

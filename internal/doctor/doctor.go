@@ -89,12 +89,18 @@ func Run(w io.Writer, o Options) int {
 func (r *report) install() {
 	r.line("install")
 	r.kv("version", r.o.Version)
-	m := string(r.o.Install.Method)
-	if r.o.Install.Method == upgrade.Checkout {
+	m, exe := string(r.o.Install.Method), r.o.Install.Exe
+	switch {
+	case r.o.Short:
+		exe = "(withheld)"
+		if r.o.Install.Method == upgrade.Checkout {
+			m += " (path withheld)"
+		}
+	case r.o.Install.Method == upgrade.Checkout:
 		m += " at " + r.o.Install.Root
 	}
 	r.kv("method", m)
-	r.kv("binary", r.o.Install.Exe)
+	r.kv("binary", exe)
 	sh := os.Getenv("HOP_SHELL")
 	switch {
 	case sh == "":
