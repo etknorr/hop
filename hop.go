@@ -452,7 +452,7 @@ func (s *session) reposOf(list func() []string, up func() int) int {
 	repos, rc := s.repoRows(list())
 	switch rc {
 	case 1:
-		fmt.Fprintln(s.stderr, "hop: not in a git repository, and no repos found (set $HOP_REPOS)")
+		s.noRepos()
 		return 1
 	case 2:
 		fmt.Fprintln(s.stderr, "hop: no readable repos in $HOP_REPOS")
@@ -461,11 +461,24 @@ func (s *session) reposOf(list func() []string, up func() int) int {
 	return s.pick(s.resolveIn(s.resolver("", ""), "", repos), "", s.repoLv(repos, list, up))
 }
 
+// noRepos names the setting to fix: with no workspaces at all, that is the workspaces file, not $HOP_REPOS.
+func (s *session) noRepos() {
+	if len(s.workspaces()) > 0 {
+		fmt.Fprintln(s.stderr, "hop: not in a git repository, and no repos found in your workspaces (or set $HOP_REPOS)")
+		return
+	}
+	f := s.cfg.Settings.WorkspacesFile
+	if h := os.Getenv("HOME"); len(h) > 1 && strings.HasPrefix(f, strings.TrimRight(h, "/")+"/") {
+		f = "~" + strings.TrimPrefix(f, strings.TrimRight(h, "/"))
+	}
+	fmt.Fprintf(s.stderr, "hop: not in a git repository, and no workspaces found: list your code dirs in %s, or set $HOP_WORKSPACES\n", f)
+}
+
 func (s *session) repoLevel(query string) int {
 	repos, rc := s.repoRows(s.allRepos())
 	switch rc {
 	case 1:
-		fmt.Fprintln(s.stderr, "hop: not in a git repository, and no repos found (set $HOP_REPOS)")
+		s.noRepos()
 		return 1
 	case 2:
 		fmt.Fprintln(s.stderr, "hop: no readable repos in $HOP_REPOS")

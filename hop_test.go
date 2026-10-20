@@ -388,6 +388,21 @@ func TestConfigZshHintPrintedAsIs(t *testing.T) {
 	}
 }
 
+// TestNoWorkspacesNamesTheFile: outside a repo with nothing to list, the hint is the workspaces file, and $HOP_REPOS only once workspaces exist.
+func TestNoWorkspacesNamesTheFile(t *testing.T) {
+	e := newE2E(t)
+	bare := filepath.Join(e.tmp, "bare-home")
+	os.MkdirAll(bare, 0o755)
+	_, errs, rc := e.detached(e.tmp, []string{"HOME=" + bare}, e.bin)
+	if want := "hop: not in a git repository, and no workspaces found: list your code dirs in ~/.config/hop/workspaces, or set $HOP_WORKSPACES\n"; rc != 1 || errs != want {
+		t.Errorf("no workspaces: rc %d, %q", rc, errs)
+	}
+	_, errs, rc = e.detached(e.tmp, []string{"HOME=" + bare, "HOP_WORKSPACES=" + e.home + "/lit"}, e.bin, "-R")
+	if rc != 1 || !strings.Contains(errs, "no repos found in your workspaces (or set $HOP_REPOS)") {
+		t.Errorf("workspaces without repos: rc %d, %q", rc, errs)
+	}
+}
+
 // TestFormerVerbsAreQueries holds the spike's config, kinds and rows verbs to what 0.3.1 does with those words: search.
 func TestFormerVerbsAreQueries(t *testing.T) {
 	if !testfix.HaveZsh() {

@@ -785,7 +785,9 @@ NORMAL and `alt-B` in SEARCH. Navigation is `l`/`h` in NORMAL and `ctrl-l`/`ctrl
 
 `hop` needs either a git repo or a configured workspace. Outside a repo it opens the workspace
 picker, and with no `~/.config/hop/workspaces` it guesses `~/src`, `~/code`, `~/projects`, `~/dev`
-and `~/work`. If none of those exist you get an empty picker; write the file.
+and `~/work`. If none of those exist, it stops with
+`hop: not in a git repository, and no workspaces found`. List your code dirs in that file (see
+[`workspaces.example`](workspaces.example)), or set `$HOP_WORKSPACES`.
 
 ### Tests
 
