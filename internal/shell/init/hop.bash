@@ -19,12 +19,30 @@
 	return "$rc"
 }
 
-# The current word is passed on its own because bash 3.2 leaves an empty one out of COMP_WORDS.
+# Words come from COMP_LINE split on blanks, since bash 4+ also splits COMP_WORDS at COMP_WORDBREAKS (`=`, `:`) and 3.2 does not.
+# - Either way readline replaces only the text after the last break character, so each reply drops what precedes it there.
 _@CMD@_complete() {
-	local IFS=$'\n' l
+	local IFS=$' \t\n' l i cur pre=
+	local -a w
+	cur=${COMP_LINE:0:COMP_POINT}
+	read -ra w <<<"$cur"
+	if [[ -z $cur || $cur == *[[:space:]] ]]; then
+		cur=
+	else
+		cur=${w[${#w[@]}-1]}
+		w=("${w[@]:0:${#w[@]}-1}")
+	fi
+	for ((i = ${#cur} - 1; i >= 0; i--)); do
+		if [[ $COMP_WORDBREAKS == *"${cur:i:1}"* ]]; then
+			pre=${cur:0:i+1}
+			break
+		fi
+	done
+	IFS=$'\n'
 	COMPREPLY=()
-	for l in $(command hop __complete "${COMP_WORDS[@]:1:COMP_CWORD-1}" "${COMP_WORDS[COMP_CWORD]}"); do
-		COMPREPLY+=("${l%%$'\t'*}")
+	for l in $(command hop __complete "${w[@]:1}" "$cur"); do
+		l=${l%%$'\t'*}
+		COMPREPLY+=("${l#"$pre"}")
 	done
 }
 complete -F _@CMD@_complete @CMD@

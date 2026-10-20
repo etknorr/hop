@@ -21,5 +21,8 @@ proc check {name typed want} {
 }
 check complete-flag "--wor" "<--workspaces>"
 check complete-kind "-k " "<-k><u>"
+check complete-eq "--action=c" "<--action=cd>"
+check complete-eq-empty "--action=" "<--action=>"
+check complete-eq-unique "--doctor=s" "<--doctor=short>"
 send "exit\r"
 expect -timeout 3 eof
