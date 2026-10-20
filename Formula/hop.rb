@@ -12,6 +12,7 @@ class Hop < Formula
   def install
     ldflags = "-s -w -X github.com/etknorr/hop/internal/version.Version=#{version}"
     system "go", "build", *std_go_args(ldflags:)
+    pkgshare.install "config.example.toml", "workspaces.example"
   end
 
   def caveats
@@ -20,12 +21,17 @@ class Hop < Formula
         zsh:  eval "$(hop init zsh)"
         bash: eval "$(hop init bash)"
         fish: hop init fish | source
+
+      Example config and workspaces files to copy into ~/.config/hop:
+        #{opt_pkgshare}/config.example.toml
+        #{opt_pkgshare}/workspaces.example
     EOS
   end
 
   test do
     assert_match "hop #{version}", shell_output("#{bin}/hop -V")
     assert_match "hopr", shell_output("#{bin}/hop init zsh")
+    assert_path_exists pkgshare/"config.example.toml"
     system "git", "init", "-q", testpath/"repo"
     (testpath/"repo/api/README.md").write "api\n"
     system "git", "-C", testpath/"repo", "add", "-A"
