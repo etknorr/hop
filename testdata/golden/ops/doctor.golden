@@ -55,7 +55,7 @@ kinds, with row counts here
 keys people mix up
   l / ctrl-l    go INTO the thing under the cursor (workspace -> repos -> targets)
   h / ctrl-h    come back OUT a level
-  b / ctrl-g    open on your git host, NOT navigation
+  b / alt-B     open on your git host, NOT navigation
   ^G / alt-g    launch hop from the shell prompt
 
 last 15 debug lines (~/.local/state/hop/debug.log)

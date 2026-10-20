@@ -498,7 +498,7 @@ func (r *report) keys() {
 	r.line("keys people mix up")
 	r.line("  l / ctrl-l    go INTO the thing under the cursor (workspace -> repos -> targets)")
 	r.line("  h / ctrl-h    come back OUT a level")
-	r.line("  b / ctrl-g    open on your git host, NOT navigation")
+	r.line("  b / alt-B     open on your git host, NOT navigation")
 	r.line("  ^G / alt-g    launch hop from the shell prompt")
 	r.line("")
 }
