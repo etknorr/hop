@@ -89,8 +89,19 @@ tag, so all three move in the release commit.
     gh run watch --repo etknorr/hop "$(gh run list --repo etknorr/hop --workflow release.yml --limit 1 --json databaseId -q '.[0].databaseId')"
     ```
 
-`go install github.com/etknorr/hop@v1.1.0` works as soon as the tag is pushed, since the Go module
-proxy fetches tags from GitHub on demand.
+11. Check `go install` through the default proxy and checksum database, from a clean module cache so
+    nothing local answers for them:
+    ```sh
+    d=$(mktemp -d) && GOMODCACHE=$d/mod GOBIN=$d/bin GOFLAGS=-modcacherw go install github.com/etknorr/hop@latest && "$d/bin/hop" -V
+    ```
+    It should print `hop 1.1.0`. The proxy fetches a new tag from GitHub on demand, but `@latest`
+    can lag by a few minutes, so retry `@v1.1.0` first if it names the previous release.
+
+    Before 1.0.0, proxy.golang.org and sum.golang.org answered `404 not found:` for every 0.x tag,
+    which also broke `go install` of any commit, because go checks the newest tag for a deprecation
+    notice. If that comes back, request `https://proxy.golang.org/github.com/etknorr/hop/@v/<tag>.info`
+    and `https://sum.golang.org/lookup/github.com/etknorr/hop@<tag>` again later; meanwhile
+    `GOPROXY=direct GONOSUMDB=github.com/etknorr/hop go install ...` works.
 
 ## If the workflow fails
 
