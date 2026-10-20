@@ -102,7 +102,7 @@ func usage(stdout io.Writer) {
 			fmt.Fprintf(bw, "    %s %-12s %s\n", mark, k.Name, k.Desc)
 		}
 	}
-	fmt.Fprintf(bw, "\n  declare your own in %s; see config.example.toml\n", config.Path())
+	fmt.Fprintf(bw, "\n  declare your own in %s; see https://github.com/etknorr/hop/blob/main/config.example.toml\n", config.Path())
 	fmt.Fprintf(bw, usageKeys, enter)
 }
 
