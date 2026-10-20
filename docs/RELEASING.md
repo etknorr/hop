@@ -59,7 +59,7 @@ tag, so all three move in the release commit.
 6. Check that it builds and passes. The snapshot builds the four archives into `dist/` and
    publishes nothing:
    ```sh
-   go vet ./... && test -z "$(gofmt -l .)" && go test ./...
+   go vet ./... && test -z "$(git ls-files -z '*.go' | xargs -0 gofmt -l)" && go test ./...
    go run github.com/goreleaser/goreleaser/v2@v2.18.3 release --snapshot --clean
    ```
 
