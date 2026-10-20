@@ -128,7 +128,8 @@ func TestParityRows(t *testing.T) {
 	}
 }
 
-// TestParityResolve runs test/parity/resolve.sh under HOP_JUMP=auto, or $PARITY_JUMPS, against a real repo.
+// TestParityResolve runs test/parity/resolve.sh under HOP_JUMP=auto and HOP_VIM=1, or $PARITY_JUMPS and $PARITY_VIM, against a real repo.
+// - One pass is about 4 minutes of zsh on Eric's repo, so the full matrix would outlast go test's 10-minute default timeout.
 func TestParityResolve(t *testing.T) {
 	if os.Getenv("HOP_PARITY_REPO") == "" || os.Getenv("HOP_PARITY_HOME") == "" {
 		t.Skip("set HOP_PARITY_HOME and HOP_PARITY_REPO, as test/parity/resolve.sh asks")
@@ -137,6 +138,9 @@ func TestParityResolve(t *testing.T) {
 	cmd.Env = testfix.Inherited
 	if os.Getenv("PARITY_JUMPS") == "" {
 		cmd.Env = append(cmd.Env, "PARITY_JUMPS=auto")
+	}
+	if os.Getenv("PARITY_VIM") == "" {
+		cmd.Env = append(cmd.Env, "PARITY_VIM=1")
 	}
 	out, err := cmd.CombinedOutput()
 	t.Logf("\n%s", out)
