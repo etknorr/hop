@@ -68,6 +68,7 @@ It fast-forwards the zsh checkout to the Go tree, which has no `hop.zsh`, so the
 - The non-modal legend says `M-a all` where 0.3.1 said `M-a +conf`.
 - `init`, `import` and `upgrade` are the only first-word verbs, so `hop -- init` searches for `init`.
 - `~` forms expand `$HOME` only, not zsh's `hash -d` named directories.
+- A level you reach with `l` or `h` stays open even when it holds one row, where 0.3.1 accepted that row.
 
 ## [0.3.1] - 2026-10-15
 

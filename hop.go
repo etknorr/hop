@@ -234,6 +234,8 @@ type session struct {
 	kword string
 	vim   bool
 	cols  int
+	// moved is set once l or h has changed level: a level someone walked to stays open even with one row.
+	moved bool
 }
 
 // level is one picker's targets and what its keys can reach: _hop_run's and _hop_res_pick's arguments.
@@ -319,7 +321,7 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 		o.Ordered = true
 		input = res.Input(lv.targets)
 	case "empty":
-		o.Select1 = s.jump != "never" && s.kword == ""
+		o.Select1 = s.jump != "never" && s.kword == "" && !s.moved
 	}
 	sess := &pick.Session{Root: lv.root, Under: lv.under, Kinds: lv.kinds, All: s.cfg.AllKinds(), Keys: o.Keys()}
 	out, st, err := pick.Run(s.fzf.Bin, o, sess, input, s.stderr)
@@ -347,8 +349,10 @@ func (s *session) pick(res resolve.Result, query string, lv level) int {
 	}
 	switch {
 	case r.Key == "ctrl-l" && lv.drill != nil:
+		s.moved = true
 		return lv.drill(r.Dir)
 	case r.Key == "ctrl-h" && lv.up != nil:
+		s.moved = true
 		return lv.up()
 	}
 	return a.Dispatch(r.Key, r.Dir, r.Preview, r.Rel)

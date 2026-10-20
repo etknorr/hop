@@ -395,8 +395,12 @@ func TestPickerLevels(t *testing.T) {
 	settle := 300 * time.Millisecond
 	if o := p.run(t, spec{dir: p.tmp, env: env}, `workspaces  2`, steps(settle,
 		"l", label("repos  2 found"), settle, "j", "l", label("beta  2 targets  dir"), settle,
-		"h", label("repos  2 found"), settle, "h", label("workspaces  2"), settle, "j", settle, "l")); o.rc != 0 || o.cd != filepath.Join(ws2, "gamma") {
-		t.Errorf("l into ws1, j l into beta, h h back out, j l into ws2's one repo: rc %d cd %q", o.rc, o.cd)
+		"h", label("repos  2 found"), settle, "h", label("workspaces  2"), settle, "j", settle, "l", label("repos  1 found"), settle, "\r")); o.rc != 0 || o.cd != filepath.Join(ws2, "gamma") {
+		t.Errorf("l into ws1, j l into beta, h h back out, j l into ws2's one repo, which stays open for enter: rc %d cd %q", o.rc, o.cd)
+	}
+	if o := p.run(t, spec{dir: filepath.Join(ws2, "gamma"), env: []string{"HOP_CONFIG=" + cfg, "HOP_WORKSPACES=" + ws2}}, `gamma  2 targets  dir`, steps(settle,
+		"h", label("repos  1 found"), settle, "h", label("workspaces  1"), settle, "\r")); o.rc != 0 || o.cd != ws2 {
+		t.Errorf("h h up to a single workspace shows it rather than accepting it: rc %d cd %q", o.rc, o.cd)
 	}
 	if o := p.run(t, spec{dir: alpha, env: env}, `alpha  3 targets  dir`, steps(settle,
 		"h", label("repos  3 found"), settle, "h", label("workspaces  2"), settle, "\r")); o.rc != 0 || o.cd != ws1 {
