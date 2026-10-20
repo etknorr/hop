@@ -13,7 +13,8 @@ import (
 	"time"
 )
 
-// DefaultWindow was measured under a pty for zsh's 15 to 22 ms fork; docs/v1/ported-interactive.md has the Go numbers.
+// DefaultWindow was sized for zsh's 15 to 22 ms hop-guard fork.
+// - `hop __guard` measured no slower on macOS arm64 (median 8 ms, p90 11 ms at load 5; p90 26 ms at load 18), so it stays.
 const DefaultWindow = 0.15
 
 var number = regexp.MustCompile(`^([0-9]+|[0-9]+\.[0-9]+|\.[0-9]+)$`)

@@ -285,7 +285,7 @@ func plainRows(lines []string) []string {
 }
 
 // TestHelmSourcesMatchZsh holds the four declarative helm sources to zsh hop's _hop_provider_helm.
-// - The fixture holds all four families and the four gap cases in V1-PLAN 3.5; every difference must be one of the gaps.
+// - The fixture holds all four families and the four known gap cases; every difference must be one of the gaps below.
 func TestHelmSourcesMatchZsh(t *testing.T) {
 	if !testfix.HaveZsh() {
 		t.Skipf("zsh or hop %s not available", testfix.RefLayout)

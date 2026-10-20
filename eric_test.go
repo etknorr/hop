@@ -14,7 +14,7 @@ import (
 	"github.com/etknorr/hop/internal/testfix"
 )
 
-// TestRealRepoPicker drives the picker on a real repo with eric.toml, logging query, key and outcome for RESULTS.md.
+// TestRealRepoPicker drives the picker on a real repo with eric.toml, logging query, key and outcome.
 // - It runs only with HOP_PARITY_REPO set, and never writes outside its temp dir: history, clipboard, code and the editor are stubs.
 func TestRealRepoPicker(t *testing.T) {
 	repo := os.Getenv("HOP_PARITY_REPO")
