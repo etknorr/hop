@@ -1,5 +1,4 @@
 <root>               dir 	@ROOT@	@ROOT@/README.md	./
-.agents              dir 	@ROOT@/.agents	@ROOT@/.agents	.agents/
 .github              dir 	@ROOT@/.github	@ROOT@/.github	.github/
 changelog            dir 	@ROOT@/changelog	@ROOT@/changelog/README.md	changelog/
 charts               dir 	@ROOT@/charts	@ROOT@/charts	charts/

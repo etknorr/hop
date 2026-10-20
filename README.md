@@ -576,7 +576,7 @@ Every row has four columns, `scope`, `env`, `region` and `name`. With no `layout
 | `exclude = ["pattern", ...]` | files, marker | drops a file, or a marker file, whose repo path fits a zsh-style pattern. `*` crosses `/` here, and `(*/\|)x/*` matches `x/` at any depth, the root included |
 | `min_depth = 1` | marker | drops matches fewer than this many dirs below `under` (or the root) |
 | `nested = false` | marker | drops a match inside another match of the same kind or source |
-| `skip = ["dir", ...]` | builtin dir | top-level dirs that aren't rows; default `["target", "tmp"]` |
+| `skip = ["dir", ...]` | builtin dir | names or globs of top-level dirs that aren't rows; default `["target", "tmp"]`, and the `dir` recipe adds `.[!g]*` (hidden dirs other than `.github` and `.gitlab`) |
 
 A row's preview is the first `preview` candidate that exists and isn't empty, else the dir. Candidates are relative to the row's dir and may be globs (`*.tf`, `charts/*/Chart.yaml`), which expand alphabetically to regular files only. A candidate whose basename matches a `preview_skip` glob is passed over. `preview` works on dirs, marker, exec and builtin dir kinds; a files row previews its own file.
 

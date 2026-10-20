@@ -4,3 +4,5 @@ name = "dir"
 desc = "repo root and top-level dirs"
 default = true
 builtin = "dir"
+# .[!g]* drops hidden dirs such as .cargo and .vscode but keeps the git host's .github and .gitlab.
+skip = ["target", "tmp", ".[!g]*"]

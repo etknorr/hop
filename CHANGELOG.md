@@ -32,6 +32,7 @@ It fast-forwards the zsh checkout to the Go tree, which has no `hop.zsh`, so the
 - Every `HOP_*` variable has a `[settings]` key too, and the environment beats the file.
   In 0.3 a `typeset` in `config.zsh` beat the environment.
 - With no config, hop lists `dir`, `project` and `file`, not the eight presets.
+  The zero-config `dir` leaves out hidden top-level dirs other than `.github` and `.gitlab`, and `skip` takes globs.
   The old presets are recipes you name with `recipes = [...]`, and `hop import` writes out 0.3.1's own definitions, so your rows don't change.
 - `hop upgrade` upgrades the way hop was installed: `brew upgrade`, `go install`, or a checkout moved to the newest release tag and rebuilt.
   `hop upgrade --check` reads release tags with `git ls-remote`, so it needs no GitHub token.

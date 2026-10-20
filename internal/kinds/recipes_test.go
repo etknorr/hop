@@ -192,12 +192,16 @@ name = 'k'
 func TestDirSkipAndPreview(t *testing.T) {
 	root := buildRepo(t, map[string]string{
 		"target/x": "x\n", "tmp/x": "x\n", "build/x": "x\n", "docs/README.md": "x\n", "docs/guide.md": "x\n", "src/CLAUDE.md": "x\n",
+		".github/x": "x\n", ".vscode/x": "x\n",
 	}, nil)
 	def := loadSrc(t, "recipes = ['dir']\n")
-	wantRows(t, "default skip", brief(Generate(def, root, []string{"dir"}, nil), root), "<root>|-|./", "build|-|build/", "docs|-|docs/", "src|-|src/")
-	cfg := loadSrc(t, "recipes = ['dir']\n[[kind]]\nname = 'dir'\nextend = true\nskip = ['build']\npreview = ['guide.md']\n")
+	wantRows(t, "default skip", brief(Generate(def, root, []string{"dir"}, nil), root), "<root>|-|./", ".github|-|.github/", "build|-|build/", "docs|-|docs/", "src|-|src/")
+	bare := loadSrc(t, "recipes = []\n[[kind]]\nname = 'dir'\nbuiltin = 'dir'\n")
+	wantRows(t, "an imported dir kind keeps 0.3.1's skip", brief(Generate(bare, root, []string{"dir"}, nil), root),
+		"<root>|-|./", ".github|-|.github/", ".vscode|-|.vscode/", "build|-|build/", "docs|-|docs/", "src|-|src/")
+	cfg := loadSrc(t, "recipes = ['dir']\n[[kind]]\nname = 'dir'\nextend = true\nskip = ['b*', '.*']\npreview = ['guide.md']\n")
 	rs := Generate(cfg, root, []string{"dir"}, nil)
-	wantRows(t, "skip replaces the default", brief(rs, root), "<root>|-|./", "docs|-|docs/", "src|-|src/", "target|-|target/", "tmp|-|tmp/")
+	wantRows(t, "skip replaces the default, and takes globs", brief(rs, root), "<root>|-|./", "docs|-|docs/", "src|-|src/", "target|-|target/", "tmp|-|tmp/")
 	if rs[1].Preview != root+"/docs/guide.md" || rs[2].Preview != root+"/src" {
 		t.Errorf("a declared preview replaces README.md, README, CLAUDE.md: %s %s", rs[1].Preview, rs[2].Preview)
 	}

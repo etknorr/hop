@@ -1,5 +1,4 @@
 <root>                   dir   -  	@ROOT@	@ROOT@/README.md	./
-.deploystack             dir   -  	@ROOT@/.deploystack	@ROOT@/.deploystack	.deploystack/
 .github                  dir   -  	@ROOT@/.github	@ROOT@/.github	.github/
 docs                     dir   -  	@ROOT@/docs	@ROOT@/docs	docs/
 helm-chart               dir   -  	@ROOT@/helm-chart	@ROOT@/helm-chart/README.md	helm-chart/

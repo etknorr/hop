@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"slices"
 	"strings"
 
 	"github.com/etknorr/hop/internal/config"
@@ -32,7 +31,7 @@ func previewDoc(dir string) string {
 
 var dirSkip = []string{"target", "tmp"}
 
-// builtinDir is _hop_provider_dir: the root plus every top-level tracked directory not in the kind's skip.
+// builtinDir is _hop_provider_dir: the root plus every top-level tracked directory no skip glob matches.
 // - With no preview set it keeps _hop_preview_doc's -f test, which a declared preview chain loosens to -s.
 func (e *Engine) builtinDir(k *config.Kind) []rows.Row {
 	skip := k.Skip
@@ -52,7 +51,7 @@ func (e *Engine) builtinDir(k *config.Kind) []rows.Row {
 				continue
 			}
 			seen[top] = true
-			if slices.Contains(skip, top) {
+			if skipped(top, skip) {
 				continue
 			}
 			dir := e.Root + "/" + top
